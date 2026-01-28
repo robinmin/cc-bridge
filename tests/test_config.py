@@ -7,6 +7,7 @@ Tests follow TDD principles:
 3. Refactor for cleanliness
 """
 
+# ruff: noqa: PLC0415 (intentional lazy imports in tests)
 import os
 from pathlib import Path
 from unittest.mock import patch
@@ -340,7 +341,7 @@ class TestGlobalConfig:
     def test_get_config_creates_instance_if_none(self):
         """Should create instance if not exists."""
         # Reset global config
-        import cc_bridge.config  # noqa: PLC0415
+        import cc_bridge.config
 
         cc_bridge.config._config = None
 
