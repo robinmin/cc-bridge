@@ -1,9 +1,9 @@
 ---
 name: Robustness: rate limiting
 description: Task: Robustness: rate limiting
-status: Backlog
+status: Done
 created_at: 2026-01-26 21:11:20
-updated_at: 2026-01-26 21:11:20
+updated_at: 2026-01-28 15:47:08
 impl_progress:
   planning: pending
   design: pending

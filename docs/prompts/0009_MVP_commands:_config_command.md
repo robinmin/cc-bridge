@@ -1,9 +1,9 @@
 ---
 name: MVP commands: config command
 description: Task: MVP commands: config command
-status: Backlog
+status: Done
 created_at: 2026-01-26 21:11:00
-updated_at: 2026-01-26 21:11:00
+updated_at: 2026-01-28 15:45:35
 impl_progress:
   planning: pending
   design: pending

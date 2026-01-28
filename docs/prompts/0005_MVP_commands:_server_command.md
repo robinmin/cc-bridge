@@ -1,9 +1,9 @@
 ---
 name: MVP commands: server command
 description: Task: MVP commands: server command
-status: In Progress
+status: Done
 created_at: 2026-01-26 21:10:54
-updated_at: 2026-01-27 16:00:00
+updated_at: 2026-01-28 15:44:36
 impl_progress:
   planning: completed
   design: completed

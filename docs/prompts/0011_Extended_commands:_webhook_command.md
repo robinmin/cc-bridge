@@ -1,9 +1,9 @@
 ---
 name: Extended commands: webhook command
 description: Task: Extended commands: webhook command
-status: Backlog
+status: Done
 created_at: 2026-01-26 21:11:13
-updated_at: 2026-01-26 21:11:13
+updated_at: 2026-01-28 15:45:50
 impl_progress:
   planning: pending
   design: pending

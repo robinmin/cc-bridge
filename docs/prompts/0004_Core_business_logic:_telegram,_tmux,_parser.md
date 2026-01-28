@@ -1,9 +1,9 @@
 ---
 name: Core business logic: telegram, tmux, parser
 description: Task: Core business logic: telegram, tmux, parser
-status: WIP
+status: Done
 created_at: 2026-01-26 21:10:52
-updated_at: 2026-01-26 22:00:00
+updated_at: 2026-01-28 15:44:29
 impl_progress:
   planning: completed
   design: completed

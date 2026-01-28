@@ -1,9 +1,9 @@
 ---
 name: Extended commands: logs command
 description: Task: Extended commands: logs command
-status: Backlog
+status: Done
 created_at: 2026-01-26 21:11:14
-updated_at: 2026-01-26 21:11:14
+updated_at: 2026-01-28 15:46:02
 impl_progress:
   planning: pending
   design: pending

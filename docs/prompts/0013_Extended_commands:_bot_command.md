@@ -1,9 +1,9 @@
 ---
 name: Extended commands: bot command
 description: Task: Extended commands: bot command
-status: Backlog
+status: Done
 created_at: 2026-01-26 21:11:16
-updated_at: 2026-01-26 21:11:16
+updated_at: 2026-01-28 15:46:18
 impl_progress:
   planning: pending
   design: pending

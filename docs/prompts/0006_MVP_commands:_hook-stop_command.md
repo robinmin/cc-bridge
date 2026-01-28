@@ -1,9 +1,9 @@
 ---
 name: MVP commands: hook-stop command
 description: Task: MVP commands: hook-stop command
-status: Backlog
+status: Done
 created_at: 2026-01-26 21:10:56
-updated_at: 2026-01-26 21:10:56
+updated_at: 2026-01-28 15:45:19
 impl_progress:
   planning: pending
   design: pending
