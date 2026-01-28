@@ -2,6 +2,7 @@
 Tests for claude command.
 """
 
+# ruff: noqa: PLC0415 (intentional lazy imports in tests)
 from datetime import datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -80,7 +81,7 @@ class TestClaudeCommand:
 
     def test_start_new_instance(self, mock_instance_manager, mock_tmux_available, tmp_path: Path):
         """Should start new instance successfully."""
-        from typer.testing import CliRunner  # noqa: PLC0415
+        from typer.testing import CliRunner
 
         runner = CliRunner()
         mock_instance_manager.get_instance.return_value = None
