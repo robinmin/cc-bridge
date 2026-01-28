@@ -5,7 +5,9 @@ This tests the webhook deletion and chat ID detection flow.
 """
 
 import asyncio
+
 from cc_bridge.core.telegram import TelegramClient
+
 
 async def test_telegram_client():
     """Test Telegram client with webhook deletion."""
@@ -51,6 +53,7 @@ async def test_telegram_client():
         print(f"\n   ❌ Error: {e}")
 
     print("\n=== Test Complete ===")
+
 
 if __name__ == "__main__":
     asyncio.run(test_telegram_client())

@@ -6,13 +6,12 @@ configuration of cc-bridge with enhanced automation.
 """
 
 import asyncio
-import sys
 from pathlib import Path
 
-from cc_bridge.config import Config, settings
+from cc_bridge.commands import cron, tunnel
+from cc_bridge.config import Config
 from cc_bridge.core.telegram import TelegramClient
 from cc_bridge.logging import get_logger
-from cc_bridge.commands import tunnel, cron
 
 logger = get_logger(__name__)
 
@@ -49,7 +48,7 @@ def _save_env_file(env_vars: dict, env_path: Path) -> None:
     """
     env_path.parent.mkdir(parents=True, exist_ok=True)
 
-    with open(env_path, 'w') as f:
+    with env_path.open("w") as f:
         for key, value in env_vars.items():
             f.write(f"{key}={value}\n")
 
@@ -104,14 +103,14 @@ def _setup_crontab() -> bool:
     if manager.has_entries():
         print("⚠️  Crontab already contains CC-Bridge entries.")
         confirm = input("   Replace existing entries? (y/N): ")
-        if confirm.lower() != 'y':
+        if confirm.lower() != "y":
             print("   Skipping crontab setup.")
             return True
         manager.remove_entry()
 
     # Add health check entry (every 5 minutes)
     entry = "*/5 * * * * cc-bridge health-check --quiet"
-    print(f"\nAdding crontab entry:")
+    print("\nAdding crontab entry:")
     print(f"   {entry}")
 
     if manager.add_entry(entry):
@@ -150,11 +149,11 @@ async def _setup_webhook(bot_token: str, tunnel_url: str) -> bool:
         print("   2. The tunnel URL has DNS issues (try running setup again)")
         print("   3. Network connectivity issues")
         print("\n📝 You can set the webhook manually later:")
-        print(f"   curl \"https://api.telegram.org/bot{bot_token}/setWebhook?url={tunnel_url}\"")
+        print(f'   curl "https://api.telegram.org/bot{bot_token}/setWebhook?url={tunnel_url}"')
         return False
 
 
-async def run_setup_enhanced() -> Config:
+async def run_setup_enhanced() -> Config:  # noqa: PLR0915
     """
     Run enhanced interactive setup wizard.
 
@@ -194,7 +193,7 @@ async def run_setup_enhanced() -> Config:
             chat_id = int(chat_id)
         except ValueError:
             print("❌ Invalid Chat ID")
-            raise ValueError("Invalid Chat ID")
+            raise ValueError("Invalid Chat ID") from None
 
     # Step 3: Cloudflare Tunnel
     print("\n📝 Step 3: Cloudflare Tunnel")
@@ -233,7 +232,7 @@ async def run_setup_enhanced() -> Config:
     print("Configure crontab for automatic health checks?")
 
     setup_crontab = input("Setup crontab? (Y/n): ").strip().lower()
-    if setup_crontab != 'n':
+    if setup_crontab != "n":
         _setup_crontab()
     else:
         print("   Skipping crontab setup.")
@@ -242,15 +241,15 @@ async def run_setup_enhanced() -> Config:
     print("\n" + "=" * 60)
     print("✅ Setup Complete!")
     print("=" * 60)
-    print(f"\nConfiguration:")
+    print("\nConfiguration:")
     print(f"   Bot Token: {bot_token[:20]}...")
     print(f"   Chat ID: {chat_id}")
     print(f"   Tunnel URL: {tunnel_url}")
     print(f"   Config File: {env_path}")
-    print(f"\nNext steps:")
+    print("\nNext steps:")
     print(f"   1. Review configuration in {env_path}")
-    print(f"   2. Start the server: cc-bridge server")
-    print(f"   3. Test by sending a message to your bot")
+    print("   2. Start the server: cc-bridge server")
+    print("   3. Test by sending a message to your bot")
 
     # Load and return config
     return Config()
@@ -264,7 +263,7 @@ def main() -> int:
         Exit code (0 for success, 1 for error)
     """
     try:
-        config = asyncio.run(run_setup_enhanced())
+        asyncio.run(run_setup_enhanced())
         return 0
     except KeyboardInterrupt:
         print("\n\n⚠️  Setup cancelled")

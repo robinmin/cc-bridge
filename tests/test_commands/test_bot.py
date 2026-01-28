@@ -4,7 +4,7 @@ Tests for bot command.
 
 import pytest
 
-from cc_bridge.commands.bot import set_bot_commands, get_default_commands
+from cc_bridge.commands.bot import get_default_commands, set_bot_commands
 
 
 @pytest.mark.asyncio

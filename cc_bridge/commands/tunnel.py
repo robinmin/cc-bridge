@@ -8,18 +8,19 @@ webhook configuration.
 import re
 import subprocess
 import sys
-from typing import Optional
+import time
+
+import httpx
 
 from cc_bridge.logging import get_logger
 
 logger = get_logger(__name__)
 
 # Pattern to match cloudflared quick tunnel URL
-# Example: "https://abc123.trycloudflare.com"
-TUNNEL_URL_PATTERN = re.compile(r'https://[a-z0-9\-]+\.trycloudflare\.com')
+TUNNEL_URL_PATTERN = re.compile(r"https://[a-z0-9\-]+\.trycloudflare\.com")
 
 
-def parse_tunnel_url(output: str) -> Optional[str]:
+def parse_tunnel_url(output: str) -> str | None:
     """
     Parse tunnel URL from cloudflared output.
 
@@ -62,17 +63,17 @@ def start_tunnel(port: int = 8080, timeout: int = 30) -> str:
             ["cloudflared", "tunnel", "--url", f"http://localhost:{port}"],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
-            text=True
+            text=True,
         )
 
         # Monitor output for tunnel URL
-        import time
         start_time = time.time()
         url = None
 
         while time.time() - start_time < timeout:
             try:
                 # Non-blocking read with timeout
+                assert process.stdout is not None  # for type checker
                 line = process.stdout.readline()
                 if not line:
                     # Process ended
@@ -100,10 +101,10 @@ def start_tunnel(port: int = 8080, timeout: int = 30) -> str:
         raise RuntimeError(
             "cloudflared not found. Install from: "
             "https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/"
-        )
+        ) from None
     except Exception as e:
         logger.error("Failed to start tunnel", error=str(e))
-        raise RuntimeError(f"Failed to start tunnel: {e}")
+        raise RuntimeError(f"Failed to start tunnel: {e}") from e
 
 
 def stop_tunnel() -> None:
@@ -115,13 +116,11 @@ def stop_tunnel() -> None:
     # Find and terminate cloudflared processes
     try:
         result = subprocess.run(
-            ["pgrep", "-f", "cloudflared tunnel"],
-            capture_output=True,
-            text=True
+            ["pgrep", "-f", "cloudflared tunnel"], capture_output=True, text=True, check=False
         )
 
         if result.returncode == 0:
-            pids = result.stdout.strip().split('\n')
+            pids = result.stdout.strip().split("\n")
             for pid in pids:
                 try:
                     subprocess.run(["kill", pid], check=True)
@@ -133,7 +132,7 @@ def stop_tunnel() -> None:
 
     except Exception as e:
         logger.error("Failed to stop tunnel", error=str(e))
-        raise RuntimeError(f"Failed to stop tunnel: {e}")
+        raise RuntimeError(f"Failed to stop tunnel: {e}") from e
 
 
 async def set_webhook(url: str, bot_token: str) -> bool:
@@ -147,16 +146,11 @@ async def set_webhook(url: str, bot_token: str) -> bool:
     Returns:
         True if webhook set successfully
     """
-    import httpx
-
     api_url = f"https://api.telegram.org/bot{bot_token}/setWebhook"
 
     try:
         async with httpx.AsyncClient() as client:
-            response = await client.post(
-                api_url,
-                json={"url": url}
-            )
+            response = await client.post(api_url, json={"url": url})
             result = response.json()
 
             if result.get("ok"):
@@ -189,8 +183,7 @@ def main(start: bool = False, stop: bool = False, port: int = 8080) -> int:
             print(f"Tunnel started: {url}")
 
             # Auto-set webhook if bot token available
-            # TODO: Get bot token from config
-            # await set_webhook(url, bot_token)
+            # TODO: Get bot token from config and set webhook automatically
 
         elif stop:
             stop_tunnel()

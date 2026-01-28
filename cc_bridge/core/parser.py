@@ -8,7 +8,6 @@ This module provides message formatting for:
 """
 
 import re
-from typing import Tuple
 
 
 class MessageFormatter:
@@ -61,7 +60,7 @@ class MessageFormatter:
 
         return text
 
-    def extract_code_blocks(self, text: str) -> Tuple[list[str], str]:
+    def extract_code_blocks(self, text: str) -> tuple[list[str], str]:
         """
         Extract code blocks from message.
 

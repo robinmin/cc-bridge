@@ -8,10 +8,9 @@ Tests follow TDD principles:
 """
 
 import logging
+import logging.handlers
 from pathlib import Path
-from unittest.mock import MagicMock, patch
 
-import pytest
 import structlog
 
 from cc_bridge.logging import get_logger, setup_logging

@@ -7,11 +7,8 @@ instances running in tmux sessions.
 
 import json
 import os
-import signal
-import subprocess
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 from cc_bridge.logging import get_logger
 from cc_bridge.models.instances import ClaudeInstance, InstancesData
@@ -56,17 +53,13 @@ class InstanceManager:
         """Save instances to JSON file."""
         try:
             data = InstancesData(instances=self._instances).model_dump(mode="json")
-            import json
             self.instances_file.write_text(json.dumps(data, indent=2))
             logger.debug("Saved instances", instances=list(self._instances.keys()))
         except Exception as e:
             logger.error("Failed to save instances", error=str(e))
 
     def create_instance(
-        self,
-        name: str,
-        tmux_session: str,
-        cwd: str | None = None
+        self, name: str, tmux_session: str, cwd: str | None = None
     ) -> ClaudeInstance:
         """
         Create a new instance metadata.
@@ -79,17 +72,12 @@ class InstanceManager:
         Returns:
             Created ClaudeInstance
         """
-        instance = ClaudeInstance(
-            name=name,
-            tmux_session=tmux_session,
-            cwd=cwd,
-            status="created"
-        )
+        instance = ClaudeInstance(name=name, tmux_session=tmux_session, cwd=cwd, status="created")
         self._instances[name] = instance
         self._save()
         return instance
 
-    def get_instance(self, name: str) -> Optional[ClaudeInstance]:
+    def get_instance(self, name: str) -> ClaudeInstance | None:
         """
         Get instance by name.
 
@@ -110,11 +98,7 @@ class InstanceManager:
         """
         return list(self._instances.values())
 
-    def update_instance(
-        self,
-        name: str,
-        **kwargs
-    ) -> Optional[ClaudeInstance]:
+    def update_instance(self, name: str, **kwargs) -> ClaudeInstance | None:
         """
         Update instance attributes.
 
@@ -196,7 +180,7 @@ def get_instance_manager() -> InstanceManager:
     Returns:
         InstanceManager instance
     """
-    global _instance_manager
+    global _instance_manager  # noqa: PLW0603
     if _instance_manager is None:
         _instance_manager = InstanceManager()
     return _instance_manager

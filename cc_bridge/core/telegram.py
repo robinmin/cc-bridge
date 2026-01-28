@@ -9,6 +9,8 @@ This module provides a custom Telegram client using httpx for:
 - Parsing updates (callback/text)
 """
 
+import asyncio
+
 import httpx
 
 from cc_bridge.logging import get_logger
@@ -112,9 +114,7 @@ class TelegramClient:
             response = await client.post(url)
             return response.json()
 
-    async def answer_callback_query(
-        self, callback_query_id: str, text: str | None = None
-    ) -> dict:
+    async def answer_callback_query(self, callback_query_id: str, text: str | None = None) -> dict:
         """
         Answer callback query from inline keyboard.
 
@@ -168,8 +168,6 @@ class TelegramClient:
         Returns:
             Chat ID if found, None otherwise
         """
-        import asyncio
-
         print("⏳ Waiting for you to send /start to your bot...")
         print("   (This allows me to detect your chat ID)")
 
@@ -213,9 +211,7 @@ class TelegramClient:
         logger.warning("Chat ID not detected", timeout=timeout)
         return None
 
-    async def wait_for_message(
-        self, timeout: int = 30
-    ) -> dict | None:
+    async def wait_for_message(self, timeout: int = 30) -> dict | None:
         """
         Wait for a message to be sent to the bot.
 
@@ -225,8 +221,6 @@ class TelegramClient:
         Returns:
             First message dict or None
         """
-        import asyncio
-
         start_time = asyncio.get_event_loop().time()
         while asyncio.get_event_loop().time() - start_time < timeout:
             try:

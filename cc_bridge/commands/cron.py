@@ -4,10 +4,8 @@ Crontab management for cc-bridge health checks.
 This module provides safe crontab modification with backup and rollback capabilities.
 """
 
-import os
 import subprocess
 from pathlib import Path
-from typing import List
 
 from cc_bridge.logging import get_logger
 
@@ -27,7 +25,7 @@ class CrontabManager:
     def __init__(self):
         """Initialize crontab manager."""
 
-    def _get_current_crontab(self) -> List[str]:
+    def _get_current_crontab(self) -> list[str]:
         """
         Get current crontab entries as list of lines.
 
@@ -35,12 +33,7 @@ class CrontabManager:
             List of crontab lines
         """
         try:
-            result = subprocess.run(
-                ["crontab", "-l"],
-                capture_output=True,
-                text=True,
-                check=True
-            )
+            result = subprocess.run(["crontab", "-l"], capture_output=True, text=True, check=True)
             stdout = result.stdout.strip()
             # Handle empty crontab
             if not stdout:
@@ -54,7 +47,7 @@ class CrontabManager:
             logger.warning("crontab command not found")
             return []
 
-    def _backup_crontab(self) -> List[str]:
+    def _backup_crontab(self) -> list[str]:
         """
         Backup current crontab to file.
 
@@ -104,11 +97,7 @@ class CrontabManager:
         except (ValueError, IndexError):
             return False
 
-    def add_entry(
-        self,
-        entry: str,
-        validate: bool = True
-    ) -> bool:
+    def add_entry(self, entry: str, validate: bool = True) -> bool:
         """
         Add entry to crontab.
 
@@ -135,9 +124,7 @@ class CrontabManager:
 
             # Write new crontab
             subprocess.run(
-                ["crontab", "-"],
-                input=("\n".join(new_crontab) + "\n").encode(),
-                check=True
+                ["crontab", "-"], input=("\n".join(new_crontab) + "\n").encode(), check=True
             )
 
             logger.info("Crontab entry added", entry=entry)
@@ -170,9 +157,7 @@ class CrontabManager:
         try:
             # Write modified crontab
             subprocess.run(
-                ["crontab", "-"],
-                input=("\n".join(new_crontab) + "\n").encode(),
-                check=True
+                ["crontab", "-"], input=("\n".join(new_crontab) + "\n").encode(), check=True
             )
 
             logger.info("Crontab entries removed")
@@ -207,15 +192,11 @@ class CrontabManager:
 
         try:
             backup_content = backup_file.read_text()
-            subprocess.run(
-                ["crontab", "-"],
-                input=backup_content.encode(),
-                check=True
-            )
+            subprocess.run(["crontab", "-"], input=backup_content.encode(), check=True)
 
             logger.info("Crontab restored from backup")
             return True
 
-        except (IOError, subprocess.CalledProcessError) as e:
+        except (OSError, subprocess.CalledProcessError) as e:
             logger.error("Failed to restore crontab backup", error=str(e))
             return False

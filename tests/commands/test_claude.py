@@ -2,15 +2,17 @@
 Tests for claude command.
 """
 
+from datetime import datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+from typer.testing import CliRunner
 
 from cc_bridge.commands.claude import (
-    app,
-    _validate_working_directory,
     _get_session_name,
+    _validate_working_directory,
+    app,
 )
 
 
@@ -76,21 +78,14 @@ class TestClaudeCommand:
             mock.return_value = True
             yield mock
 
-    def test_start_new_instance(
-        self,
-        mock_instance_manager,
-        mock_tmux_available,
-        tmp_path: Path
-    ):
+    def test_start_new_instance(self, mock_instance_manager, mock_tmux_available, tmp_path: Path):
         """Should start new instance successfully."""
-        from typer.testing import CliRunner
+        from typer.testing import CliRunner  # noqa: PLC0415
 
         runner = CliRunner()
         mock_instance_manager.get_instance.return_value = None
         mock_instance_manager.create_instance.return_value = MagicMock(
-            name="test",
-            tmux_session="claude-test",
-            cwd=str(tmp_path)
+            name="test", tmux_session="claude-test", cwd=str(tmp_path)
         )
 
         # Mock subprocess calls
@@ -105,27 +100,24 @@ class TestClaudeCommand:
             assert result.exit_code == 0
             mock_instance_manager.create_instance.assert_called_once()
 
-    def test_start_existing_instance_fails(
-        self,
-        mock_instance_manager,
-        mock_tmux_available
-    ):
-        """Should fail when instance already exists."""
-        from typer.testing import CliRunner
+    def test_start_existing_instance_fails(self, mock_instance_manager, mock_tmux_available):
+        """Should fail when instance already exists and is running."""
 
         runner = CliRunner()
-        mock_instance_manager.get_instance.return_value = MagicMock(
-            name="test"
-        )
+        # Mock that a running instance with this name already exists
+        existing_instance = MagicMock()
+        existing_instance.name = "test"
+        mock_instance_manager.get_instance.return_value = existing_instance
+        # Mock get_instance_status to return "running"
+        mock_instance_manager.get_instance_status.return_value = "running"
 
         result = runner.invoke(app, ["start", "test"])
 
         assert result.exit_code == 1
-        assert "already exists" in result.stdout
+        assert "already running" in result.stdout
 
     def test_start_without_tmux_fails(self):
         """Should fail when tmux is not available."""
-        from typer.testing import CliRunner
 
         runner = CliRunner()
 
@@ -138,7 +130,6 @@ class TestClaudeCommand:
 
     def test_list_no_instances(self, mock_instance_manager):
         """Should handle no instances gracefully."""
-        from typer.testing import CliRunner
 
         runner = CliRunner()
         mock_instance_manager.list_instances.return_value = []
@@ -150,8 +141,6 @@ class TestClaudeCommand:
 
     def test_list_with_instances(self, mock_instance_manager):
         """Should list all instances."""
-        from typer.testing import CliRunner
-        from datetime import datetime
 
         runner = CliRunner()
 
@@ -160,14 +149,14 @@ class TestClaudeCommand:
             tmux_session="claude-test1",
             cwd="/home/user/project1",
             created_at=datetime.now(),
-            last_activity=None
+            last_activity=None,
         )
         instance2 = MagicMock(
             name="test2",
             tmux_session="claude-test2",
             cwd="/home/user/project2",
             created_at=datetime.now(),
-            last_activity=datetime.now()
+            last_activity=datetime.now(),
         )
 
         mock_instance_manager.list_instances.return_value = [instance1, instance2]
@@ -181,7 +170,6 @@ class TestClaudeCommand:
 
     def test_stop_nonexistent_instance_fails(self, mock_instance_manager):
         """Should fail when stopping non-existent instance."""
-        from typer.testing import CliRunner
 
         runner = CliRunner()
         mock_instance_manager.get_instance.return_value = None
@@ -193,7 +181,6 @@ class TestClaudeCommand:
 
     def test_attach_nonexistent_instance_fails(self, mock_instance_manager):
         """Should fail when attaching to non-existent instance."""
-        from typer.testing import CliRunner
 
         runner = CliRunner()
         mock_instance_manager.get_instance.return_value = None

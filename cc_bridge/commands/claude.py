@@ -7,15 +7,11 @@ running in tmux sessions, hiding tmux complexity from users.
 
 import os
 import shlex
-import signal
 import subprocess
-import sys
 from pathlib import Path
-from typing import Optional
 
 import typer
 
-from cc_bridge.config import settings
 from cc_bridge.core.instances import get_instance_manager
 from cc_bridge.logging import get_logger
 
@@ -32,11 +28,7 @@ def _get_tmux_socket_path() -> str:
 def _is_tmux_available() -> bool:
     """Check if tmux is available."""
     try:
-        subprocess.run(
-            ["tmux", "-V"],
-            capture_output=True,
-            check=True
-        )
+        subprocess.run(["tmux", "-V"], capture_output=True, check=True)
         return True
     except (subprocess.CalledProcessError, FileNotFoundError):
         return False
@@ -83,7 +75,7 @@ def _get_session_name(name: str) -> str:
 @app.command()
 def start(
     name: str = typer.Argument(..., help="Instance name"),
-    cwd: Optional[str] = typer.Option(None, "--cwd", help="Working directory"),
+    cwd: str | None = typer.Option(None, "--cwd", help="Working directory"),
     detach: bool = typer.Option(True, "--detach/--no-detach", help="Run in detached mode"),
 ):
     """
@@ -120,17 +112,13 @@ def start(
             raise typer.Exit(1)
         work_dir = result
     else:
-        work_dir = os.getcwd()
+        work_dir = str(Path.cwd())
 
     # Generate tmux session name
     session_name = _get_session_name(name)
 
     # Create instance metadata
-    instance = instance_manager.create_instance(
-        name=name,
-        tmux_session=session_name,
-        cwd=work_dir
-    )
+    instance_manager.create_instance(name=name, tmux_session=session_name, cwd=work_dir)
 
     # Start tmux session with Claude Code
     tmux_socket = _get_tmux_socket_path()
@@ -141,21 +129,21 @@ def start(
         # Create new tmux session
         cmd = [
             "tmux",
-            "-S", tmux_socket,
+            "-S",
+            tmux_socket,
             "new-session",
             "-d",  # Start detached
-            "-s", session_name,
-            "-n", "claude",
+            "-s",
+            session_name,
+            "-n",
+            "claude",
         ]
 
         # Set working directory and start Claude Code
         # Use sh -c to properly handle the command, but escape the directory path
         # to prevent command injection
-        import shlex
         safe_dir = shlex.quote(work_dir)
-        cmd.extend([
-            f"cd {safe_dir} && claude"
-        ])
+        cmd.extend([f"cd {safe_dir} && claude"])
 
         subprocess.run(cmd, check=True)
 
@@ -164,7 +152,7 @@ def start(
             ["tmux", "-S", tmux_socket, "list-panes", "-t", session_name, "-F", "#{pane_pid}"],
             capture_output=True,
             text=True,
-            check=True
+            check=True,
         )
         pid = int(result.stdout.strip())
 
@@ -182,7 +170,7 @@ def start(
         logger.error("Failed to start tmux session", error=str(e))
         instance_manager.delete_instance(name)
         typer.echo(f"❌ Failed to start instance: {e}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
 
 @app.command()
@@ -217,7 +205,7 @@ def stop(
             ["tmux", "-S", tmux_socket, "list-sessions"],
             capture_output=True,
             text=True,
-            check=False
+            check=False,
         )
         session_exists = session_name in result.stdout
     except Exception:
@@ -227,8 +215,7 @@ def stop(
         try:
             # Kill tmux session
             subprocess.run(
-                ["tmux", "-S", tmux_socket, "kill-session", "-t", session_name],
-                check=True
+                ["tmux", "-S", tmux_socket, "kill-session", "-t", session_name], check=True
             )
 
             # Remove instance metadata
@@ -239,7 +226,7 @@ def stop(
         except subprocess.CalledProcessError as e:
             logger.error("Failed to stop tmux session", error=str(e))
             typer.echo(f"❌ Failed to stop instance: {e}")
-            raise typer.Exit(1)
+            raise typer.Exit(1) from None
     else:
         # Session doesn't exist, just remove metadata
         logger.info(f"Tmux session '{session_name}' not found, removing metadata only")
@@ -319,14 +306,11 @@ def attach(
 
     # Attach to tmux session (replaces current process)
     try:
-        os.execvp(
-            "tmux",
-            ["tmux", "-S", tmux_socket, "attach", "-t", session_name]
-        )
+        os.execvp("tmux", ["tmux", "-S", tmux_socket, "attach", "-t", session_name])
     except OSError as e:
         logger.error("Failed to attach to tmux session", error=str(e))
         typer.echo(f"❌ Failed to attach: {e}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
 
 @app.command()
@@ -361,7 +345,7 @@ def restart(
                 ["tmux", "-S", tmux_socket, "list-sessions"],
                 capture_output=True,
                 text=True,
-                check=False
+                check=False,
             )
             session_exists = session_name in result.stdout
         except Exception:

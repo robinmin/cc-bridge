@@ -2,8 +2,6 @@
 Tests for logs command.
 """
 
-import pytest
-
 from cc_bridge.commands.logs import stream_logs
 
 

@@ -5,14 +5,13 @@ This module contains Pydantic models for configuration validation.
 """
 
 from pydantic import BaseModel, Field
-from typing import Optional
 
 
 class TelegramConfig(BaseModel):
     """Telegram configuration model."""
 
     bot_token: str = Field(..., min_length=1, description="Telegram bot token")
-    webhook_url: Optional[str] = Field(None, description="Webhook URL")
+    webhook_url: str | None = Field(None, description="Webhook URL")
 
 
 class ServerConfig(BaseModel):

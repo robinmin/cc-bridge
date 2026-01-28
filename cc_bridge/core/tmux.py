@@ -9,7 +9,6 @@ import asyncio
 import hashlib
 import subprocess
 from pathlib import Path
-from typing import Optional
 
 from cc_bridge.logging import get_logger
 
@@ -30,7 +29,7 @@ class TmuxSession:
     waiting for responses.
     """
 
-    def __init__(self, session_name: str = "claude", socket_path: Optional[str] = None):
+    def __init__(self, session_name: str = "claude", socket_path: str | None = None):
         """
         Initialize tmux session manager.
 
@@ -55,15 +54,10 @@ class TmuxSession:
         """
         cmd = self._base_cmd + args
         try:
-            return subprocess.run(
-                cmd,
-                capture_output=capture,
-                text=True,
-                check=False
-            )
+            return subprocess.run(cmd, capture_output=capture, text=True, check=False)
         except FileNotFoundError:
             logger.error("tmux not found")
-            raise RuntimeError("tmux is not installed")
+            raise RuntimeError("tmux is not installed") from None
 
     def session_exists(self) -> bool:
         """
@@ -149,11 +143,11 @@ class TmuxSession:
         non_empty = [line for line in lines if line.strip()]
         return non_empty[-count:]
 
-    async def send_command_and_wait(
+    async def send_command_and_wait(  # noqa: PLR0912, PLR0915
         self,
         command: str,
         timeout: float = 120.0,
-        prompt_marker: str = "❯"
+        prompt_marker: str = "❯",  # noqa: RUF001
     ) -> tuple[bool, str]:
         """
         Send a command and wait for a response.
@@ -164,7 +158,7 @@ class TmuxSession:
         Args:
             command: Command to send
             timeout: Maximum time to wait in seconds
-            prompt_marker: String that indicates the prompt is back (e.g., "❯")
+            prompt_marker: String that indicates the prompt is back (e.g., ">")
 
         Returns:
             Tuple of (success, output)
@@ -175,10 +169,10 @@ class TmuxSession:
         # Helper to compute content hash for change detection
         def get_content_hash():
             content = self.get_session_output()
-            return hashlib.md5(content.encode('utf-8', errors='ignore')).hexdigest()
+            return hashlib.md5(content.encode("utf-8", errors="ignore")).hexdigest()
 
         # Get initial state
-        initial_snapshot = self.get_session_output()
+        self.get_session_output()
         initial_hash = get_content_hash()
 
         logger.debug("Command start", command=command[:50], initial_hash=initial_hash[:8])
@@ -204,7 +198,12 @@ class TmuxSession:
             # Check if content has changed (ANY change means Claude is responding)
             if current_hash != last_stable_hash:
                 if not content_changed:
-                    logger.debug("Content changed", new_hash=current_hash[:8], prev_hash=last_stable_hash[:8], elapsed=elapsed)
+                    logger.debug(
+                        "Content changed",
+                        new_hash=current_hash[:8],
+                        prev_hash=last_stable_hash[:8],
+                        elapsed=elapsed,
+                    )
                 content_changed = True
                 last_stable_hash = current_hash
                 consecutive_prompt_checks = 0  # Reset when content changes
@@ -221,7 +220,7 @@ class TmuxSession:
                     line = lines[i].strip()
                     if line:
                         # Check for various prompt patterns
-                        if line in (prompt_marker, "❯", ">", "»"):
+                        if line in (prompt_marker, "❯", ">", "»"):  # noqa: RUF001
                             prompt_found = True
                             consecutive_prompt_checks += 1
                             break
@@ -236,7 +235,6 @@ class TmuxSession:
 
                     # Extract just the NEW content by comparing with initial state
                     # Skip static header (first ~15 lines) and find actual response
-                    output_lines = []
 
                     if len(lines) > 20:
                         # Skip the likely static header
@@ -250,7 +248,7 @@ class TmuxSession:
                             if not stripped:
                                 continue
                             # Skip prompts and separators
-                            if stripped in (prompt_marker, "❯", ">", "»"):
+                            if stripped in (prompt_marker, "❯", ">", "»"):  # noqa: RUF001
                                 continue
                             if all(c in "─═━─│┌┐└┘ ▔▚▛▜▝▘▐▙▌" for c in stripped):
                                 continue
@@ -263,7 +261,9 @@ class TmuxSession:
 
                         result = "\n".join(cleaned).strip()
                         if result and len(result) > 3:  # Avoid returning empty/minimal responses
-                            logger.debug("Returning response", length=len(result), preview=result[:100])
+                            logger.debug(
+                                "Returning response", length=len(result), preview=result[:100]
+                            )
                             return True, result
 
         return False, current_snapshot or "Timeout waiting for response"
@@ -284,7 +284,9 @@ class TmuxSession:
 
         try:
             if command:
-                self._run_tmux(["new-session", "-d", "-s", self.session_name, command], capture=False)
+                self._run_tmux(
+                    ["new-session", "-d", "-s", self.session_name, command], capture=False
+                )
             else:
                 self._run_tmux(["new-session", "-d", "-s", self.session_name], capture=False)
             logger.info("Session created", session=self.session_name)

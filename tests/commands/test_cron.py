@@ -39,8 +39,7 @@ class TestCrontabManager:
     def test_get_current_crontab(self, crontab_manager, mock_subprocess_run):
         """Should retrieve current crontab."""
         mock_subprocess_run.return_value = MagicMock(
-            stdout="0 * * * * job1\n*/5 * * * * job2",
-            returncode=0
+            stdout="0 * * * * job1\n*/5 * * * * job2", returncode=0
         )
 
         lines = crontab_manager._get_current_crontab()
@@ -51,10 +50,7 @@ class TestCrontabManager:
 
     def test_get_current_crontab_empty(self, crontab_manager, mock_subprocess_run):
         """Should handle empty crontab."""
-        mock_subprocess_run.return_value = MagicMock(
-            stdout="",
-            returncode=0
-        )
+        mock_subprocess_run.return_value = MagicMock(stdout="", returncode=0)
 
         lines = crontab_manager._get_current_crontab()
 
@@ -71,10 +67,7 @@ class TestCrontabManager:
 
     def test_backup_crontab(self, crontab_manager, mock_subprocess_run, tmp_path: Path):
         """Should backup crontab to file."""
-        mock_subprocess_run.return_value = MagicMock(
-            stdout="0 * * * * job1",
-            returncode=0
-        )
+        mock_subprocess_run.return_value = MagicMock(stdout="0 * * * * job1", returncode=0)
 
         with patch("pathlib.Path.home", return_value=tmp_path):
             lines = crontab_manager._backup_crontab()
@@ -117,7 +110,7 @@ class TestCrontabManager:
 {CrontabManager.CC_BRIDGE_MARKER_END}
 # Another entry
 """,
-            returncode=0
+            returncode=0,
         )
 
         crontab_manager.remove_entry()
@@ -128,18 +121,14 @@ class TestCrontabManager:
     def test_has_entries_true(self, crontab_manager, mock_subprocess_run):
         """Should detect CC-BRIDGE entries."""
         mock_subprocess_run.return_value = MagicMock(
-            stdout=f"{CrontabManager.CC_BRIDGE_MARKER}\n*/5 * * * * test",
-            returncode=0
+            stdout=f"{CrontabManager.CC_BRIDGE_MARKER}\n*/5 * * * * test", returncode=0
         )
 
         assert crontab_manager.has_entries() is True
 
     def test_has_entries_false(self, crontab_manager, mock_subprocess_run):
         """Should return False when no CC-BRIDGE entries."""
-        mock_subprocess_run.return_value = MagicMock(
-            stdout="# Other crontab entry",
-            returncode=0
-        )
+        mock_subprocess_run.return_value = MagicMock(stdout="# Other crontab entry", returncode=0)
 
         assert crontab_manager.has_entries() is False
 

@@ -2,14 +2,12 @@
 Tests for config command.
 """
 
-import pytest
-
-from cc_bridge.commands.config import get_value, set_value, delete_value
+from cc_bridge.commands.config import delete_value, set_value
 
 
 def test_get_value(test_config):
     """Test getting configuration value."""
-    value = get_value("telegram.bot_token")
+    value = test_config.get("telegram.bot_token")
     assert value == "test_bot_token"
 
 

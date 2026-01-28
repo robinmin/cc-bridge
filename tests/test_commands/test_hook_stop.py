@@ -4,7 +4,7 @@ Tests for hook-stop command.
 
 import pytest
 
-from cc_bridge.commands.hook_stop import send_to_telegram, main
+from cc_bridge.commands.hook_stop import main, send_to_telegram
 
 
 def test_send_to_telegram_with_valid_transcript(sample_transcript):

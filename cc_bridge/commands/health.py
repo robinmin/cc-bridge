@@ -7,6 +7,7 @@ This module implements health checks for:
 - Hook functionality
 """
 
+import asyncio
 from typing import Any
 
 
@@ -74,7 +75,6 @@ def main() -> int:
     Returns:
         Exit code (0 if all checks pass, 1 otherwise)
     """
-    import asyncio
 
     result = asyncio.run(run_all_checks())
 

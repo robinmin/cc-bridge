@@ -11,7 +11,6 @@ import os
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
 import toml
 
 from cc_bridge.config import Config, get_config
@@ -58,7 +57,7 @@ class TestConfigLoading:
             "server": {"host": "127.0.0.1", "port": 9000},
         }
 
-        with open(config_file, "w") as f:
+        with config_file.open("w") as f:
             toml.dump(config_data, f)
 
         config = Config(config_path=config_file)
@@ -81,7 +80,7 @@ class TestConfigLoading:
         config_file = test_config_dir / "expand_tilde_test.toml"
         config_data = {"logging": {"file": "~/logs/test.log"}}
 
-        with open(config_file, "w") as f:
+        with config_file.open("w") as f:
             toml.dump(config_data, f)
 
         config = Config(config_path=config_file)
@@ -99,7 +98,7 @@ class TestConfigEnvironmentVariables:
         """Environment variable should override config file."""
         config_file = test_config_dir / "env_bot_token_test.toml"
         config_data = {"telegram": {"bot_token": "file_token"}}
-        with open(config_file, "w") as f:
+        with config_file.open("w") as f:
             toml.dump(config_data, f)
 
         with patch.dict(os.environ, {"TELEGRAM_BOT_TOKEN": "env_token"}):
@@ -110,7 +109,7 @@ class TestConfigEnvironmentVariables:
         """Environment variable should override webhook URL."""
         config_file = test_config_dir / "env_webhook_test.toml"
         config_data = {"telegram": {"webhook_url": "https://file.com"}}
-        with open(config_file, "w") as f:
+        with config_file.open("w") as f:
             toml.dump(config_data, f)
 
         with patch.dict(os.environ, {"TELEGRAM_WEBHOOK_URL": "https://env.com"}):
@@ -121,7 +120,7 @@ class TestConfigEnvironmentVariables:
         """Environment variable should override tmux session."""
         config_file = test_config_dir / "env_tmux_test.toml"
         config_data = {"tmux": {"session": "file_session"}}
-        with open(config_file, "w") as f:
+        with config_file.open("w") as f:
             toml.dump(config_data, f)
 
         with patch.dict(os.environ, {"TMUX_SESSION": "env_session"}):
@@ -132,7 +131,7 @@ class TestConfigEnvironmentVariables:
         """Environment variable should override port."""
         config_file = test_config_dir / "env_port_test.toml"
         config_data = {"server": {"port": 8080}}
-        with open(config_file, "w") as f:
+        with config_file.open("w") as f:
             toml.dump(config_data, f)
 
         with patch.dict(os.environ, {"PORT": "9000"}):
@@ -143,7 +142,7 @@ class TestConfigEnvironmentVariables:
         """Environment variable should override log level."""
         config_file = test_config_dir / "env_log_level_test.toml"
         config_data = {"logging": {"level": "WARNING"}}
-        with open(config_file, "w") as f:
+        with config_file.open("w") as f:
             toml.dump(config_data, f)
 
         with patch.dict(os.environ, {"LOG_LEVEL": "DEBUG"}):
@@ -158,7 +157,7 @@ class TestConfigDeepMerge:
         """Deep merge should preserve nested default values."""
         config_file = test_config_dir / "merge_nested_test.toml"
         config_data = {"telegram": {"bot_token": "test_token"}}
-        with open(config_file, "w") as f:
+        with config_file.open("w") as f:
             toml.dump(config_data, f)
 
         config = Config(config_path=config_file)
@@ -175,7 +174,7 @@ class TestConfigDeepMerge:
             "server": {"host": "127.0.0.1"},
             "logging": {"level": "DEBUG", "format": "text"},
         }
-        with open(config_file, "w") as f:
+        with config_file.open("w") as f:
             toml.dump(config_data, f)
 
         config = Config(config_path=config_file)
@@ -341,7 +340,8 @@ class TestGlobalConfig:
     def test_get_config_creates_instance_if_none(self):
         """Should create instance if not exists."""
         # Reset global config
-        import cc_bridge.config
+        import cc_bridge.config  # noqa: PLC0415
+
         cc_bridge.config._config = None
 
         config = get_config()

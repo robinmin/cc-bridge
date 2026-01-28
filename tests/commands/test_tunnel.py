@@ -66,15 +66,19 @@ class TestStartTunnel:
             "Still waiting...\n",
         ]
 
-        with patch("cc_bridge.commands.tunnel.subprocess.Popen", return_value=mock_process):
-            with pytest.raises(RuntimeError, match="Timeout"):
-                start_tunnel(port=8080, timeout=1)
+        with (
+            patch("cc_bridge.commands.tunnel.subprocess.Popen", return_value=mock_process),
+            pytest.raises(RuntimeError, match="Timeout"),
+        ):
+            start_tunnel(port=8080, timeout=1)
 
     def test_start_tunnel_cloudflared_not_found(self):
         """Should raise error if cloudflared not installed."""
-        with patch("cc_bridge.commands.tunnel.subprocess.Popen", side_effect=FileNotFoundError):
-            with pytest.raises(RuntimeError, match="cloudflared not found"):
-                start_tunnel(port=8080)
+        with (
+            patch("cc_bridge.commands.tunnel.subprocess.Popen", side_effect=FileNotFoundError),
+            pytest.raises(RuntimeError, match="cloudflared not found"),
+        ):
+            start_tunnel(port=8080)
 
 
 class TestStopTunnel:
@@ -103,9 +107,11 @@ class TestStopTunnel:
 
     def test_stop_tunnel_error(self):
         """Should raise error on failure."""
-        with patch("cc_bridge.commands.tunnel.subprocess.run", side_effect=Exception("Kill failed")):
-            with pytest.raises(RuntimeError):
-                stop_tunnel()
+        with (
+            patch("cc_bridge.commands.tunnel.subprocess.run", side_effect=Exception("Kill failed")),
+            pytest.raises(RuntimeError),
+        ):
+            stop_tunnel()
 
 
 class TestSetWebhook:
@@ -114,7 +120,7 @@ class TestSetWebhook:
     @pytest.mark.asyncio
     async def test_set_webhook_success(self):
         """Should set webhook successfully."""
-        from cc_bridge.commands.tunnel import set_webhook
+        from cc_bridge.commands.tunnel import set_webhook  # noqa: PLC0415
 
         mock_response = MagicMock()
         mock_response.json.return_value = {"ok": True}
@@ -124,17 +130,14 @@ class TestSetWebhook:
                 return_value=mock_response
             )
 
-            result = await set_webhook(
-                "https://test.trycloudflare.com",
-                "test_token"
-            )
+            result = await set_webhook("https://test.trycloudflare.com", "test_token")
 
             assert result is True
 
     @pytest.mark.asyncio
     async def test_set_webhook_failure(self):
         """Should handle webhook setting failure."""
-        from cc_bridge.commands.tunnel import set_webhook
+        from cc_bridge.commands.tunnel import set_webhook  # noqa: PLC0415
 
         mock_response = MagicMock()
         mock_response.json.return_value = {"ok": False, "description": "Error"}
@@ -144,9 +147,6 @@ class TestSetWebhook:
                 return_value=mock_response
             )
 
-            result = await set_webhook(
-                "https://test.trycloudflare.com",
-                "test_token"
-            )
+            result = await set_webhook("https://test.trycloudflare.com", "test_token")
 
             assert result is False

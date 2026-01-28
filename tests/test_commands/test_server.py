@@ -3,22 +3,21 @@ Tests for server command.
 """
 
 import pytest
-from httpx import AsyncClient, ASGITransport
+from httpx import ASGITransport, AsyncClient
 
 from cc_bridge.commands.server import app
 
 
 @pytest.mark.asyncio
 async def test_root_endpoint():
-    """Test root endpoint returns status ok."""
-    # Use ASGITransport for FastAPI app testing
+    """Test root endpoint returns 404 for security (information disclosure prevention)."""
+    # Root endpoint intentionally returns 404 to prevent information disclosure
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.get("/")
 
-        assert response.status_code == 200
-        assert response.json()["status"] == "ok"
-        assert response.json()["service"] == "cc-bridge"
+        assert response.status_code == 404
+        assert "Not found" in response.json()["detail"]
 
 
 @pytest.mark.asyncio
@@ -45,6 +44,7 @@ async def test_webhook_endpoint():
             "message_id": 1,
             "from": {"id": 123456, "first_name": "Test"},
             "chat": {"id": 123456, "type": "private"},
+            "date": 1234567890,
             "text": "Test message",
         },
     }
@@ -52,7 +52,8 @@ async def test_webhook_endpoint():
     response = await client.post("/webhook", json=payload)
 
     assert response.status_code == 200
-    assert response.json()["status"] == "ok"
+    # Response is "ignored" because chat_id is not authorized (expected behavior)
+    assert response.json()["status"] == "ignored"
 
     # Close client explicitly
     await client.aclose()

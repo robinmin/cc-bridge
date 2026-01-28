@@ -74,7 +74,10 @@ def setup_logging(
     root_logger.setLevel(log_level)
 
     # Add console handler if not already present
-    if not any(isinstance(h, logging.StreamHandler) and h.stream == sys.stdout for h in root_logger.handlers):
+    if not any(
+        isinstance(h, logging.StreamHandler) and h.stream == sys.stdout
+        for h in root_logger.handlers
+    ):
         console_handler = logging.StreamHandler(sys.stdout)
         console_handler.setLevel(log_level)
         console_handler.setFormatter(formatter)

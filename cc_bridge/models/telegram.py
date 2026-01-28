@@ -6,7 +6,6 @@ including updates, messages, callbacks, and inline keyboards.
 """
 
 from pydantic import BaseModel, Field
-from typing import Optional, List
 
 
 class User(BaseModel):
@@ -15,9 +14,9 @@ class User(BaseModel):
     id: int
     is_bot: bool = False
     first_name: str
-    last_name: Optional[str] = None
-    username: Optional[str] = None
-    language_code: Optional[str] = None
+    last_name: str | None = None
+    username: str | None = None
+    language_code: str | None = None
 
 
 class Chat(BaseModel):
@@ -25,21 +24,21 @@ class Chat(BaseModel):
 
     id: int
     type: str = Field(..., description="Chat type: private, group, supergroup, channel")
-    first_name: Optional[str] = None
-    last_name: Optional[str] = None
-    username: Optional[str] = None
-    title: Optional[str] = None
+    first_name: str | None = None
+    last_name: str | None = None
+    username: str | None = None
+    title: str | None = None
 
 
 class Message(BaseModel):
     """Telegram message model."""
 
     message_id: int
-    from_: Optional[User] = Field(None, alias="from")
+    from_: User | None = Field(None, alias="from")
     date: int
     chat: Chat
-    text: Optional[str] = None
-    entities: Optional[List[dict]] = None
+    text: str | None = None
+    entities: list[dict] | None = None
 
 
 class CallbackQuery(BaseModel):
@@ -47,34 +46,34 @@ class CallbackQuery(BaseModel):
 
     id: str
     from_: User = Field(..., alias="from")
-    message: Optional[Message] = None
-    data: Optional[str] = None
+    message: Message | None = None
+    data: str | None = None
 
 
 class InlineKeyboardButton(BaseModel):
     """Inline keyboard button model."""
 
     text: str
-    callback_data: Optional[str] = None
-    url: Optional[str] = None
+    callback_data: str | None = None
+    url: str | None = None
 
 
 class InlineKeyboardMarkup(BaseModel):
     """Inline keyboard markup model."""
 
-    inline_keyboard: List[List[InlineKeyboardButton]]
+    inline_keyboard: list[list[InlineKeyboardButton]]
 
 
 class Update(BaseModel):
     """Telegram update model."""
 
     update_id: int
-    message: Optional[Message] = None
-    callback_query: Optional[CallbackQuery] = None
+    message: Message | None = None
+    callback_query: CallbackQuery | None = None
 
 
 class WebhookRequest(BaseModel):
     """Webhook request model."""
 
     update: Update
-    timestamp: Optional[str] = None
+    timestamp: str | None = None

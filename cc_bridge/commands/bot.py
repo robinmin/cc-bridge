@@ -6,6 +6,10 @@ This module implements bot command synchronization:
 - List bot commands
 """
 
+import sys
+
+import httpx
+
 
 async def set_bot_commands(bot_token: str, commands: list[dict]) -> bool:
     """
@@ -20,7 +24,6 @@ async def set_bot_commands(bot_token: str, commands: list[dict]) -> bool:
     """
     # TODO: Implement bot command setting (Task 0013)
     api_url = f"https://api.telegram.org/bot{bot_token}/setMyCommands"
-    import httpx
 
     async with httpx.AsyncClient() as client:
         response = await client.post(api_url, json={"commands": commands})

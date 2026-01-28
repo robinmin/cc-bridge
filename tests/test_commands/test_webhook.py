@@ -4,7 +4,7 @@ Tests for webhook command.
 
 import pytest
 
-from cc_bridge.commands.webhook import set_webhook, get_webhook_info, delete_webhook
+from cc_bridge.commands.webhook import delete_webhook, get_webhook_info, set_webhook
 
 
 @pytest.mark.asyncio

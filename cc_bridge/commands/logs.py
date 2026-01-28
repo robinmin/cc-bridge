@@ -4,6 +4,7 @@ Logs command implementation.
 This module implements log streaming with filtering capabilities.
 """
 
+import sys
 from pathlib import Path
 
 

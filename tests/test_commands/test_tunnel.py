@@ -2,8 +2,6 @@
 Tests for tunnel command.
 """
 
-import pytest
-
 from cc_bridge.commands.tunnel import start_tunnel, stop_tunnel
 
 

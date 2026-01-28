@@ -6,10 +6,10 @@ import pytest
 
 from cc_bridge.core.claude import (
     ClaudeTranscript,
-    get_pending_flag_path,
-    set_pending_flag,
     clear_pending_flag,
+    get_pending_flag_path,
     is_pending,
+    set_pending_flag,
 )
 
 
@@ -53,10 +53,10 @@ def test_pending_flag_path():
 def test_set_and_clear_pending_flag(tmp_path):
     """Test setting and clearing pending flag."""
     # Override path for testing
-    import cc_bridge.core.claude as claude_module
+    import cc_bridge.core.claude as claude_module  # noqa: PLC0415
 
     original_path = claude_module.get_pending_flag_path
-    claude_module.get_pending_flag_path = lambda: tmp_path / "pending"
+    claude_module.get_pending_flag_path = lambda: tmp_path / "pending"  # type: ignore[assignment]
 
     try:
         set_pending_flag()

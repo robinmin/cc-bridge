@@ -11,7 +11,7 @@ This module provides a layered configuration system with priority:
 import os
 from copy import deepcopy
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 import toml
 
@@ -27,7 +27,7 @@ class Config:
     4. Defaults (lowest priority)
     """
 
-    DEFAULTS: dict[str, Any] = {
+    DEFAULTS: ClassVar[dict[str, Any]] = {
         "telegram": {
             "bot_token": "",
             "chat_id": None,
@@ -99,9 +99,9 @@ class Config:
 
         if env_file and env_file.exists():
             try:
-                with open(env_file) as f:
-                    for line in f:
-                        line = line.strip()
+                with env_file.open() as f:
+                    for raw_line in f:
+                        line = raw_line.strip()
                         # Skip comments and empty lines
                         if not line or line.startswith("#"):
                             continue
@@ -112,7 +112,6 @@ class Config:
                             value = value.strip().strip('"').strip("'")
                             # Set as environment variable
                             os.environ[key.strip()] = value
-                logger_debug = lambda msg: None  # No logger available at init
             except Exception:
                 pass  # Silently ignore .env loading errors
 
@@ -123,7 +122,7 @@ class Config:
         If config file doesn't exist, use defaults.
         """
         if self.config_path.exists():
-            with open(self.config_path) as f:
+            with self.config_path.open() as f:
                 file_config = toml.load(f)
             self._merge_config(file_config)
         else:
@@ -257,7 +256,7 @@ class Config:
         Creates parent directories if they don't exist.
         """
         self.config_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(self.config_path, "w") as f:
+        with self.config_path.open("w") as f:
             toml.dump(self._config, f)
 
     @property
@@ -303,9 +302,8 @@ class Config:
         are expanded to their absolute form.
         """
         log_file = self.get("logging.file")
-        if log_file and isinstance(log_file, str):
-            if log_file.startswith("~"):
-                self.set("logging.file", str(Path(log_file).expanduser()))
+        if log_file and isinstance(log_file, str) and log_file.startswith("~"):
+            self.set("logging.file", str(Path(log_file).expanduser()))
 
 
 # Global config instance
@@ -319,7 +317,7 @@ def get_config() -> Config:
     Returns:
         Global Config instance
     """
-    global _config
+    global _config  # noqa: PLW0603
     if _config is None:
         _config = Config()
     return _config

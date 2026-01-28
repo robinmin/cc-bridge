@@ -2,8 +2,6 @@
 Tests for tmux session manager.
 """
 
-import pytest
-
 from cc_bridge.core.tmux import TmuxSession
 
 
@@ -29,7 +27,8 @@ def test_send_keys(mock_tmux_session):
 def test_send_command(mock_tmux_session):
     """Test sending command to session."""
     mock_tmux_session.send_command("test command")
-    assert mock_tmux_session.send_keys.call_count == 2
+    # send_command calls send_keys once with enter=True
+    mock_tmux_session.send_keys.assert_called_once_with("test command", enter=True)
 
 
 def test_get_session_output(mock_tmux_session):

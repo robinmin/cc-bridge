@@ -2,29 +2,98 @@
 pytest fixtures and configuration for cc-bridge tests.
 """
 
+import os
+from collections.abc import AsyncGenerator
 from pathlib import Path
-from typing import AsyncGenerator, Generator
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from httpx import AsyncClient, Response
+from httpx import AsyncClient
 
-from cc_bridge.config import Config, _config
+from cc_bridge.config import Config
 from cc_bridge.core.telegram import TelegramClient
 from cc_bridge.core.tmux import TmuxSession
 
+# Store original environment variables before any tests run
+_ORIG_ENV = os.environ.copy()
+
+# Type stub for _config global (using string forward reference)
+_config: "Config | None" = None
+
+
+@pytest.fixture(autouse=True, scope="session")
+def clean_test_environment() -> None:  # type: ignore[misc]
+    """
+    Clean environment for entire test session.
+
+    This must run before any tests to prevent loading of user's
+    actual configuration from environment variables or .env file.
+    """
+    # Clear problematic environment variables at session start
+    env_vars_to_clear = [
+        "LOG_LEVEL",
+        "TELEGRAM_BOT_TOKEN",
+        "TELEGRAM_CHAT_ID",
+        "TELEGRAM_WEBHOOK_URL",
+        "TMUX_SESSION",
+        "PORT",
+    ]
+    for var in env_vars_to_clear:
+        os.environ.pop(var, None)
+
+    yield
+
+    # No cleanup needed - we want this to persist for all tests
+
 
 @pytest.fixture(autouse=True)
-def reset_global_config() -> None:
+def reset_global_config() -> None:  # type: ignore[misc]
     """
-    Reset global config singleton before each test.
+    Reset global config singleton and environment variables before each test.
 
     This ensures tests don't pollute each other's state.
     """
-    global _config
+    global _config  # noqa: PLW0603
+
+    # Reset config singleton
     _config = None
+
+    # Reset environment variables to original state
+    # Remove any variables that were added by tests (excluding pytest's own vars)
+    pytest_vars = {"PYTEST_CURRENT_TEST", "PYTEST_XDIST_WORKER", "PYTEST_XDIST_WORKER_COUNT"}
+    added_vars = (set(os.environ.keys()) - set(_ORIG_ENV.keys())) - pytest_vars
+    for var in added_vars:
+        os.environ.pop(var, None)
+
+    # Restore original values for any modified variables
+    for var in set(_ORIG_ENV.keys()) & set(os.environ.keys()):
+        if os.environ[var] != _ORIG_ENV[var]:
+            os.environ[var] = _ORIG_ENV[var]
+
     yield
+
+    # Cleanup after test
     _config = None
+
+    # Final environment cleanup - use pop to avoid KeyError
+    current_vars = set(os.environ.keys())
+    original_vars = set(_ORIG_ENV.keys())
+    added_vars = (current_vars - original_vars) - pytest_vars
+    for var in added_vars:
+        os.environ.pop(var, None)
+
+
+@pytest.fixture(autouse=True)
+def prevent_env_file_loading() -> None:  # type: ignore[misc]
+    """
+    Prevent loading of .env files during tests.
+
+    This ensures tests run in isolation without loading
+    environment variables from the project's .env file.
+    """
+    # Patch _load_env_file to do nothing
+    with patch.object(Config, "_load_env_file", return_value=None):
+        yield
 
 
 @pytest.fixture
@@ -91,15 +160,15 @@ def mock_tmux_session() -> TmuxSession:
     Returns:
         TmuxSession instance with mocked methods
     """
-    from unittest.mock import MagicMock
+    from unittest.mock import MagicMock  # noqa: PLC0415
 
     session = TmuxSession("test_claude")
     # Mock session_exists to return True
-    session.session_exists = MagicMock(return_value=True)
+    session.session_exists = MagicMock(return_value=True)  # type: ignore[assignment]
     # Mock send_keys to track calls
-    session.send_keys = MagicMock()
+    session.send_keys = MagicMock()  # type: ignore[assignment]
     # Mock get_session_output
-    session.get_session_output = MagicMock(return_value="Test output")
+    session.get_session_output = MagicMock(return_value="Test output")  # type: ignore[assignment]
     return session
 
 
@@ -170,7 +239,7 @@ async def async_http_client() -> AsyncGenerator[AsyncClient, None]:
     Yields:
         AsyncClient instance
     """
-    async with AsyncClient(app=None, base_url="http://test") as client:
+    async with AsyncClient(base_url="http://test") as client:
         yield client
 
 

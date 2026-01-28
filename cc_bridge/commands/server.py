@@ -5,19 +5,20 @@ This module implements the FastAPI webhook server that receives
 Telegram webhooks and injects messages into Claude Code via tmux.
 """
 
-import asyncio
 import time
 from collections import defaultdict
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator, Dict
 
-from fastapi import FastAPI, HTTPException, Depends, Request
+import uvicorn
+from fastapi import Depends, FastAPI, HTTPException, Request
+
 from cc_bridge.config import get_config
-from cc_bridge.models.telegram import Update
+from cc_bridge.core.instances import get_instance_manager
 from cc_bridge.core.telegram import TelegramClient
 from cc_bridge.core.tmux import get_session
-from cc_bridge.core.instances import get_instance_manager
 from cc_bridge.logging import get_logger
+from cc_bridge.models.telegram import Update
 
 logger = get_logger(__name__)
 
@@ -39,7 +40,7 @@ class RateLimiter:
         """
         self.requests = requests
         self.window = window
-        self._timestamps: Dict[int, list] = defaultdict(list)
+        self._timestamps: dict[int, list] = defaultdict(list)
 
     def is_allowed(self, identifier: int) -> bool:
         """
@@ -55,8 +56,7 @@ class RateLimiter:
 
         # Clean old timestamps outside the window
         self._timestamps[identifier] = [
-            ts for ts in self._timestamps[identifier]
-            if now - ts < self.window
+            ts for ts in self._timestamps[identifier] if now - ts < self.window
         ]
 
         # Check if under the limit
@@ -76,7 +76,9 @@ class RateLimiter:
         if not self._timestamps:
             return 0
 
-        oldest = min(self._timestamps.values()[0])
+        # Get first list from values, then find min timestamp
+        first_list = next(iter(self._timestamps.values()))
+        oldest = min(first_list)
         retry_after = int(oldest + self.window - time.time())
         return max(0, retry_after)
 
@@ -87,7 +89,7 @@ _rate_limiter = None
 
 def get_rate_limiter() -> RateLimiter:
     """Get or create the global rate limiter."""
-    global _rate_limiter
+    global _rate_limiter  # noqa: PLW0603
     if _rate_limiter is None:
         _rate_limiter = RateLimiter(requests=10, window=60)
     return _rate_limiter
@@ -134,12 +136,12 @@ async def health():
 
 
 @app.post("/webhook")
-async def telegram_webhook(
+async def telegram_webhook(  # noqa: PLR0911, PLR0912, PLR0915
     request: Request,
     update: dict,
-    instance_manager = Depends(get_instance_manager_dep),
-    telegram_client = Depends(get_telegram_client_dep),
-    rate_limiter: RateLimiter = Depends(get_rate_limiter)
+    instance_manager=Depends(get_instance_manager_dep),  # noqa: B008
+    telegram_client=Depends(get_telegram_client_dep),  # noqa: B008
+    rate_limiter: RateLimiter = Depends(get_rate_limiter),  # noqa: B008
 ):
     """
     Telegram webhook endpoint.
@@ -161,10 +163,7 @@ async def telegram_webhook(
     content_length = request.headers.get("content-length", 0)
     if content_length and int(content_length) > MAX_REQUEST_SIZE:
         logger.warning("Request too large", size=int(content_length))
-        return {
-            "status": "error",
-            "reason": "Request too large"
-        }, 413  # HTTP 413 Payload Too Large
+        return {"status": "error", "reason": "Request too large"}, 413  # HTTP 413 Payload Too Large
 
     # Validate update is not empty
     if not update:
@@ -195,7 +194,7 @@ async def telegram_webhook(
             return {
                 "status": "rate_limited",
                 "retry_after": retry_after,
-                "message": "Too many requests. Please try again later."
+                "message": "Too many requests. Please try again later.",
             }, 429  # HTTP 429 Too Many Requests
 
         # Validate message length (Telegram max is 4096, but be conservative)
@@ -227,7 +226,7 @@ async def telegram_webhook(
                         "I'm connected to Claude Code. Send me a message and I'll relay it to Claude.\n\n"
                         "Commands:\n"
                         "/status - Check service status\n"
-                        "/help - Show this message"
+                        "/help - Show this message",
                     )
                 return {"status": "ok"}
             elif text == "/status":
@@ -238,13 +237,13 @@ async def telegram_webhook(
                 else:
                     instance = None
 
-                status_text = f"📊 **Service Status**\n\n"
-                status_text += f"✅ Server: Running\n"
+                status_text = "📊 **Service Status**\n\n"
+                status_text += "✅ Server: Running\n"
                 if instance:
                     status_text += f"🔌 Instance: {instance.name}\n"
                 else:
                     status_text += "🔌 Instance: None\n"
-                status_text += f"🟢 Tunnel: Active (ccb.robinmin.net)\n"
+                status_text += "🟢 Tunnel: Active (ccb.robinmin.net)\n"
                 if telegram_client:
                     await telegram_client.send_message(chat_id, status_text)
                 return {"status": "ok"}
@@ -257,7 +256,7 @@ async def telegram_webhook(
                         "Commands:\n"
                         "/status - Check service status\n"
                         "/help - Show this message\n\n"
-                        "Your messages are sent directly to your Claude Code instance."
+                        "Your messages are sent directly to your Claude Code instance.",
                     )
                 return {"status": "ok"}
             else:
@@ -280,7 +279,7 @@ async def telegram_webhook(
             if telegram_client:
                 await telegram_client.send_message(
                     chat_id,
-                    "⚠️ No Claude instance running. Start one with: cc-bridge claude start <name>"
+                    "⚠️ No Claude instance running. Start one with: cc-bridge claude start <name>",
                 )
             return {"status": "error", "reason": "no instance"}
 
@@ -293,7 +292,7 @@ async def telegram_webhook(
             if telegram_client:
                 await telegram_client.send_message(
                     chat_id,
-                    f"⚠️ Claude instance '{instance.name}' is not running. Start it with: cc-bridge claude start {instance.name}"
+                    f"⚠️ Claude instance '{instance.name}' is not running. Start it with: cc-bridge claude start {instance.name}",
                 )
             return {"status": "error", "reason": "instance not running"}
 
@@ -306,7 +305,12 @@ async def telegram_webhook(
         # For simple text messages, just send them directly
         success, output = await session.send_command_and_wait(text, timeout=60.0)
 
-        logger.info("Claude response", success=success, output_length=len(output) if output else 0, output_preview=(output[:100] if output else "None"))
+        logger.info(
+            "Claude response",
+            success=success,
+            output_length=len(output) if output else 0,
+            output_preview=(output[:100] if output else "None"),
+        )
 
         if success and output:
             # Clean up output (remove prompts, etc.)
@@ -320,22 +324,18 @@ async def telegram_webhook(
 
                 await telegram_client.send_message(chat_id, clean_output)
                 logger.info("Response sent", chat_id=chat_id, length=len(clean_output))
-        else:
-            # Command failed or timed out
-            if telegram_client:
-                await telegram_client.send_message(
-                    chat_id,
-                    f"⚠️ Claude command timed out or failed. Output: {output[:200] if output else 'No output'}"
-                )
+        # Command failed or timed out
+        elif telegram_client:
+            await telegram_client.send_message(
+                chat_id,
+                f"⚠️ Claude command timed out or failed. Output: {output[:200] if output else 'No output'}",
+            )
 
         return {"status": "ok"}
 
     except Exception as e:
         logger.error("Webhook processing error", error=str(e), exc_info=True)
-        return {
-            "status": "error",
-            "reason": "Processing failed"
-        }, 500
+        return {"status": "error", "reason": "Processing failed"}, 500
 
 
 def _clean_claude_output(output: str) -> str:
@@ -365,11 +365,11 @@ def _clean_claude_output(output: str) -> str:
             continue
 
         # Skip prompt lines (various Claude Code prompt styles)
-        # - Just a prompt: "❯", ">", "> "
+        # - Just a prompt: ">", "> ", "»"
         # - Path prompt: "~/project> ", "/path> "
         # - Multi-char prompt that's mostly special chars
-        if stripped in ("❯", ">", "»") or (
-            stripped.startswith(("❯", ">", "»"))
+        if stripped in ("❯", ">", "»") or (  # noqa: RUF001
+            stripped.startswith(("❯", ">", "»"))  # noqa: RUF001
             and len(stripped) < 20
             and sum(c.isalnum() or c.isspace() for c in stripped) < 5
         ):
@@ -399,6 +399,4 @@ def start_server(host: str = "0.0.0.0", port: int = 8080, reload: bool = False):
         port: Server port
         reload: Enable auto-reload for development
     """
-    import uvicorn
-
     uvicorn.run("cc_bridge.commands.server:app", host=host, port=port, reload=reload)

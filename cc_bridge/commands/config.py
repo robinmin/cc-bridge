@@ -7,6 +7,8 @@ This module implements configuration management commands:
 - Delete configuration values
 """
 
+import sys
+
 from cc_bridge.config import Config
 
 
@@ -79,7 +81,7 @@ def main(key: str | None = None, value: str | None = None, delete: bool = False)
                 print(result)
         else:
             # Show all config
-            config = Config()
+            Config()
             print("Current configuration:")
             # TODO: Pretty print config
         return 0

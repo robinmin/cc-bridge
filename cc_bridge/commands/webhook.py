@@ -7,6 +7,8 @@ This module implements manual webhook management commands:
 - Delete webhook
 """
 
+import sys
+
 import httpx
 
 

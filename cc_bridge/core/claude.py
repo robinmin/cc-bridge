@@ -93,18 +93,14 @@ class ClaudeTranscript:
         for line in lines:
             if line.strip() in ["[user]", "[assistant]"]:
                 if current_role and current_content:
-                    messages.append(
-                        {"role": current_role, "content": "\n".join(current_content)}
-                    )
+                    messages.append({"role": current_role, "content": "\n".join(current_content)})
                 current_role = line.strip().strip("[]")
                 current_content = []
             else:
                 current_content.append(line)
 
         if current_role and current_content:
-            messages.append(
-                {"role": current_role, "content": "\n".join(current_content)}
-            )
+            messages.append({"role": current_role, "content": "\n".join(current_content)})
 
         return messages
 
