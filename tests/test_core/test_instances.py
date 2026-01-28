@@ -2,6 +2,7 @@
 Tests for Claude instance management.
 """
 
+# ruff: noqa: PLC0415 (intentional lazy imports in tests)
 from pathlib import Path
 
 import pytest
@@ -111,7 +112,7 @@ class TestGetInstanceManager:
     def test_get_instance_manager_returns_singleton(self):
         """Should return same instance on multiple calls."""
         # Reset global state
-        import cc_bridge.core.instances as instances_module  # noqa: PLC0415
+        import cc_bridge.core.instances as instances_module
 
         instances_module._instance_manager = None
 
@@ -123,7 +124,7 @@ class TestGetInstanceManager:
     def test_get_instance_manager_creates_if_none(self):
         """Should create manager if none exists."""
         # Reset global state
-        import cc_bridge.core.instances as instances_module  # noqa: PLC0415
+        import cc_bridge.core.instances as instances_module
 
         instances_module._instance_manager = None
 
