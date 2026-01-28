@@ -7,6 +7,7 @@ Tests follow TDD principles:
 3. Refactor for cleanliness
 """
 
+# ruff: noqa: PLC0415 (intentional lazy imports in tests)
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -22,7 +23,7 @@ class TestCLIInitialization:
 
     def test_cli_has_app_instance(self):
         """CLI should have Typer app instance."""
-        from cc_bridge.cli import app  # noqa: PLC0415
+        from cc_bridge.cli import app
 
         assert app is not None
         assert app.info.name == "cc-bridge"
@@ -31,7 +32,7 @@ class TestCLIInitialization:
 
     def test_cli_all_commands_exist(self):
         """CLI should have all required commands registered."""
-        from cc_bridge.cli import app  # noqa: PLC0415
+        from cc_bridge.cli import app
 
         # Simply verify that commands can be invoked without errors
         expected_commands = ["server", "hook-stop", "health", "setup", "config", "tunnel"]
