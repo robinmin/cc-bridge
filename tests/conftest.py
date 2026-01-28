@@ -2,6 +2,7 @@
 pytest fixtures and configuration for cc-bridge tests.
 """
 
+# ruff: noqa: PLC0415 (intentional lazy imports in test fixtures)
 import os
 from collections.abc import AsyncGenerator
 from pathlib import Path
@@ -160,7 +161,7 @@ def mock_tmux_session() -> TmuxSession:
     Returns:
         TmuxSession instance with mocked methods
     """
-    from unittest.mock import MagicMock  # noqa: PLC0415
+    from unittest.mock import MagicMock
 
     session = TmuxSession("test_claude")
     # Mock session_exists to return True
