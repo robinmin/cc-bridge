@@ -2,6 +2,7 @@
 Tests for tunnel command enhancements.
 """
 
+# ruff: noqa: PLC0415 (intentional lazy imports in tests)
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -120,7 +121,7 @@ class TestSetWebhook:
     @pytest.mark.asyncio
     async def test_set_webhook_success(self):
         """Should set webhook successfully."""
-        from cc_bridge.commands.tunnel import set_webhook  # noqa: PLC0415
+        from cc_bridge.commands.tunnel import set_webhook
 
         mock_response = MagicMock()
         mock_response.json.return_value = {"ok": True}
@@ -137,7 +138,7 @@ class TestSetWebhook:
     @pytest.mark.asyncio
     async def test_set_webhook_failure(self):
         """Should handle webhook setting failure."""
-        from cc_bridge.commands.tunnel import set_webhook  # noqa: PLC0415
+        from cc_bridge.commands.tunnel import set_webhook
 
         mock_response = MagicMock()
         mock_response.json.return_value = {"ok": False, "description": "Error"}
