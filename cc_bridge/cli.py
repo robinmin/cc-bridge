@@ -5,6 +5,7 @@ This module provides the main Typer CLI application with all commands
 for managing the Telegram-Claude bridge.
 """
 
+# ruff: noqa: PLC0415 (intentional lazy imports to avoid circular dependencies)
 from typer import Typer
 
 from cc_bridge.config import get_config
@@ -44,7 +45,7 @@ def server(
     This command starts the uvicorn server that receives Telegram webhooks
     and injects messages into Claude Code via tmux.
     """
-    from cc_bridge.commands.server import start_server  # noqa: PLC0415
+    from cc_bridge.commands.server import start_server
 
     start_server(host=host, port=port, reload=reload)
 
@@ -54,9 +55,9 @@ def hook_stop(transcript_path: str):
     """
     Send Claude response to Telegram (Stop hook).
     """
-    import sys  # noqa: PLC0415
+    import sys
 
-    from cc_bridge.commands.hook_stop import main as hook_stop_main  # noqa: PLC0415
+    from cc_bridge.commands.hook_stop import main as hook_stop_main
 
     sys.exit(hook_stop_main(transcript_path))
 
@@ -66,9 +67,9 @@ def health():
     """
     Run health checks.
     """
-    import sys  # noqa: PLC0415
+    import sys
 
-    from cc_bridge.commands.health import main as health_main  # noqa: PLC0415
+    from cc_bridge.commands.health import main as health_main
 
     sys.exit(health_main())
 
@@ -80,9 +81,9 @@ def setup():
 
     This command guides the user through first-time configuration.
     """
-    import sys  # noqa: PLC0415
+    import sys
 
-    from cc_bridge.commands.setup import main as setup_main  # noqa: PLC0415
+    from cc_bridge.commands.setup import main as setup_main
 
     sys.exit(setup_main())
 
@@ -96,9 +97,9 @@ def config(
     """
     Configuration management.
     """
-    import sys  # noqa: PLC0415
+    import sys
 
-    from cc_bridge.commands.config import main as config_main  # noqa: PLC0415
+    from cc_bridge.commands.config import main as config_main
 
     sys.exit(config_main(key=key, value=value, delete=delete))
 
@@ -112,9 +113,9 @@ def tunnel(
     """
     Cloudflare tunnel management.
     """
-    import sys  # noqa: PLC0415
+    import sys
 
-    from cc_bridge.commands.tunnel import main as tunnel_main  # noqa: PLC0415
+    from cc_bridge.commands.tunnel import main as tunnel_main
 
     sys.exit(tunnel_main(start=start, stop=stop, port=port))
 
