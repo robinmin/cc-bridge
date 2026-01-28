@@ -1,4 +1,4 @@
-.PHONY: dev test lint format typecheck install build clean help
+.PHONY: dev test lint lint-fix format format-check typecheck install build clean help fix all fix-all
 
 # Default target
 .DEFAULT_GOAL := help
@@ -42,6 +42,11 @@ lint:
 	@echo "Running linter..."
 	$(UV) run ruff check .
 
+## lint-fix: Auto-fix lint errors
+lint-fix:
+	@echo "Auto-fixing lint errors..."
+	$(UV) run ruff check . --fix
+
 ## format: Format code with ruff
 format:
 	@echo "Formatting code..."
@@ -52,10 +57,14 @@ format-check:
 	@echo "Checking code formatting..."
 	$(UV) run ruff format --check .
 
+## fix: Run all auto-fix commands (lint-fix + format)
+fix: lint-fix format
+	@echo "Auto-fix complete!"
+
 ## typecheck: Run ty type checker
 typecheck:
 	@echo "Running type checker..."
-	$(UV) run ty
+	$(UV) run ty check .
 
 ## clean: Clean build artifacts
 clean:
@@ -78,6 +87,12 @@ build: clean
 ## all: Run lint, format-check, typecheck, and test
 all: lint format-check typecheck test
 	@echo "All checks passed!"
+
+## fix-all: Auto-fix everything, then validate
+fix-all: fix
+	@echo "Running validation after fixes..."
+	$(MAKE) all
+	@echo "All fixes applied and validated!"
 
 ## setup: Initial project setup
 setup: install
