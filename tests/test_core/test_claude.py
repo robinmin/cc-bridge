@@ -2,6 +2,7 @@
 Tests for Claude Code integration.
 """
 
+# ruff: noqa: PLC0415 (intentional lazy imports in tests)
 import pytest
 
 from cc_bridge.core.claude import (
@@ -53,7 +54,7 @@ def test_pending_flag_path():
 def test_set_and_clear_pending_flag(tmp_path):
     """Test setting and clearing pending flag."""
     # Override path for testing
-    import cc_bridge.core.claude as claude_module  # noqa: PLC0415
+    import cc_bridge.core.claude as claude_module
 
     original_path = claude_module.get_pending_flag_path
     claude_module.get_pending_flag_path = lambda: tmp_path / "pending"  # type: ignore[assignment]
