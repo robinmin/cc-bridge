@@ -41,9 +41,9 @@ class TestCLIInitialization:
             result = runner.invoke(app, [cmd_name, "--help"])
             # Should not error - command exists
             # Exit code 0 means command was found
-            assert result.exit_code == 0 or result.exit_code is None, (
-                f"Command '{cmd_name}' not found"
-            )
+            assert (
+                result.exit_code == 0 or result.exit_code is None
+            ), f"Command '{cmd_name}' not found"
 
 
 class TestCLIServerCommand:

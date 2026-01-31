@@ -169,7 +169,7 @@ class TmuxSession:
         # Helper to compute content hash for change detection
         def get_content_hash():
             content = self.get_session_output()
-            return hashlib.md5(content.encode("utf-8", errors="ignore")).hexdigest()
+            return hashlib.sha256(content.encode("utf-8", errors="ignore")).hexdigest()
 
         # Get initial state
         self.get_session_output()
@@ -182,18 +182,18 @@ class TmuxSession:
             return False, "Failed to send command"
 
         # Wait for response
-        start_time = asyncio.get_event_loop().time()
+        start_time = asyncio.get_running_loop().time()
         content_changed = False
         consecutive_prompt_checks = 0
         min_wait_time = 3.0  # Wait at least 3 seconds before checking for completion
         last_stable_hash = initial_hash
 
-        while asyncio.get_event_loop().time() - start_time < timeout:
+        while asyncio.get_running_loop().time() - start_time < timeout:
             await asyncio.sleep(1.0)
 
             current_snapshot = self.get_session_output()
             current_hash = get_content_hash()
-            elapsed = asyncio.get_event_loop().time() - start_time
+            elapsed = asyncio.get_running_loop().time() - start_time
 
             # Check if content has changed (ANY change means Claude is responding)
             if current_hash != last_stable_hash:

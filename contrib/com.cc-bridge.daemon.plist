@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Service identifier (system-level daemon) -->
+    <key>Label</key>
+    <string>com.cc-bridge.daemon</string>
+
+    <!-- Command to run: cc-bridge server -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/robin/xprojects/cc-bridge/.venv/bin/cc-bridge</string>
+        <string>server</string>
+        <string>--host</string>
+        <string>0.0.0.0</string>
+        <string>--port</string>
+        <string>8080</string>
+    </array>
+
+    <!-- Run as specified user (not root) -->
+    <key>UserName</key>
+    <string>robin</string>
+
+    <!-- Start service immediately after load -->
+    <key>RunAtLoad</key>
+    <true/>
+
+    <!-- Restart service if it crashes -->
+    <key>KeepAlive</key>
+    <dict>
+        <!-- Restart if it exits with an error -->
+        <key>SuccessfulExit</key>
+        <false/>
+        <!-- Restart if it crashes -->
+        <key>Crashed</key>
+        <true/>
+    </dict>
+
+    <!-- Environment variables -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <!-- Ensure PATH includes virtual environment -->
+        <key>PATH</key>
+        <string>/Users/robin/xprojects/cc-bridge/.venv/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin</string>
+
+        <!-- Set virtual environment -->
+        <key>VIRTUAL_ENV</key>
+        <string>/Users/robin/xprojects/cc-bridge/.venv</string>
+
+        <!-- Set HOME to current user's home directory -->
+        <key>HOME</key>
+        <string>/Users/robin</string>
+    </dict>
+
+    <!-- Working directory -->
+    <key>WorkingDirectory</key>
+    <string>/Users/robin/xprojects/cc-bridge</string>
+
+    <!-- Standard output log file -->
+    <key>StandardOutPath</key>
+    <string>/opt/homebrew/var/log/cc-bridge/server.log</string>
+
+    <!-- Standard error log file -->
+    <key>StandardErrorPath</key>
+    <string>/opt/homebrew/var/log/cc-bridge/server.error.log</string>
+
+    <!-- Resource limits -->
+    <key>SoftResourceLimits</key>
+    <dict>
+        <!-- Max number of open file descriptors -->
+        <key>NumberOfFiles</key>
+        <integer>1024</integer>
+    </dict>
+
+    <!-- Process type (adaptive for Apple Silicon) -->
+    <key>ProcessType</key>
+    <string>Adaptive</string>
+
+    <!-- Nice value (process priority, 0 is normal) -->
+    <key>Nice</key>
+    <integer>0</integer>
+</dict>
+</plist>

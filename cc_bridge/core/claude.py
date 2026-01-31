@@ -34,7 +34,6 @@ class ClaudeTranscript:
         Raises:
             FileNotFoundError: If transcript doesn't exist
         """
-        # TODO: Implement transcript reading (Task 0004)
         if not self.transcript_path.exists():
             raise FileNotFoundError(f"Transcript not found: {self.transcript_path}")
 
@@ -50,7 +49,6 @@ class ClaudeTranscript:
         Raises:
             ValueError: If transcript format is invalid
         """
-        # TODO: Implement response extraction (Task 0004)
         content = self.read()
 
         # Parse transcript to find last assistant message
@@ -82,7 +80,6 @@ class ClaudeTranscript:
         Returns:
             List of message dictionaries with 'role' and 'content'
         """
-        # TODO: Implement conversation history extraction (Task 0004)
         content = self.read()
         lines = content.split("\n")
 
@@ -115,7 +112,6 @@ def get_pending_flag_path() -> Path:
     Returns:
         Path to pending flag file
     """
-    # TODO: Implement pending flag path (Task 0004)
     return Path.home() / ".claude" / "bridge" / "pending"
 
 
@@ -123,7 +119,6 @@ def set_pending_flag() -> None:
     """
     Set pending flag to indicate Telegram-initiated message.
     """
-    # TODO: Implement pending flag setting (Task 0004)
     flag_path = get_pending_flag_path()
     flag_path.parent.mkdir(parents=True, exist_ok=True)
     flag_path.touch()
@@ -133,7 +128,6 @@ def clear_pending_flag() -> None:
     """
     Clear pending flag after responding to Telegram.
     """
-    # TODO: Implement pending flag clearing (Task 0004)
     flag_path = get_pending_flag_path()
     if flag_path.exists():
         flag_path.unlink()
@@ -146,5 +140,4 @@ def is_pending() -> bool:
     Returns:
         True if pending flag exists
     """
-    # TODO: Implement pending flag check (Task 0004)
     return get_pending_flag_path().exists()

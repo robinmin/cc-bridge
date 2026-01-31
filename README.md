@@ -217,6 +217,51 @@ This starts the HTTP server that receives Telegram webhooks and forwards message
 Overall: Healthy
 ```
 
+## Running as a Service (macOS)
+
+For automatic startup on boot and crash recovery, you can run cc-bridge as a Homebrew service on macOS.
+
+### Quick Installation
+
+```bash
+# Install the service
+./scripts/install-service.sh
+
+# Check service status
+launchctl list | grep cc-bridge
+
+# View logs
+tail -f /opt/homebrew/var/log/cc-bridge/server.log
+```
+
+### Manual Service Management
+
+```bash
+# Start service
+launchctl start com.github.cc-bridge
+
+# Stop service
+launchctl stop com.github.cc-bridge
+
+# Restart service
+launchctl kickstart -k gui/$(id -u)/com.github.cc-bridge
+```
+
+### Uninstall Service
+
+```bash
+./scripts/uninstall-service.sh
+```
+
+### Service Features
+
+- **Automatic startup on boot** - Service starts when your Mac starts
+- **Automatic restart on crash** - launchd restarts the server if it crashes
+- **Standardized logging** - Logs stored in `/opt/homebrew/var/log/cc-bridge/`
+- **Easy management** - Use standard launchctl commands
+
+For detailed documentation, see [Service Management Guide](docs/service-management.md).
+
 ### Config
 
 Configuration management for the bridge:
@@ -290,19 +335,26 @@ cc-bridge config --edit
 Manage Claude Code instances without touching tmux directly:
 
 ```bash
-# Start a new instance
+# Start a new instance (auto-detects type: tmux or Docker)
 cc-bridge claude start my-instance
 
 # Start with custom working directory
 cc-bridge claude start project-a --cwd ~/projects/project-a
 
-# Start and attach immediately
+# Force specific instance type
+cc-bridge claude start my-instance --type docker
+cc-bridge claude start my-instance --type tmux
+
+# Start and attach immediately (tmux only)
 cc-bridge claude start my-instance --no-detach
 
-# List all instances
+# List all instances (both tmux and Docker)
 cc-bridge claude list
 
-# Attach to a running instance
+# Show detailed instance status
+cc-bridge claude status my-instance
+
+# Attach to a running instance (tmux only)
 cc-bridge claude attach my-instance
 
 # Stop an instance
@@ -315,10 +367,48 @@ cc-bridge claude stop my-instance --force
 cc-bridge claude restart my-instance
 ```
 
+**Instance Types:**
+
+cc-bridge supports two types of Claude instances:
+- **tmux instances** (💻) - Run in tmux sessions on the host system
+- **Docker instances** (🐳) - Run in Docker containers with isolated environments
+
+**Type Auto-Detection:**
+
+The `start` command automatically detects the appropriate type:
+1. Checks existing instance metadata
+2. Discovers Docker containers by label
+3. Falls back to configuration preference (`docker.preferred`)
+4. Defaults to tmux for backward compatibility
+
+**Docker Instance Management:**
+
+For Docker-specific operations, use the docker command group:
+
+```bash
+# List only Docker instances
+cc-bridge docker list
+
+# Discover Docker containers
+cc-bridge docker discover
+
+# View container logs
+cc-bridge docker logs my-instance --follow
+
+# Execute commands in container
+cc-bridge docker exec my-instance -- ls -la
+
+# Start/stop containers
+cc-bridge docker start my-instance
+cc-bridge docker stop my-instance
+```
+
 **Features:**
-- **Automatic tmux management** - No need to manually create/attach sessions
+- **Automatic instance type detection** - Smart detection based on metadata and environment
+- **Docker container discovery** - Auto-discovers containers with `cc-bridge.instance` label
+- **Polymorphic instance management** - Unified commands work with both tmux and Docker
 - **Working directory support** - Each instance can have its own project folder
-- **Instance metadata** - Tracks PID, status, and activity timestamps
+- **Instance metadata** - Tracks type, status, PID, and activity timestamps
 - **Status monitoring** - Check if instances are running, stopped, or crashed
 - **Safe operations** - Validates paths and handles errors gracefully
 
@@ -326,30 +416,36 @@ cc-bridge claude restart my-instance
 
 ```bash
 $ cc-bridge claude start project-a --cwd ~/projects/project-a
-✅ Started Claude instance 'project-a'
+✅ Started Claude instance 'project-a' (type: tmux)
    Session: claude-project-a
    Working directory: /Users/you/projects/project-a
 
 $ cc-bridge claude list
 Found 2 instance(s):
 
-🟢 project-a
+🟢 project-a (💻 tmux)
    Session: claude-project-a
    Working directory: /Users/you/projects/project-a
    Status: running
    Created: 2025-01-27 14:30
 
-🔴 old-instance
-   Session: claude-old-instance
-   Working directory: (default)
-   Status: stopped
-   Created: 2025-01-26 09:15
+🟢 docker-dev (🐳 docker)
+   Container: abc123def456
+   Image: anthropics/claude-code:latest
+   Status: running
+   Created: 2025-01-28 10:15
 
-$ cc-bridge claude attach project-a
-Attaching to 'project-a'...
-Press Ctrl+B then D to detach.
-[Attaches to tmux session...]
+$ cc-bridge claude status project-a
+🟢 project-a (💻 tmux)
+   Status: running
+   Created: 2025-01-27 14:30
+   Session: claude-project-a
+   Working directory: /Users/you/projects/project-a
+   PID: 12345
+   Last activity: 2025-01-28 11:20
 ```
+
+**For more Docker integration details, see [Docker Integration Guide](docs/DOCKER_INTEGRATION.md).**
 
 **Instance Status:**
 - 🟢 **running** - Instance is active and responding
@@ -448,16 +544,49 @@ cc-bridge webhook delete
 ✓ Webhook deleted
 ```
 
-## Docker Deployment
+## Docker Deployment (Alternative)
 
 ### Why Docker?
 
-Docker deployment offers several advantages:
+Docker deployment offers an alternative to the tmux-based approach with several advantages:
 - **Isolated environment** - No dependency conflicts with host system
 - **Reproducible builds** - Same environment across development and production
 - **Easy deployment** - Single command to start the entire stack
 - **Health monitoring** - Built-in health checks and automatic restarts
 - **Log management** - Centralized logging with rotation
+- **Security** - Container boundaries for safe `--dangerously-skip-permissions` usage
+
+### Quick Start with Docker
+
+```bash
+# 1. Copy environment file
+cp .env.example.docker .env
+
+# 2. Edit .env and set ANTHROPIC_API_KEY or ANTHROPIC_AUTH_TOKEN (and optionally ANTHROPIC_BASE_URL)
+nano .env
+
+# 3. Ensure OrbStack is running (macOS)
+orb start
+
+# 4. Start the container
+docker-compose up -d
+
+# 5. View logs
+docker-compose logs -f claude-agent
+
+# 6. Stop the container
+docker-compose down
+```
+
+### Documentation
+
+For complete Docker setup instructions, troubleshooting, and advanced configuration, see [Docker Setup Guide](docs/docker-setup.md).
+
+---
+
+## Legacy Docker Deployment (Bridge Server)
+
+Note: The following Docker setup is for the bridge server component only. For running Claude Code itself in Docker, see the section above.
 
 ### Quick Start with Docker Compose
 

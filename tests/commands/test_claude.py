@@ -1,11 +1,6 @@
-"""
-Tests for claude command.
-"""
-
-# ruff: noqa: PLC0415 (intentional lazy imports in tests)
 from datetime import datetime
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from typer.testing import CliRunner
@@ -69,6 +64,11 @@ class TestClaudeCommand:
         """Mock instance manager."""
         with patch("cc_bridge.commands.claude.get_instance_manager") as mock:
             manager = MagicMock()
+            manager.create_instance = AsyncMock()
+            manager.update_instance = AsyncMock()
+            manager.aget_instance_status = AsyncMock()
+            manager.delete_instance = AsyncMock()
+            manager.update_instance_activity = AsyncMock()
             mock.return_value = manager
             yield manager
 
@@ -109,8 +109,8 @@ class TestClaudeCommand:
         existing_instance = MagicMock()
         existing_instance.name = "test"
         mock_instance_manager.get_instance.return_value = existing_instance
-        # Mock get_instance_status to return "running"
-        mock_instance_manager.get_instance_status.return_value = "running"
+        # Mock aget_instance_status to return "running"
+        mock_instance_manager.aget_instance_status.return_value = "running"
 
         result = runner.invoke(app, ["start", "test"])
 
@@ -161,7 +161,7 @@ class TestClaudeCommand:
         )
 
         mock_instance_manager.list_instances.return_value = [instance1, instance2]
-        mock_instance_manager.get_instance_status.side_effect = ["running", "stopped"]
+        mock_instance_manager.aget_instance_status.side_effect = ["running", "stopped"]
 
         result = runner.invoke(app, ["list"])
 

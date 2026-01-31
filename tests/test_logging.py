@@ -13,11 +13,15 @@ from pathlib import Path
 
 import structlog
 
-from cc_bridge.logging import get_logger, setup_logging
+from cc_bridge.logging import get_logger, reset_logging, setup_logging
 
 
 class TestSetupLogging:
     """Test logging setup functionality."""
+
+    def setup_method(self):
+        """Reset logging before each test."""
+        reset_logging()
 
     def test_setup_logging_defaults(self, tmp_path: Path):
         """Should setup logging with default configuration."""

@@ -2,25 +2,135 @@
 Server command implementation.
 
 This module implements the FastAPI webhook server that receives
-Telegram webhooks and injects messages into Claude Code via tmux.
+Telegram webhooks and injects messages into Claude Code via tmux or Docker.
 """
 
+import asyncio
+import html
+import signal
 import time
 from collections import defaultdict
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from urllib.parse import urlparse
 
 import uvicorn
 from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse
 
 from cc_bridge.config import get_config
+from cc_bridge.constants import (
+    DEFAULT_RATE_LIMIT_REQUESTS,
+    DEFAULT_RATE_LIMIT_WINDOW_SECONDS,
+    MAX_MESSAGE_LENGTH,
+    MAX_REQUEST_SIZE,
+    SERVER_SHUTDOWN_TIMEOUT,
+    TELEGRAM_MAX_MESSAGE_LENGTH,
+    TELEGRAM_TRUNCATED_MESSAGE_SUFFIX,
+)
+from cc_bridge.core.instance_interface import get_instance_adapter
 from cc_bridge.core.instances import get_instance_manager
 from cc_bridge.core.telegram import TelegramClient
-from cc_bridge.core.tmux import get_session
 from cc_bridge.logging import get_logger
+from cc_bridge.models.instances import ClaudeInstance
 from cc_bridge.models.telegram import Update
 
 logger = get_logger(__name__)
+
+
+class GracefulShutdown:
+    """
+    Manages graceful shutdown of the FastAPI server.
+
+    Tracks pending requests and waits for them to complete during shutdown.
+    """
+
+    def __init__(self, timeout: float = SERVER_SHUTDOWN_TIMEOUT):
+        """
+        Initialize graceful shutdown handler.
+
+        Args:
+            timeout: Maximum seconds to wait for pending requests
+        """
+        self._shutdown_event = asyncio.Event()
+        self._pending_requests = 0
+        self._lock = asyncio.Lock()
+        self._timeout = timeout
+
+    async def increment_requests(self) -> None:
+        """Increment pending request count."""
+        async with self._lock:
+            self._pending_requests += 1
+
+    async def decrement_requests(self) -> None:
+        """Decrement pending request count."""
+        async with self._lock:
+            self._pending_requests -= 1
+
+    async def wait_for_shutdown(self) -> None:
+        """
+        Wait for pending requests to complete during shutdown.
+
+        Logs progress and enforces timeout.
+        """
+        try:
+            # Wait for pending requests with timeout
+            start_time = time.time()
+            while self._pending_requests > 0:
+                elapsed = time.time() - start_time
+                if elapsed >= self._timeout:
+                    logger.warning(
+                        "Shutdown timeout reached",
+                        pending=self._pending_requests,
+                        timeout=self._timeout,
+                    )
+                    break
+
+                # Log progress every 5 seconds
+                if int(elapsed) % 5 == 0 and self._pending_requests > 0:
+                    logger.info(
+                        "Waiting for pending requests",
+                        pending=self._pending_requests,
+                        elapsed=f"{elapsed:.1f}s",
+                    )
+
+                await asyncio.sleep(0.1)
+
+            logger.info("Shutdown complete", pending=self._pending_requests)
+
+        except Exception as e:
+            logger.error("Error during shutdown", error=str(e), exc_info=True)
+
+    def is_shutting_down(self) -> bool:
+        """Check if shutdown has been initiated."""
+        return self._shutdown_event.is_set()
+
+    @property
+    def pending_requests(self) -> int:
+        """Get current pending request count."""
+        return self._pending_requests
+
+
+# Global graceful shutdown handler
+_shutdown_handler: GracefulShutdown | None = None
+
+# Server start time for uptime tracking
+_server_start_time: float | None = None
+
+
+def get_shutdown_handler() -> GracefulShutdown:
+    """Get or create the global shutdown handler."""
+    global _shutdown_handler  # noqa: PLW0603
+    if _shutdown_handler is None:
+        _shutdown_handler = GracefulShutdown()
+    return _shutdown_handler
+
+
+def get_server_uptime() -> float:
+    """Get server uptime in seconds."""
+    if _server_start_time is None:
+        return 0.0
+    return time.time() - _server_start_time
 
 
 # Simple in-memory rate limiter
@@ -41,8 +151,9 @@ class RateLimiter:
         self.requests = requests
         self.window = window
         self._timestamps: dict[int, list] = defaultdict(list)
+        self._lock = asyncio.Lock()
 
-    def is_allowed(self, identifier: int) -> bool:
+    async def is_allowed(self, identifier: int) -> bool:
         """
         Check if request is allowed for this identifier.
 
@@ -52,46 +163,56 @@ class RateLimiter:
         Returns:
             True if request is allowed, False if rate limited
         """
-        now = time.time()
+        async with self._lock:
+            now = time.time()
 
-        # Clean old timestamps outside the window
-        self._timestamps[identifier] = [
-            ts for ts in self._timestamps[identifier] if now - ts < self.window
-        ]
+            # Clean old timestamps outside the window
+            self._timestamps[identifier] = [
+                ts for ts in self._timestamps[identifier] if now - ts < self.window
+            ]
 
-        # Check if under the limit
-        if len(self._timestamps[identifier]) < self.requests:
-            self._timestamps[identifier].append(now)
-            return True
+            # Check if under the limit
+            if len(self._timestamps[identifier]) < self.requests:
+                self._timestamps[identifier].append(now)
+                return True
 
-        return False
+            return False
 
-    def get_retry_after(self) -> int:
+    async def get_retry_after(self, identifier: int) -> int:
         """
-        Get seconds until next request is allowed.
+        Get seconds until next request is allowed for a specific identifier.
+
+        Args:
+            identifier: Unique identifier for the requester (e.g., chat_id)
 
         Returns:
             Seconds to wait, or 0 if allowed
         """
-        if not self._timestamps:
-            return 0
+        async with self._lock:
+            if identifier not in self._timestamps:
+                return 0
 
-        # Get first list from values, then find min timestamp
-        first_list = next(iter(self._timestamps.values()))
-        oldest = min(first_list)
-        retry_after = int(oldest + self.window - time.time())
-        return max(0, retry_after)
+            # Get the oldest timestamp for this identifier
+            timestamps = self._timestamps[identifier]
+            if not timestamps:
+                return 0
+
+            oldest = min(timestamps)
+            retry_after = int(oldest + self.window - time.time())
+            return max(0, retry_after)
 
 
 # Global rate limiter: 10 requests per minute per chat_id
-_rate_limiter = None
+_rate_limiter: RateLimiter | None = None
 
 
 def get_rate_limiter() -> RateLimiter:
     """Get or create the global rate limiter."""
     global _rate_limiter  # noqa: PLW0603
     if _rate_limiter is None:
-        _rate_limiter = RateLimiter(requests=10, window=60)
+        _rate_limiter = RateLimiter(
+            requests=DEFAULT_RATE_LIMIT_REQUESTS, window=DEFAULT_RATE_LIMIT_WINDOW_SECONDS
+        )
     return _rate_limiter
 
 
@@ -114,13 +235,69 @@ async def get_telegram_client_dep() -> AsyncGenerator[TelegramClient | None]:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Manage application lifespan."""
-    logger.info("Starting cc-bridge server")
+    """
+    Manage application lifespan with graceful shutdown.
+
+    Sets up signal handlers for SIGTERM/SIGINT and waits for pending
+    requests to complete during shutdown.
+    """
+    shutdown_handler = get_shutdown_handler()
+
+    # Setup signal handlers for graceful shutdown
+    loop = asyncio.get_running_loop()
+
+    def handle_shutdown_signal():
+        """Handle shutdown signal by setting the event."""
+        if not shutdown_handler.is_shutting_down():
+            logger.info("Shutdown signal received")
+            shutdown_handler._shutdown_event.set()
+
+    # Register signal handlers
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        loop.add_signal_handler(sig, handle_shutdown_signal)
+
+    # Set server start time for uptime tracking
+    global _server_start_time  # noqa: PLW0603
+    _server_start_time = time.time()
+
+    logger.info("Starting cc-bridge server", shutdown_timeout=shutdown_handler._timeout)
+
     yield
-    logger.info("Shutting down cc-bridge server")
+
+    # Graceful shutdown
+    logger.info("Initiating graceful shutdown...")
+    await shutdown_handler.wait_for_shutdown()
 
 
 app = FastAPI(title="cc-bridge", version="0.1.0", lifespan=lifespan)
+
+
+@app.middleware("http")
+async def track_requests(request: Request, call_next):
+    """
+    Middleware to track pending requests for graceful shutdown.
+
+    Increments pending count before request and decrements after.
+    """
+    shutdown_handler = get_shutdown_handler()
+
+    # Don't process new requests during shutdown
+    if shutdown_handler.is_shutting_down():
+        return JSONResponse(
+            status_code=503,
+            content={"status": "error", "reason": "Server is shutting down"},
+        )
+
+    # Increment pending requests
+    await shutdown_handler.increment_requests()
+
+    try:
+        # Process the request
+        response = await call_next(request)
+        return response
+    finally:
+        # Always decrement pending requests, even if error occurs
+        await shutdown_handler.decrement_requests()
 
 
 @app.get("/", include_in_schema=False)
@@ -131,8 +308,88 @@ async def root():
 
 @app.get("/health")
 async def health():
-    """Health check endpoint for monitoring."""
-    return {"status": "healthy"}
+    """
+    Health check endpoint for monitoring.
+
+    Returns detailed server status including uptime, instance counts,
+    and pending requests.
+    """
+    shutdown_handler = get_shutdown_handler()
+    instance_manager = get_instance_manager()
+
+    # Get instance statistics
+    instances = instance_manager.list_instances()
+    instance_stats = {
+        "total": len(instances),
+        "running": 0,
+        "stopped": 0,
+        "tmux": 0,
+        "docker": 0,
+    }
+
+    for instance in instances:
+        # Check actual status
+        status = await instance_manager.aget_instance_status(instance.name)
+        if status == "running":
+            instance_stats["running"] += 1
+        else:
+            instance_stats["stopped"] += 1
+
+        # Count by type
+        if instance.instance_type == "tmux":
+            instance_stats["tmux"] += 1
+        elif instance.instance_type == "docker":
+            instance_stats["docker"] += 1
+
+    # Subtract 1 from pending_requests since this health check request itself is counted
+    pending = max(0, shutdown_handler.pending_requests - 1)
+
+    return {
+        "status": "healthy",
+        "uptime_seconds": round(get_server_uptime(), 1),
+        "instances": instance_stats,
+        "pending_requests": pending,
+        "version": app.version,
+    }
+
+
+async def _select_instance(instances: list) -> ClaudeInstance | None:
+    """
+    Select the best instance to use from a list.
+
+    Args:
+        instances: List of ClaudeInstance objects
+
+    Returns:
+        Selected instance or None if no running instance found
+    """
+    settings_obj = get_config()
+    docker_preferred = settings_obj.get("docker.preferred", False)
+    instance_manager = get_instance_manager()
+
+    # Filter running instances by checking actual status
+    running = []
+    for i in instances:
+        status = await instance_manager.aget_instance_status(i.name)
+        if status == "running":
+            running.append(i)
+
+    if not running:
+        return None
+
+    # If only one running instance, use it
+    if len(running) == 1:
+        return running[0]
+
+    # Select based on preference
+    for instance in running:
+        if (docker_preferred and instance.instance_type == "docker") or (
+            not docker_preferred and instance.instance_type == "tmux"
+        ):
+            return instance
+
+    # Fallback to first running instance
+    return running[0]
 
 
 @app.post("/webhook")
@@ -159,20 +416,26 @@ async def telegram_webhook(  # noqa: PLR0911, PLR0912, PLR0915
         Success response
     """
     # Validate request size before processing (prevent DoS)
-    MAX_REQUEST_SIZE = 10_000  # 10KB max request size
     content_length = request.headers.get("content-length", 0)
     if content_length and int(content_length) > MAX_REQUEST_SIZE:
         logger.warning("Request too large", size=int(content_length))
-        return {"status": "error", "reason": "Request too large"}, 413  # HTTP 413 Payload Too Large
+        return JSONResponse(
+            status_code=413,
+            content={"status": "error", "reason": "Request too large"},
+        )
 
     # Validate update is not empty
     if not update:
         logger.warning("Empty update received")
-        return {"status": "error", "reason": "Empty update"}, 400
+        return JSONResponse(
+            status_code=400,
+            content={"status": "error", "reason": "Empty update"},
+        )
 
     try:
         # Parse the update using Pydantic model
         telegram_update = Update(**update)
+        logger.debug("Received webhook update", update_id=telegram_update.update_id)
 
         # Extract message from update
         if not telegram_update.message:
@@ -188,20 +451,25 @@ async def telegram_webhook(  # noqa: PLR0911, PLR0912, PLR0915
         text = message.text
 
         # Apply rate limiting (per chat_id)
-        if not rate_limiter.is_allowed(chat_id):
-            retry_after = rate_limiter.get_retry_after()
+        if not await rate_limiter.is_allowed(chat_id):
+            retry_after = await rate_limiter.get_retry_after(chat_id)
             logger.warning("Rate limit exceeded", chat_id=chat_id, retry_after=retry_after)
-            return {
-                "status": "rate_limited",
-                "retry_after": retry_after,
-                "message": "Too many requests. Please try again later.",
-            }, 429  # HTTP 429 Too Many Requests
+            return JSONResponse(
+                status_code=429,
+                content={
+                    "status": "rate_limited",
+                    "retry_after": retry_after,
+                    "message": "Too many requests. Please try again later.",
+                },
+            )
 
         # Validate message length (Telegram max is 4096, but be conservative)
-        MAX_MESSAGE_LENGTH = 4000
         if text and len(text) > MAX_MESSAGE_LENGTH:
             logger.warning("Message too long", length=len(text), chat_id=chat_id)
-            return {"status": "error", "reason": "Message too long"}, 400
+            return JSONResponse(
+                status_code=400,
+                content={"status": "error", "reason": "Message too long"},
+            )
 
         # Clean and validate the text
         if text:
@@ -237,13 +505,24 @@ async def telegram_webhook(  # noqa: PLR0911, PLR0912, PLR0915
                 else:
                     instance = None
 
+                config_obj = get_config()
+                tunnel_url = config_obj.get("tunnel.url", "")
+
                 status_text = "📊 **Service Status**\n\n"
                 status_text += "✅ Server: Running\n"
                 if instance:
                     status_text += f"🔌 Instance: {instance.name}\n"
                 else:
                     status_text += "🔌 Instance: None\n"
-                status_text += "🟢 Tunnel: Active (ccb.robinmin.net)\n"
+
+                if tunnel_url:
+                    # Extract domain from URL for display (avoid showing full URL)
+                    parsed = urlparse(tunnel_url)
+                    domain = parsed.netloc or tunnel_url
+                    status_text += f"🟢 Tunnel: Active ({domain})\n"
+                else:
+                    status_text += "⚠️  Tunnel: Not configured\n"
+
                 if telegram_client:
                     await telegram_client.send_message(chat_id, status_text)
                 return {"status": "ok"}
@@ -263,7 +542,13 @@ async def telegram_webhook(  # noqa: PLR0911, PLR0912, PLR0915
                 # Unknown command - ignore
                 return {"status": "ignored", "reason": "unknown command"}
 
-        logger.info("Received message", chat_id=chat_id, text=text[:100], text_repr=repr(text[:50]))
+        import sys
+
+        print(
+            f"[DEBUG] Received message: chat_id={chat_id}, text={text[:50]}",
+            file=sys.stderr,
+            flush=True,
+        )
 
         # Verify chat ID is authorized
         settings_obj = get_config()
@@ -283,59 +568,162 @@ async def telegram_webhook(  # noqa: PLR0911, PLR0912, PLR0915
                 )
             return {"status": "error", "reason": "no instance"}
 
-        # Use the first running instance (or default instance)
-        instance = instances[0]
-        session = get_session(instance.name)
-
-        if not session.session_exists():
-            logger.warning("Instance session not running", instance=instance.name)
+        # Select instance based on configuration and running status
+        instance = await _select_instance(instances)
+        if not instance:
+            logger.warning("No running Claude instance found")
             if telegram_client:
                 await telegram_client.send_message(
                     chat_id,
-                    f"⚠️ Claude instance '{instance.name}' is not running. Start it with: cc-bridge claude start {instance.name}",
+                    "⚠️ No running Claude instance found. Start one with: cc-bridge claude start <name>",
+                )
+            return {"status": "error", "reason": "no running instance"}
+
+        # Assert for type checker - we've already checked instance is not None
+        assert instance is not None
+
+        # Get the appropriate adapter for this instance type
+        try:
+            adapter = get_instance_adapter(instance)
+        except (ValueError, NotImplementedError) as e:
+            logger.warning("Instance adapter creation failed", instance=instance.name, error=str(e))
+            if telegram_client:
+                await telegram_client.send_message(
+                    chat_id,
+                    f"⚠️ Instance '{instance.name}' is not supported: {e}",
+                )
+            return {"status": "error", "reason": "unsupported instance"}
+
+        # Check if instance is running
+        if not adapter.is_running():
+            logger.warning(
+                "Instance not running", instance=instance.name, type=instance.instance_type
+            )
+            if telegram_client:
+                await telegram_client.send_message(
+                    chat_id,
+                    f"⚠️ Claude instance '{instance.name}' is not running.",
                 )
             return {"status": "error", "reason": "instance not running"}
 
         # Update instance activity
-        instance_manager.update_instance_activity(instance.name)
+        await instance_manager.update_instance_activity(instance.name)
 
         # Send command to Claude and wait for response
-        logger.info("Sending to Claude", instance=instance.name, text=text, text_repr=repr(text))
-
-        # For simple text messages, just send them directly
-        success, output = await session.send_command_and_wait(text, timeout=60.0)
-
         logger.info(
-            "Claude response",
-            success=success,
-            output_length=len(output) if output else 0,
-            output_preview=(output[:100] if output else "None"),
+            "Sending to Claude",
+            instance=instance.name,
+            type=instance.instance_type,
+            text=text[:100],
         )
 
-        if success and output:
-            # Clean up output (remove prompts, etc.)
-            clean_output = _clean_claude_output(output)
+        try:
+            # For simple text messages, just send them directly
+            success, output = await adapter.send_command_and_wait(text, timeout=60.0)
 
-            # Send response back to Telegram
-            if telegram_client:
-                # Truncate if too long (Telegram limit is 4096)
-                if len(clean_output) > 4000:
-                    clean_output = clean_output[:4000] + "\n\n... (truncated)"
-
-                await telegram_client.send_message(chat_id, clean_output)
-                logger.info("Response sent", chat_id=chat_id, length=len(clean_output))
-        # Command failed or timed out
-        elif telegram_client:
-            await telegram_client.send_message(
-                chat_id,
-                f"⚠️ Claude command timed out or failed. Output: {output[:200] if output else 'No output'}",
+            logger.info(
+                "Claude response",
+                success=success,
+                output_length=len(output) if output else 0,
+                output_preview=(output[:100] if output else "None"),
             )
 
-        return {"status": "ok"}
+            if success and output:
+                # Clean up output (remove prompts, etc.)
+                clean_output = _clean_claude_output(output)
+
+                # Send response back to Telegram
+                if telegram_client:
+                    # Truncate if too long (Telegram limit is 4096)
+                    if len(clean_output) > TELEGRAM_MAX_MESSAGE_LENGTH:
+                        clean_output = (
+                            clean_output[:MAX_MESSAGE_LENGTH] + TELEGRAM_TRUNCATED_MESSAGE_SUFFIX
+                        )
+
+                    await telegram_client.send_message(chat_id, clean_output)
+                    logger.info("Response sent", chat_id=chat_id, length=len(clean_output))
+            # Command failed or timed out
+            elif telegram_client:
+                await telegram_client.send_message(
+                    chat_id,
+                    f"⚠️ Claude command timed out or failed. Output: {output[:200] if output else 'No output'}",
+                )
+
+            return {"status": "ok"}
+
+        except Exception as e:
+            # Generate error reference ID for tracking
+            logger.bind(error_id=str(hash(str(e) + str(time.time())) % 10000000))
+            logger.error("Command execution error", error=str(e), exc_info=True)
+            if telegram_client:
+                await telegram_client.send_message(
+                    chat_id,
+                    "❌ Failed to execute command. Please try again later.",
+                )
+            return JSONResponse(
+                status_code=500,
+                content={"status": "error", "reason": "Command execution failed"},
+            )
 
     except Exception as e:
         logger.error("Webhook processing error", error=str(e), exc_info=True)
-        return {"status": "error", "reason": "Processing failed"}, 500
+        return JSONResponse(
+            status_code=500,
+            content={"status": "error", "reason": "Processing failed"},
+        )
+
+
+def sanitize_for_telegram(text: str, parse_mode: str = "HTML") -> str:
+    """
+    Sanitize text for safe Telegram message sending.
+
+    Prevents HTML/Markdown injection by escaping special characters.
+
+    Args:
+        text: Raw text to sanitize
+        parse_mode: "HTML" or "Markdown" (default: "HTML")
+
+    Returns:
+        Sanitized text safe for the specified parse mode
+    """
+    if not text:
+        return ""
+
+    if parse_mode == "HTML":
+        # Escape HTML entities: <, >, &, ", '
+        return html.escape(text)
+    elif parse_mode == "Markdown":
+        # Escape Markdown special characters
+        # From: https://core.telegram.org/bots/api#markdownv2-style
+        special_chars = [
+            "_",
+            "*",
+            "[",
+            "]",
+            "(",
+            ")",
+            "~",
+            "`",
+            ">",
+            "#",
+            "+",
+            "-",
+            "=",
+            "|",
+            "{",
+            "}",
+            ".",
+            "!",
+        ]
+        result = text
+        for char in special_chars:
+            # Escape with backslash, but don't double-escape
+            result = result.replace(f"\\{char}", f"\\\\{char}")
+            result = result.replace(char, f"\\{char}")
+        return result
+    else:
+        # No parse mode or unknown mode - return as-is
+        return text
 
 
 def _clean_claude_output(output: str) -> str:
@@ -386,6 +774,9 @@ def _clean_claude_output(output: str) -> str:
     # Limit excessive blank lines
     while "\n\n\n" in result:
         result = result.replace("\n\n\n", "\n\n")
+
+    # Sanitize for Telegram HTML mode to prevent injection
+    result = sanitize_for_telegram(result, parse_mode="HTML")
 
     return result
 

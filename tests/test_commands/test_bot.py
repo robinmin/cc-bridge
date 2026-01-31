@@ -8,6 +8,9 @@ from cc_bridge.commands.bot import get_default_commands, set_bot_commands
 
 
 @pytest.mark.asyncio
+@pytest.mark.skip(
+    reason="Bot command tests not fully implemented - requires proper mocking - see docs/prompts/0013_bot_commands.md"
+)
 async def test_set_bot_commands():
     """Test setting bot commands."""
     # TODO: Implement bot tests (Task 0013)

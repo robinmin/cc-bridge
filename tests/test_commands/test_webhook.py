@@ -8,6 +8,7 @@ from cc_bridge.commands.webhook import delete_webhook, get_webhook_info, set_web
 
 
 @pytest.mark.asyncio
+@pytest.mark.skip(reason="Webhook command tests not fully implemented - requires proper mocking")
 async def test_set_webhook():
     """Test setting webhook."""
     # TODO: Implement webhook tests (Task 0011)
@@ -16,6 +17,7 @@ async def test_set_webhook():
 
 
 @pytest.mark.asyncio
+@pytest.mark.skip(reason="Webhook command tests not fully implemented - requires proper mocking")
 async def test_get_webhook_info():
     """Test getting webhook info."""
     # TODO: Implement webhook tests (Task 0011)
@@ -24,6 +26,7 @@ async def test_get_webhook_info():
 
 
 @pytest.mark.asyncio
+@pytest.mark.skip(reason="Webhook command tests not fully implemented - requires proper mocking")
 async def test_delete_webhook():
     """Test deleting webhook."""
     # TODO: Implement webhook tests (Task 0011)

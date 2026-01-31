@@ -65,8 +65,6 @@ async def _fetch_chat_id(bot_token: str) -> int | None:
     Returns:
         Chat ID if found, None otherwise
     """
-    client = TelegramClient(bot_token)
-
     print("\n" + "=" * 60)
     print("🔔 Chat ID Detection")
     print("=" * 60)
@@ -75,15 +73,17 @@ async def _fetch_chat_id(bot_token: str) -> int | None:
     print("2. Send /start to your bot")
     print("\nWaiting for you to send /start...")
 
-    chat_id = await client.get_chat_id(timeout=30)
+    # Use async context manager to ensure proper cleanup
+    async with TelegramClient(bot_token) as client:
+        chat_id = await client.get_chat_id(timeout=30)
 
-    if chat_id:
-        print(f"\n✅ Chat ID detected: {chat_id}")
-        return chat_id
-    else:
-        print("\n❌ Could not detect Chat ID automatically.")
-        print("   Please enter it manually.")
-        return None
+        if chat_id:
+            print(f"\n✅ Chat ID detected: {chat_id}")
+            return chat_id
+        else:
+            print("\n❌ Could not detect Chat ID automatically.")
+            print("   Please enter it manually.")
+            return None
 
 
 def _setup_crontab() -> bool:

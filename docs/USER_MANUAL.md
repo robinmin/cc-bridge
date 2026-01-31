@@ -149,7 +149,7 @@ Usage: cc-bridge [OPTIONS] COMMAND [ARGS]...
 
 ╭─ Commands ───────────────────────────────────╮
 │ server      Start the FastAPI webhook server │
-│ hook-stop   Send Claude response to Telegram │
+│ claude      Manage Claude Code instances     │
 │ health      Run health checks                 │
 │ setup       Interactive setup wizard          │
 │ config      Configuration management          │
@@ -692,20 +692,6 @@ cc-bridge server --port 9000
 # Start with auto-reload (development)
 cc-bridge server --reload
 ```
-
-#### `cc-bridge hook-stop`
-
-Process Claude Code transcripts and send responses to Telegram.
-
-**Usage**:
-```bash
-cc-bridge hook-stop TRANSCRIPT_PATH
-```
-
-**Arguments**:
-- `TRANSCRIPT_PATH`: Path to Claude transcript file
-
-**Note**: This command is typically called automatically by Claude Code's stop hook.
 
 #### `cc-bridge health`
 
@@ -1674,6 +1660,7 @@ When something isn't working, go through this checklist:
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.2.0 | 2025-01-29 | Major architecture update: Documented direct webhook processing model, removed references to deprecated hook-based system |
 | 1.1.0 | 2025-01-27 | Major update: Added automated setup, `claude` command, simplified user flow, added Advanced/Professional section |
 | 1.0.0 | 2025-01-27 | Initial user manual |
 

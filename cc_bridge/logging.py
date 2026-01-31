@@ -13,6 +13,19 @@ from typing import Any
 
 import structlog
 
+# Flag to track if logging has been configured
+_logging_configured = False
+
+
+def reset_logging() -> None:
+    """
+    Reset logging configuration flag.
+
+    This is primarily used in tests to allow reconfiguration between test runs.
+    """
+    global _logging_configured  # noqa: PLW0603
+    _logging_configured = False
+
 
 def setup_logging(
     level: str = "INFO",
@@ -24,6 +37,8 @@ def setup_logging(
     """
     Configure structured logging for cc-bridge.
 
+    This function is idempotent - subsequent calls after the first will be ignored.
+
     Args:
         level: Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
         log_format: Log format ("json" or "text")
@@ -31,6 +46,12 @@ def setup_logging(
         max_bytes: Maximum size of log file before rotation
         backup_count: Number of backup files to keep
     """
+    global _logging_configured  # noqa: PLW0603
+
+    # Idempotent check - only configure once
+    if _logging_configured:
+        return
+
     # Convert string level to logging constant
     log_level = getattr(logging, level.upper(), logging.INFO)
 
@@ -99,6 +120,9 @@ def setup_logging(
     # Configure uvicorn logging
     logging.getLogger("uvicorn").setLevel(logging.WARNING)
     logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+
+    # Mark logging as configured
+    _logging_configured = True
 
 
 def get_logger(name: str) -> Any:

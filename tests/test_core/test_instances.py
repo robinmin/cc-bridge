@@ -26,9 +26,10 @@ def instance_manager(test_instances_file):
 class TestInstanceManager:
     """Test InstanceManager class."""
 
-    def test_create_instance(self, instance_manager):
+    @pytest.mark.asyncio
+    async def test_create_instance(self, instance_manager):
         """Should create instance with metadata."""
-        instance = instance_manager.create_instance(
+        instance = await instance_manager.create_instance(
             name="test", tmux_session="claude-test", cwd="/home/user/project"
         )
 
@@ -37,9 +38,10 @@ class TestInstanceManager:
         assert instance.cwd == "/home/user/project"
         assert instance.status == "created"
 
-    def test_get_instance(self, instance_manager):
+    @pytest.mark.asyncio
+    async def test_get_instance(self, instance_manager):
         """Should retrieve instance by name."""
-        instance_manager.create_instance(name="test", tmux_session="claude-test")
+        await instance_manager.create_instance(name="test", tmux_session="claude-test")
 
         instance = instance_manager.get_instance("test")
         assert instance is not None
@@ -50,50 +52,56 @@ class TestInstanceManager:
         instance = instance_manager.get_instance("nonexistent")
         assert instance is None
 
-    def test_list_instances(self, instance_manager):
+    @pytest.mark.asyncio
+    async def test_list_instances(self, instance_manager):
         """Should list all instances."""
-        instance_manager.create_instance(name="test1", tmux_session="claude-test1")
-        instance_manager.create_instance(name="test2", tmux_session="claude-test2")
+        await instance_manager.create_instance(name="test1", tmux_session="claude-test1")
+        await instance_manager.create_instance(name="test2", tmux_session="claude-test2")
 
         instances = instance_manager.list_instances()
         assert len(instances) == 2
         assert {i.name for i in instances} == {"test1", "test2"}
 
-    def test_update_instance(self, instance_manager):
+    @pytest.mark.asyncio
+    async def test_update_instance(self, instance_manager):
         """Should update instance attributes."""
-        instance_manager.create_instance(name="test", tmux_session="claude-test")
+        await instance_manager.create_instance(name="test", tmux_session="claude-test")
 
-        updated = instance_manager.update_instance("test", pid=12345, status="running")
+        updated = await instance_manager.update_instance("test", pid=12345, status="running")
         assert updated.pid == 12345
         assert updated.status == "running"
 
-    def test_delete_instance(self, instance_manager):
+    @pytest.mark.asyncio
+    async def test_delete_instance(self, instance_manager):
         """Should delete instance."""
-        instance_manager.create_instance(name="test", tmux_session="claude-test")
+        await instance_manager.create_instance(name="test", tmux_session="claude-test")
 
-        result = instance_manager.delete_instance("test")
+        result = await instance_manager.delete_instance("test")
         assert result is True
 
         # Verify it's gone
         assert instance_manager.get_instance("test") is None
 
-    def test_delete_nonexistent_instance(self, instance_manager):
+    @pytest.mark.asyncio
+    async def test_delete_nonexistent_instance(self, instance_manager):
         """Should return False when deleting non-existent instance."""
-        result = instance_manager.delete_instance("nonexistent")
+        result = await instance_manager.delete_instance("nonexistent")
         assert result is False
 
-    def test_get_instance_status_no_pid(self, instance_manager):
+    @pytest.mark.asyncio
+    async def test_get_instance_status_no_pid(self, instance_manager):
         """Should return 'no_pid' for instance without PID."""
-        instance_manager.create_instance(name="test", tmux_session="claude-test")
+        await instance_manager.create_instance(name="test", tmux_session="claude-test")
 
         status = instance_manager.get_instance_status("test")
         assert status == "no_pid"
 
-    def test_save_and_load_instances(self, test_instances_file):
+    @pytest.mark.asyncio
+    async def test_save_and_load_instances(self, test_instances_file):
         """Should persist instances to file and reload."""
         manager1 = InstanceManager(instances_file=str(test_instances_file))
 
-        manager1.create_instance(name="persisted", tmux_session="claude-persisted")
+        await manager1.create_instance(name="persisted", tmux_session="claude-persisted")
 
         # Force save
         manager1._save()

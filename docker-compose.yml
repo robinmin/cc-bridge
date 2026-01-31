@@ -1,0 +1,67 @@
+version: '3.8'
+
+services:
+  claude-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: cc-bridge:latest
+    container_name: claude-${PROJECT_NAME:-cc-bridge}
+
+    # Volume mounts
+    volumes:
+      # READ-ONLY mount for global Claude configs (Auth, tokens, settings)
+      # This provides security by preventing container from modifying host config
+      - ${HOME}/.claude:/home/vscode/.claude:ro
+
+      # DYNAMIC mount for the current project folder
+      # This allows the container to access and modify project files
+      - .:/workspaces/${PROJECT_NAME:-cc-bridge}
+
+    # Environment variables
+    environment:
+      # Anthropic authentication (one of these is required for Claude Code)
+      # ANTHROPIC_API_KEY: For API key authentication
+      # ANTHROPIC_AUTH_TOKEN: For OAuth/session token authentication
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - ANTHROPIC_AUTH_TOKEN=${ANTHROPIC_AUTH_TOKEN:-}
+
+      # Anthropic API base URL (optional, for using alternative LLM providers)
+      # Leave empty to use official Anthropic API
+      - ANTHROPIC_BASE_URL=${ANTHROPIC_BASE_URL:-}
+
+      # Project name for workspace organization
+      - PROJECT_NAME=${PROJECT_NAME:-cc-bridge}
+
+      # Python settings
+      - PYTHONUNBUFFERED=1
+
+    # Working directory inside container
+    working_dir: /workspaces/${PROJECT_NAME:-cc-bridge}
+
+    # Keep stdin open and allocate tty for interactive sessions
+    stdin_open: true
+    tty: true
+
+    # Restart policy (none for development, unless-stopped for production)
+    restart: unless-stopped
+
+    # Command to run Claude Code with permission skip for agentic workflows
+    command: claude --dangerously-skip-permissions
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import sys; exit(0)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+
+    # Network configuration
+    networks:
+      - claude-network
+
+# Define network for container communication
+networks:
+  claude-network:
+    driver: bridge

@@ -120,10 +120,35 @@ def tunnel(
     sys.exit(tunnel_main(start=start, stop=stop, port=port))
 
 
-# Register the claude command as a sub-app
-from cc_bridge.commands.claude import app as claude_app  # noqa: E402
+# Register docker commands as a sub-command group
+from cc_bridge.commands.docker_cmd import docker_app  # noqa: E402
 
-app.add_typer(claude_app, name="claude", help="Manage Claude Code instances")
+app.add_typer(docker_app, name="docker")
+
+
+# Register claude-* commands as individual top-level commands
+from cc_bridge.commands.claude import (  # noqa: E402
+    attach as claude_attach,
+)
+from cc_bridge.commands.claude import (  # noqa: E402
+    list as claude_list,
+)
+from cc_bridge.commands.claude import (  # noqa: E402
+    restart as claude_restart,
+)
+from cc_bridge.commands.claude import (  # noqa: E402
+    start as claude_start,
+)
+from cc_bridge.commands.claude import (  # noqa: E402
+    stop as claude_stop,
+)
+
+# Register each claude command as a top-level command
+app.command(name="claude-start")(claude_start)
+app.command(name="claude-list")(claude_list)
+app.command(name="claude-attach")(claude_attach)
+app.command(name="claude-restart")(claude_restart)
+app.command(name="claude-stop")(claude_stop)
 
 
 if __name__ == "__main__":

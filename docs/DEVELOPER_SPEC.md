@@ -27,9 +27,9 @@
 
 CC-Bridge is a production-ready Python application that bridges Telegram bots with Claude Code CLI. It enables bidirectional communication between Telegram users and Claude Code through:
 
-- **FastAPI Webhook Server**: Receives Telegram updates and forwards them to Claude Code
-- **tmux Integration**: Injects messages into Claude Code's tmux session
-- **Python Stop Hook**: Captures Claude's responses and sends them back to Telegram
+- **FastAPI Webhook Server**: Receives Telegram updates and handles communication synchronously
+- **Instance Management**: Manages Claude Code instances (tmux sessions, Docker containers)
+- **Direct Response Handling**: Captures Claude's responses and sends them back to Telegram immediately
 - **Health Monitoring**: Ensures all components are functioning correctly
 
 ### 1.2 Design Principles
@@ -64,56 +64,64 @@ CC-Bridge is a production-ready Python application that bridges Telegram bots wi
 │   Telegram      │
 │     Bot API     │
 └────────┬────────┘
-         │ Webhook
+         │ Webhook POST
          ▼
-┌─────────────────────────────────────────┐
-│         CC-Bridge FastAPI Server        │
-│  ┌──────────────────────────────────┐  │
-│  │  Webhook Endpoint (/webhook)     │  │
-│  │  - Validates update              │  │
-│  │  - Extracts message              │  │
-│  │  - Parses commands               │  │
-│  └────────────┬─────────────────────┘  │
-│               │                         │
-│  ┌────────────▼─────────────────────┐  │
-│  │  Message Processor               │  │
-│  │  - Sanitizes input               │  │
-│  │  - Extracts code blocks          │  │
-│  │  - Formats for Claude            │  │
-│  └────────────┬─────────────────────┘  │
-└───────────────┼────────────────────────┘
-                │ tmux send-keys
+┌───────────────────────────────────────────────────────────┐
+│              CC-Bridge FastAPI Server                     │
+│  ┌────────────────────────────────────────────────────┐  │
+│  │  Webhook Endpoint (/webhook)                       │  │
+│  │  - Validates update                                │  │
+│  │  - Extracts message                                │  │
+│  │  - Parses commands                                 │  │
+│  └────────────┬───────────────────────────────────────┘  │
+│               │                                            │
+│  ┌────────────▼───────────────────────────────────────┐  │
+│  │  Message Processor                                 │  │
+│  │  - Sanitizes input                                  │  │
+│  │  - Extracts code blocks                            │  │
+│  │  - Formats for Claude                               │  │
+│  └────────────┬───────────────────────────────────────┘  │
+└───────────────┼──────────────────────────────────────────┘
+                │
+                │ Send via Instance Adapter
                 ▼
-┌─────────────────────────────────────────┐
-│       Claude Code tmux Session          │
-│  ┌──────────────────────────────────┐  │
-│  │  claude@cc-bridge session        │  │
-│  │  - Receives messages             │  │
-│  │  - Processes requests            │  │
-│  │  - Generates responses           │  │
-│  └────────────┬─────────────────────┘  │
-└───────────────┼────────────────────────┘
-                │ Transcript
+┌───────────────────────────────────────────────────────────┐
+│              Claude Code Instance                         │
+│  ┌────────────────────────────────────────────────────┐  │
+│  │  Instance Adapter (tmux/Docker)                    │  │
+│  │  - Sends message to instance                       │  │
+│  │  - Waits for response                               │  │
+│  │  - Captures output                                  │  │
+│  └────────────┬───────────────────────────────────────┘  │
+│               │                                            │
+│  ┌────────────▼───────────────────────────────────────┐  │
+│  │  Claude Code                                       │  │
+│  │  - Processes request                                │  │
+│  │  - Generates response                               │  │
+│  └────────────┬───────────────────────────────────────┘  │
+└───────────────┼──────────────────────────────────────────┘
+                │ Response captured
                 ▼
-┌─────────────────────────────────────────┐
-│      Python Stop Hook (hook-stop)       │
-│  ┌──────────────────────────────────┐  │
-│  │  Transcript Parser               │  │
-│  │  - Extracts Claude's response    │  │
-│  │  - Formats for Telegram          │  │
-│  └────────────┬─────────────────────┘  │
-│               │                         │
-│  ┌────────────▼─────────────────────┐  │
-│  │  Telegram Sender                 │  │
-│  │  - Sends response                │  │
-│  │  - Handles errors                │  │
-│  └────────────┬─────────────────────┘  │
-└───────────────┼────────────────────────┘
+┌───────────────────────────────────────────────────────────┐
+│           Response Formatter & Sender                      │
+│  ┌────────────────────────────────────────────────────┐  │
+│  │  Response Processor                                 │  │
+│  │  - Formats Claude's response for Telegram           │  │
+│  │  - Handles truncation for long messages             │  │
+│  └────────────┬───────────────────────────────────────┘  │
+│               │                                            │
+│  ┌────────────▼───────────────────────────────────────┐  │
+│  │  Telegram Client                                    │  │
+│  │  - Sends response to user                           │  │
+│  │  - Handles errors                                   │  │
+│  └────────────┬───────────────────────────────────────┘  │
+└───────────────┼──────────────────────────────────────────┘
                 │ sendMessage API
                 ▼
 ┌─────────────────┐
 │   Telegram      │
-│     Bot API     │
+│   User Receives │
+│     Response    │
 └─────────────────┘
 ```
 
@@ -127,7 +135,7 @@ cc_bridge/
 ├── commands/                 # CLI command implementations
 │   ├── server.py            # FastAPI server command
 │   ├── webhook.py           # Webhook management
-│   ├── hook_stop.py         # Stop hook implementation
+│   ├── claude.py            # Claude instance management
 │   ├── health.py            # Health checks
 │   ├── setup.py             # Setup wizard
 │   ├── config.py            # Config management command
@@ -136,12 +144,16 @@ cc_bridge/
 │   └── logs.py              # Log streaming
 ├── core/                     # Business logic
 │   ├── telegram.py          # Telegram API client
-│   ├── tmux.py              # tmux session management
+│   ├── instances.py         # Instance manager
+│   ├── instance_interface.py # Instance adapter interface
+│   ├── tmux.py              # tmux session adapter
+│   ├── docker.py            # Docker container adapter
 │   ├── claude.py            # Claude Code integration
 │   └── parser.py            # Message parsing
 └── models/                   # Data models
     ├── telegram.py          # Telegram models
-    └── config.py            # Configuration models
+    ├── config.py            # Configuration models
+    └── instances.py         # Instance data models
 ```
 
 ### 2.3 Sequence Diagrams
@@ -154,18 +166,17 @@ sequenceDiagram
     participant Telegram
     participant CC-Bridge
     participant Claude
-    participant Hook
 
     User->>Telegram: Send message
     Telegram->>CC-Bridge: Webhook POST /webhook
     CC-Bridge->>CC-Bridge: Validate update
     CC-Bridge->>CC-Bridge: Parse message
     CC-Bridge->>CC-Bridge: Sanitize input
-    CC-Bridge->>Claude: tmux send-keys
+    CC-Bridge->>Claude: Send via Instance Adapter
     Claude->>Claude: Process request
-    Claude-->>Hook: Generate transcript
-    Hook->>Hook: Parse transcript
-    Hook->>Telegram: Send response
+    Claude-->>CC-Bridge: Return response
+    CC-Bridge->>CC-Bridge: Format for Telegram
+    CC-Bridge->>Telegram: Send response
     Telegram->>User: Display response
 ```
 
@@ -176,16 +187,16 @@ sequenceDiagram
     participant CLI
     participant Health
     participant Telegram
-    participant tmux
-    participant Hook
+    participant Instance
+    participant Webhook
 
     CLI->>Health: health check
     Health->>Telegram: Check webhook
     Telegram-->>Health: Status
-    Health->>tmux: Check session
-    tmux-->>Health: Status
-    Health->>Hook: Check functionality
-    Hook-->>Health: Status
+    Health->>Instance: Check Claude instances
+    Instance-->>Health: Status
+    Health->>Webhook: Check endpoint
+    Webhook-->>Health: Status
     Health-->>CLI: Aggregate report
 ```
 
@@ -199,7 +210,7 @@ sequenceDiagram
 
 **Key Functions**:
 - `server()`: Start FastAPI webhook server
-- `hook_stop()`: Process Claude transcripts
+- `claude()`: Manage Claude Code instances
 - `health()`: Run health checks
 - `setup()`: Interactive setup wizard
 - `config()`: Configuration management
@@ -303,29 +314,7 @@ async def webhook(update: Update) -> StatusResponse:
 - `get_webhook_info()`: Get current webhook info
 - `delete_webhook()`: Remove webhook
 
-#### 3.4.3 Hook Stop Command (`commands/hook_stop.py`)
-
-**Stop Hook Implementation**:
-```python
-def send_to_telegram(transcript_path: str) -> None:
-    """
-    Read Claude transcript and send response to Telegram.
-
-    Process:
-    1. Read transcript file
-    2. Parse for Claude's response
-    3. Format for Telegram
-    4. Send via Telegram API
-    """
-
-def main(transcript_path: str) -> int:
-    """
-    Main entry point for hook-stop command.
-    Returns exit code (0 for success, 1 for error).
-    """
-```
-
-#### 3.4.4 Health Command (`commands/health.py`)
+#### 3.4.3 Health Command (`commands/health.py`)
 
 **Health Checks**:
 - Webhook connectivity
@@ -560,186 +549,7 @@ class CrontabManager:
 
 ### 3.5 Core Layer (`core/`)
 
-#### 3.5.1 Telegram Client (`core/telegram.py`)
-
-**API Client**:
-- `send_message()`: Send messages to Telegram
-- `set_webhook()`: Register webhook URL
-- `get_webhook_info()`: Get current webhook info
-- `delete_webhook()`: Remove webhook
-- `answer_callback_query()`: Handle inline keyboard responses
-
-**Enhanced Methods** (Chat ID Detection):
-```python
-async def get_updates(self, timeout: int = 0, offset: int = 0, limit: int = 1) -> dict:
-    """Get updates from Telegram (for chat_id detection)."""
-
-async def get_chat_id(self, timeout: int = 30) -> int | None:
-    """
-    Auto-fetch chat_id by polling for updates.
-
-    User must send a message (e.g., /start) to trigger an update.
-
-    Returns:
-        Chat ID if found, None otherwise
-    """
-
-async def wait_for_message(self, timeout: int = 30) -> dict | None:
-    """Wait for a message to be sent to the bot."""
-```
-```python
-class TelegramClient:
-    async def send_message(
-        chat_id: int,
-        text: str,
-        parse_mode: str = "Markdown"
-    ) -> dict
-
-    async def set_webhook(url: str) -> dict
-    async def get_webhook_info() -> dict
-    async def delete_webhook() -> dict
-    async def answer_callback_query(
-        callback_query_id: str,
-        text: str | None = None
-    ) -> dict
-```
-
-#### 3.5.2 tmux Session (`core/tmux.py`)
-
-**Session Management**:
-```python
-class TmuxSession:
-    def __init__(session_name: str = "claude")
-
-    def session_exists() -> bool
-    def send_keys(text: str) -> None
-    def send_command(command: str) -> None
-    def get_session_output() -> str
-    def create_session(command: str | None = None) -> None
-    def kill_session() -> None
-```
-
-#### 3.5.3 Claude Integration (`core/claude.py`)
-
-**Claude Code Interface**:
-```python
-class ClaudeCode:
-    def __init__(tmux_session: TmuxSession)
-
-    def send_message(message: str) -> None
-    def get_pending_flag() -> bool
-    def set_pending_flag(value: bool) -> None
-    def get_last_response() -> str | None
-```
-
-#### 3.5.4 Message Parser (`core/parser.py`)
-
-**Message Processing**:
-```python
-class MessageFormatter:
-    @staticmethod
-    def sanitize(message: str) -> str:
-        """Remove harmful content."""
-
-    @staticmethod
-    def extract_code_blocks(message: str) -> list[str]:
-        """Extract code blocks from markdown."""
-
-    @staticmethod
-    def format_for_claude(message: str) -> str:
-        """Format Telegram message for Claude."""
-```
-
-### 3.6 Models Layer (`models/`)
-
-#### 3.6.1 Telegram Models (`models/telegram.py`)
-
-**Pydantic Models**:
-```python
-class Update(BaseModel):
-    update_id: int
-    message: Message | None = None
-    callback_query: CallbackQuery | None = None
-
-class Message(BaseModel):
-    message_id: int
-    from_: User
-    chat: Chat
-    text: str | None = None
-
-class User(BaseModel):
-    id: int
-    is_bot: bool
-    first_name: str
-    username: str | None = None
-
-class Chat(BaseModel):
-    id: int
-    type: str  # "private", "group", "supergroup", "channel"
-```
-
-#### 3.6.2 Configuration Models (`models/config.py`)
-
-**Config Schemas**:
-```python
-class TelegramConfig(BaseModel):
-    bot_token: str = ""
-    chat_id: int | None = None
-    webhook_url: str = ""
-
-class ServerConfig(BaseModel):
-    host: str = "0.0.0.0"
-    port: int = 8080
-    reload: bool = False
-
-class TmuxConfig(BaseModel):
-    session: str = "claude"
-    auto_attach: bool = True
-
-class InstancesConfig(BaseModel):
-    data_file: str = "~/.claude/bridge/instances.json"
-```
-
-#### 3.6.3 Instance Models (`models/instances.py`)
-
-**Instance Data Models**:
-
-```python
-class ClaudeInstance(BaseModel):
-    """Represents a Claude Code instance."""
-
-    name: str = Field(description="Instance name")
-    pid: Optional[int] = Field(default=None, description="Process ID")
-    tmux_session: str = Field(description="tmux session name")
-    cwd: Optional[str] = Field(default=None, description="Working directory")
-    status: str = Field(
-        default="stopped",
-        description="Instance status: running, stopped, crashed"
-    )
-    created_at: datetime = Field(
-        default_factory=datetime.now,
-        description="Instance creation timestamp"
-    )
-    last_activity: Optional[datetime] = Field(
-        default=None, description="Last activity timestamp"
-    )
-
-
-class InstancesData(BaseModel):
-    """Container for all Claude instances."""
-
-    instances: dict[str, ClaudeInstance] = Field(
-        default_factory=dict, description="All instances by name"
-    )
-```
-
-**Instance States**:
-- `created`: Instance metadata created, process not yet started
-- `running`: Instance process is active
-- `stopped`: Instance process has terminated
-- `crashed`: Instance terminated unexpectedly
-
-#### 3.6.4 Instance Manager (`core/instances.py`)
+#### 3.5.1 Instance Manager (`core/instances.py`)
 
 **Instance Lifecycle Management**:
 
@@ -803,6 +613,213 @@ def get_instance_manager() -> InstanceManager:
 - Returns `running` if process responds to signal
 - Returns `stopped` if process is dead
 
+#### 3.5.2 Instance Interface (`core/instance_interface.py`)
+
+**Abstract Instance Adapter Pattern**:
+
+```python
+class InstanceInterface(ABC):
+    """Abstract base class for instance adapters."""
+
+    @abstractmethod
+    def send_message(self, message: str) -> None:
+        """Send a message to the instance."""
+
+    @abstractmethod
+    def get_response(self) -> str:
+        """Get the response from the instance."""
+
+    @abstractmethod
+    def is_running(self) -> bool:
+        """Check if the instance is running."""
+```
+
+**Concrete Implementations**:
+
+1. **TmuxInstance** (`core/tmux.py`): Manages tmux sessions
+2. **DockerContainer** (`core/docker.py`): Manages Docker containers
+
+This adapter pattern allows cc-bridge to work with different instance types (tmux sessions, Docker containers) through a common interface.
+
+#### 3.5.3 Telegram Client (`core/telegram.py`)
+
+**API Client**:
+- `send_message()`: Send messages to Telegram
+- `set_webhook()`: Register webhook URL
+- `get_webhook_info()`: Get current webhook info
+- `delete_webhook()`: Remove webhook
+- `answer_callback_query()`: Handle inline keyboard responses
+
+**Enhanced Methods** (Chat ID Detection):
+```python
+async def get_updates(self, timeout: int = 0, offset: int = 0, limit: int = 1) -> dict:
+    """Get updates from Telegram (for chat_id detection)."""
+
+async def get_chat_id(self, timeout: int = 30) -> int | None:
+    """
+    Auto-fetch chat_id by polling for updates.
+
+    User must send a message (e.g., /start) to trigger an update.
+
+    Returns:
+        Chat ID if found, None otherwise
+    """
+
+async def wait_for_message(self, timeout: int = 30) -> dict | None:
+    """Wait for a message to be sent to the bot."""
+```
+```python
+class TelegramClient:
+    async def send_message(
+        chat_id: int,
+        text: str,
+        parse_mode: str = "Markdown"
+    ) -> dict
+
+    async def set_webhook(url: str) -> dict
+    async def get_webhook_info() -> dict
+    async def delete_webhook() -> dict
+    async def answer_callback_query(
+        callback_query_id: str,
+        text: str | None = None
+    ) -> dict
+```
+
+#### 3.5.4 tmux Session Adapter (`core/tmux.py`)
+
+**Session Management**:
+```python
+class TmuxSession:
+    def __init__(session_name: str = "claude")
+
+    def session_exists() -> bool
+    def send_keys(text: str) -> None
+    def send_command(command: str) -> None
+    def get_session_output() -> str
+    def create_session(command: str | None = None) -> None
+    def kill_session() -> None
+```
+
+#### 3.5.5 Claude Integration (`core/claude.py`)
+
+**Claude Code Interface**:
+```python
+class ClaudeCode:
+    def __init__(tmux_session: TmuxSession)
+
+    def send_message(message: str) -> None
+    def get_pending_flag() -> bool
+    def set_pending_flag(value: bool) -> None
+    def get_last_response() -> str | None
+```
+
+#### 3.5.6 Message Parser (`core/parser.py`)
+
+**Message Processing**:
+```python
+class MessageFormatter:
+    @staticmethod
+    def sanitize(message: str) -> str:
+        """Remove harmful content."""
+
+    @staticmethod
+    def extract_code_blocks(message: str) -> list[str]:
+        """Extract code blocks from markdown."""
+
+    @staticmethod
+    def format_for_claude(message: str) -> str:
+        """Format Telegram message for Claude."""
+```
+
+### 3.6 Models Layer (`models/`)
+
+#### 3.6.1 Instance Models (`models/instances.py`)
+
+**Instance Data Models**:
+
+```python
+class ClaudeInstance(BaseModel):
+    """Represents a Claude Code instance."""
+
+    name: str = Field(description="Instance name")
+    pid: Optional[int] = Field(default=None, description="Process ID")
+    tmux_session: str = Field(description="tmux session name")
+    cwd: Optional[str] = Field(default=None, description="Working directory")
+    status: str = Field(
+        default="stopped",
+        description="Instance status: running, stopped, crashed"
+    )
+    created_at: datetime = Field(
+        default_factory=datetime.now,
+        description="Instance creation timestamp"
+    )
+    last_activity: Optional[datetime] = Field(
+        default=None, description="Last activity timestamp"
+    )
+
+
+class InstancesData(BaseModel):
+    """Container for all Claude instances."""
+
+    instances: dict[str, ClaudeInstance] = Field(
+        default_factory=dict, description="All instances by name"
+    )
+```
+
+**Instance States**:
+- `created`: Instance metadata created, process not yet started
+- `running`: Instance process is active
+- `stopped`: Instance process has terminated
+- `crashed`: Instance terminated unexpectedly
+
+#### 3.6.2 Telegram Models (`models/telegram.py`)
+
+**Pydantic Models**:
+```python
+class Update(BaseModel):
+    update_id: int
+    message: Message | None = None
+    callback_query: CallbackQuery | None = None
+
+class Message(BaseModel):
+    message_id: int
+    from_: User
+    chat: Chat
+    text: str | None = None
+
+class User(BaseModel):
+    id: int
+    is_bot: bool
+    first_name: str
+    username: str | None = None
+
+class Chat(BaseModel):
+    id: int
+    type: str  # "private", "group", "supergroup", "channel"
+```
+
+#### 3.6.3 Configuration Models (`models/config.py`)
+
+**Config Schemas**:
+```python
+class TelegramConfig(BaseModel):
+    bot_token: str = ""
+    chat_id: int | None = None
+    webhook_url: str = ""
+
+class ServerConfig(BaseModel):
+    host: str = "0.0.0.0"
+    port: int = 8080
+    reload: bool = False
+
+class TmuxConfig(BaseModel):
+    session: str = "claude"
+    auto_attach: bool = True
+
+class InstancesConfig(BaseModel):
+    data_file: str = "~/.claude/bridge/instances.json"
+```
+
 ---
 
 ## 4. Data Flow
@@ -824,17 +841,13 @@ Command Detection
            ↓
        Format for Claude (parser.py)
            ↓
-       Inject via tmux (tmux.py)
+       Send via Instance Adapter (instance_interface.py)
            ↓
-       Claude Processing
+       Claude Processing (in tmux/Docker)
            ↓
-       Response Generation
+       Response Capture
            ↓
-       Hook Stop Triggered
-           ↓
-       Transcript Parsing (parser.py)
-           ↓
-       Format for Telegram
+       Format for Telegram (parser.py)
            ↓
        Send via API (telegram.py)
            ↓
@@ -1057,10 +1070,10 @@ tests/
 ├── test_commands/           # Command tests
 │   ├── test_server.py       # Server tests
 │   ├── test_webhook.py      # Webhook tests
-│   ├── test_hook_stop.py    # Hook tests
 │   ├── test_health.py       # Health check tests
 │   ├── test_setup.py        # Setup wizard tests
-│   └── test_config.py       # Config command tests
+│   ├── test_config.py       # Config command tests
+│   └── test_claude.py        # Instance management tests
 └── test_core/               # Business logic tests
     ├── test_telegram.py     # Telegram client tests
     ├── test_tmux.py         # tmux tests
@@ -1350,8 +1363,8 @@ tail -f ~/.claude/bridge/logs/bridge.log
 | Issue | Solution |
 |-------|----------|
 | Webhook not received | Check firewall, verify webhook URL with Telegram |
-| tmux session not found | Start Claude Code in tmux: `tmux new-session -d -s claude claude` |
-| Hook not triggered | Verify Claude Code hook configuration in `.claude/hooks.json` |
+| Instance not found | Create instance: `cc-bridge claude start my-instance` |
+| Response not sent | Check instance is running: `cc-bridge claude list` |
 | Config not loading | Check file path and permissions, verify TOML syntax |
 
 ### 9.4 Performance Monitoring
@@ -1849,11 +1862,11 @@ export LOG_LEVEL="DEBUG"
 2. Verify session: `tmux ls`
 3. Update config if using different session name
 
-**Issue**: Hook not triggering
+**Issue**: Instance not responding
 **Solution**:
-1. Verify Claude Code hooks config: `~/.claude/hooks.json`
-2. Check hook is registered: `cc-bridge health`
-3. Manually test: `cc-bridge hook-stop /path/to/transcript.md`
+1. Check instance is running: `cc-bridge claude list`
+2. Attach to instance to see status: `cc-bridge claude attach my-instance`
+3. Restart instance if needed: `cc-bridge claude restart my-instance`
 
 **Issue**: Configuration not loading
 **Solution**:
@@ -1917,6 +1930,7 @@ Content-Type: application/json
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.1.0 | 2025-01-29 | Architecture update: Documented direct webhook processing with instance adapter pattern, removed deprecated hook-based architecture |
 | 1.0.0 | 2025-01-27 | Initial release |
 
 ---

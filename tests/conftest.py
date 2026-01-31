@@ -50,14 +50,27 @@ def clean_test_environment() -> None:  # type: ignore[misc]
 @pytest.fixture(autouse=True)
 def reset_global_config() -> None:  # type: ignore[misc]
     """
-    Reset global config singleton and environment variables before each test.
+    Reset global singletons and environment variables before each test.
 
-    This ensures tests don't pollute each other's state.
+    This ensures tests don't pollute each other's state by resetting:
+    - Config singleton
+    - InstanceManager singleton
+    - InstanceDetector singleton
+    - Environment variables
     """
     global _config  # noqa: PLW0603
 
-    # Reset config singleton
+    # Reset all singletons
     _config = None
+
+    # Import and reset other singletons
+    from cc_bridge.config import reset_config
+    from cc_bridge.core.instance_detector import reset_instance_detector
+    from cc_bridge.core.instances import reset_instance_manager
+
+    reset_config()
+    reset_instance_manager()
+    reset_instance_detector()
 
     # Reset environment variables to original state
     # Remove any variables that were added by tests (excluding pytest's own vars)
@@ -75,6 +88,9 @@ def reset_global_config() -> None:  # type: ignore[misc]
 
     # Cleanup after test
     _config = None
+    reset_config()
+    reset_instance_manager()
+    reset_instance_detector()
 
     # Final environment cleanup - use pop to avoid KeyError
     current_vars = set(os.environ.keys())

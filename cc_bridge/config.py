@@ -42,6 +42,14 @@ class Config:
             "session": "claude",
             "auto_attach": True,
         },
+        "docker": {
+            "enabled": True,
+            "network": "claude-network",
+            "named_pipe_path": "/tmp/cc-bridge-{instance}.fifo",
+            "auto_discovery": True,
+            "container_label": "cc-bridge.instance",
+            "preferred": False,
+        },
         "instances": {
             "data_file": "~/.claude/bridge/instances.json",
         },
@@ -58,6 +66,7 @@ class Config:
         },
         "tunnel": {
             "auto_start": False,
+            "url": "",
         },
     }
 
@@ -169,6 +178,8 @@ class Config:
         - TMUX_SESSION
         - PORT
         - LOG_LEVEL
+        - DOCKER_ENABLED
+        - DOCKER_NETWORK
         """
         env_mappings = {
             "TELEGRAM_BOT_TOKEN": "telegram.bot_token",
@@ -177,17 +188,29 @@ class Config:
             "TMUX_SESSION": "tmux.session",
             "PORT": "server.port",
             "LOG_LEVEL": "logging.level",
+            "DOCKER_ENABLED": ("docker.enabled", lambda v: v.lower() in ("true", "1", "yes")),
+            "DOCKER_NETWORK": "docker.network",
+            "CCBRIDGE_TUNNEL_URL": "tunnel.url",
         }
 
-        for env_var, config_key in env_mappings.items():
+        for env_var, config_mapping in env_mappings.items():
             env_value = os.environ.get(env_var)
             if env_value is not None:
-                # Convert port to integer
-                if env_var == "PORT":
+                # Handle tuple format (config_key, converter) or simple string format
+                if isinstance(config_mapping, tuple):
+                    config_key, converter = config_mapping
                     try:
-                        env_value = int(env_value)
-                    except ValueError:
+                        env_value = converter(env_value)
+                    except (ValueError, TypeError):
                         continue
+                else:
+                    config_key = config_mapping
+                    # Convert port to integer
+                    if env_var == "PORT":
+                        try:
+                            env_value = int(env_value)
+                        except ValueError:
+                            continue
 
                 self.set(config_key, env_value)
 
@@ -294,16 +317,44 @@ class Config:
         """Get instances configuration section."""
         return self._config.get("instances", {})
 
+    @property
+    def docker(self) -> dict[str, Any]:
+        """Get Docker configuration section."""
+        return self._config.get("docker", {})
+
+    # Define all path configuration fields that need expansion
+    # Each entry is a tuple: (section, field) or (section, subsection, field)
+    PATH_CONFIG_FIELDS: ClassVar[list[tuple[str, ...]]] = [
+        ("logging", "file"),
+        ("instances", "data_file"),
+        # Add new path fields here as needed
+    ]
+
     def _expand_paths(self) -> None:
         """
-        Expand ~ in file paths to absolute paths.
+        Expand ~ and environment variables in file paths to absolute paths.
 
         This is called after loading configuration to ensure all paths
         are expanded to their absolute form.
+
+        Supports:
+        - ~ (home directory)
+        - $VAR or ${VAR} (environment variables)
         """
-        log_file = self.get("logging.file")
-        if log_file and isinstance(log_file, str) and log_file.startswith("~"):
-            self.set("logging.file", str(Path(log_file).expanduser()))
+        for field_path in self.PATH_CONFIG_FIELDS:
+            # Build the config key from the field path tuple
+            config_key = ".".join(field_path)
+
+            # Get the current value
+            path_value = self.get(config_key)
+            if path_value and isinstance(path_value, str):
+                # Expand environment variables first, then ~
+                expanded = os.path.expandvars(path_value)
+                expanded = str(Path(expanded).expanduser())
+
+                # Update if changed
+                if expanded != path_value:
+                    self.set(config_key, expanded)
 
 
 # Global config instance
@@ -325,3 +376,14 @@ def get_config() -> Config:
 
 # Convenience alias for settings
 settings = get_config
+
+
+def reset_config() -> None:
+    """
+    Reset global config singleton for testing.
+
+    WARNING: Do not use in production code. This is only for tests
+    to ensure clean state between test runs.
+    """
+    global _config  # noqa: PLW0603
+    _config = None
