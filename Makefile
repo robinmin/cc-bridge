@@ -29,6 +29,22 @@ help:
 status:
 	@./scripts/health-check.sh
 
+## build-docker: Build docker image
+build-docker:
+	@echo "Building docker image..."
+	@docker build -t cc-bridge -f dockers/Dockerfile .
+
+## run-docker: Run docker container with host authentication (using docker-compose)
+run-docker:
+	@echo "Running docker container with docker-compose..."
+	@docker compose -f dockers/docker-compose.yml run --rm claude-agent bash
+
+## restart-docker: Rebuild and restart docker container (using docker-compose)
+restart-docker:
+	@echo "Rebuilding and restarting with docker-compose..."
+	@docker compose -f dockers/docker-compose.yml build
+	@docker compose -f dockers/docker-compose.yml run --rm claude-agent bash
+
 # =============================================================================
 # Setup
 # =============================================================================
