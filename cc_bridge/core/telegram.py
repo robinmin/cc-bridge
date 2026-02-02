@@ -276,6 +276,7 @@ class TelegramClient:
             escaped_text = text
             if parse_mode == "HTML":
                 import html
+
                 escaped_text = html.escape(text)
 
             client = await self._get_client()
