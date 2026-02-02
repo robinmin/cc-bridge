@@ -201,7 +201,7 @@ class DockerInstance(InstanceInterface):
     def __init__(
         self,
         instance: ClaudeInstance,
-        pipe_dir: str | None = None,
+        _pipe_dir: str | None = None,
     ):
         """
         Initialize Docker instance adapter.
@@ -217,20 +217,10 @@ class DockerInstance(InstanceInterface):
                 instance.name,
             )
 
-        from cc_bridge.core.docker_compat import get_docker_client
-
         self.docker_client = None
         self.process: asyncio.subprocess.Process | None = None
         self._lock = asyncio.Lock()
-
-        try:
-            self.docker_client = get_docker_client()
-        except RuntimeError as e:
-            raise InstanceOperationError(
-                "Docker client not available",
-                instance.name,
-                e,
-            ) from e
+        self._background_tasks: set[asyncio.Task] = set()
 
     async def _ensure_process(self) -> None:
         """Ensure the 'docker exec' process is running."""
@@ -249,12 +239,14 @@ class DockerInstance(InstanceInterface):
                 "docker",
                 "exec",
                 "-i",
-                "-e", "PYTHONPATH=.",
-                self.instance.container_id,
+                "-e",
+                "PYTHONPATH=.",
+                str(self.instance.container_id),
                 "python3",
                 "-m",
                 "cc_bridge.agents.container_agent",
-                "--log-level", "DEBUG",
+                "--log-level",
+                "DEBUG",
                 "--claude-args=--allow-dangerously-skip-permissions",
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
@@ -262,7 +254,9 @@ class DockerInstance(InstanceInterface):
             )
 
             # Start a task to relay agent stderr to our logger
-            asyncio.create_task(self._relay_agent_stderr())
+            task = asyncio.create_task(self._relay_agent_stderr())
+            self._background_tasks.add(task)
+            task.add_done_callback(self._background_tasks.discard)
 
     async def _relay_agent_stderr(self) -> None:
         """Relay agent stderr to the main server logs."""
@@ -274,11 +268,11 @@ class DockerInstance(InstanceInterface):
                 line = await self.process.stderr.readline()
                 if not line:
                     break
-                
+
                 log_line = line.decode("utf-8", errors="ignore").strip()
                 if log_line:
                     self.logger.info(f"[AGENT] {log_line}")
-                    
+
         except Exception as e:
             self.logger.error(f"Error relaying agent stderr: {e}")
 
@@ -310,9 +304,9 @@ class DockerInstance(InstanceInterface):
                 chunk = await asyncio.wait_for(self.process.stdout.read(1024), timeout=30.0)
                 if not chunk:
                     break
-                
+
                 yield chunk.decode("utf-8", errors="ignore")
-                
+
                 if self.process.returncode is not None:
                     break
 
@@ -326,7 +320,7 @@ class DockerInstance(InstanceInterface):
                 e,
             ) from e
 
-    async def send_command_and_wait(self, text: str, timeout: float = 30.0) -> tuple[bool, str]:
+    async def send_command_and_wait(self, text: str, timeout: float = 30.0) -> tuple[bool, str]:  # noqa: ARG002
         """Send command to Docker container and wait for completion."""
         try:
             output_parts = []
@@ -386,10 +380,10 @@ class DockerInstance(InstanceInterface):
     def cleanup(self) -> None:
         """Clean up exec process."""
         if self.process:
-            try:
+            import contextlib
+
+            with contextlib.suppress(Exception):
                 self.process.terminate()
-            except Exception:
-                pass
 
 
 def get_instance_adapter(instance: ClaudeInstance) -> InstanceInterface:
