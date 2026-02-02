@@ -55,26 +55,32 @@ class TestCLIServerCommand:
         assert result.exit_code == 0
         assert "Start the FastAPI webhook server" in result.stdout
 
-    def test_server_command_accepts_reload_flag(self):
+    @patch("cc_bridge.commands.server.uvicorn.run")
+    def test_server_command_accepts_reload_flag(self, mock_run):
         """Server command should accept reload flag."""
         result = runner.invoke(app, ["server", "--reload", "--host", "127.0.0.1", "--port", "9000"])
 
-        # Server starts but exits immediately in test environment
-        assert "Starting cc-bridge server" in result.stdout or result.exit_code in (0, 1)
+        assert result.exit_code == 0
+        kwargs = mock_run.call_args[1]
+        assert kwargs["host"] == "127.0.0.1"
+        assert kwargs["port"] == 9000
+        assert kwargs["reload"] is True
 
-    def test_server_command_accepts_host_option(self):
+    @patch("cc_bridge.commands.server.uvicorn.run")
+    def test_server_command_accepts_host_option(self, mock_run):
         """Server command should accept host option."""
         result = runner.invoke(app, ["server", "--host", "127.0.0.1"])
 
-        # Server starts but exits immediately in test environment
-        assert "Starting cc-bridge server" in result.stdout or result.exit_code in (0, 1)
+        assert result.exit_code == 0
+        assert mock_run.call_args[1]["host"] == "127.0.0.1"
 
-    def test_server_command_accepts_port_option(self):
+    @patch("cc_bridge.commands.server.uvicorn.run")
+    def test_server_command_accepts_port_option(self, mock_run):
         """Server command should accept port option."""
         result = runner.invoke(app, ["server", "--port", "9000"])
 
-        # Server starts but exits immediately in test environment
-        assert "Starting cc-bridge server" in result.stdout or result.exit_code in (0, 1)
+        assert result.exit_code == 0
+        assert mock_run.call_args[1]["port"] == 9000
 
 
 class TestCLIHookStopCommand:
