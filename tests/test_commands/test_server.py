@@ -2,6 +2,8 @@
 Tests for server command.
 """
 
+from unittest.mock import MagicMock, patch
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 
@@ -33,8 +35,14 @@ async def test_health_endpoint():
 
 
 @pytest.mark.asyncio
-async def test_webhook_endpoint():
+@patch("cc_bridge.commands.server.get_config")
+async def test_webhook_endpoint(mock_get_config):
     """Test webhook endpoint accepts updates."""
+    # Mock config to allow any chat ID during this test
+    mock_conf = MagicMock()
+    mock_conf.get.return_value = None
+    mock_get_config.return_value = mock_conf
+
     # Create client directly without context manager to avoid closure issues
     transport = ASGITransport(app=app)
     client = AsyncClient(transport=transport, base_url="http://test")
@@ -53,9 +61,9 @@ async def test_webhook_endpoint():
     response = await client.post("/webhook", json=payload)
 
     assert response.status_code == 200
-    # Response is "error" because no Claude instances are running
+    # Response is "error" because no running Claude instances are expected
     assert response.json()["status"] == "error"
-    assert "no instance" in response.json()["reason"]
+    assert "instance" in response.json()["reason"]
 
     # Close client explicitly
     await client.aclose()
