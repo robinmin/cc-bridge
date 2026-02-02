@@ -17,9 +17,14 @@ RUN apt-get update && apt-get install -y \
     make \
     curl \
     gnupg \
+    unzip \
     && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y nodejs \
+    && curl -LsSf https://astral.sh/uv/install.sh | sh \
+    && curl -fsSL https://bun.sh/install | bash \
     && rm -rf /var/lib/apt/lists/*
+
+ENV PATH="/root/.cargo/bin:/root/.local/bin:/root/.bun/bin:${PATH}"
 
 # Create app directory
 WORKDIR /app
@@ -29,8 +34,8 @@ COPY pyproject.toml ./
 COPY cc_bridge/ ./cc_bridge/
 COPY README.md ./
 
-# Install Python dependencies
-RUN pip3 install --no-cache-dir . --break-system-packages
+# Install Python dependencies using uv
+RUN uv pip install --system --no-cache-dir . --break-system-packages
 
 # Stage 2: Runtime
 FROM ubuntu:24.04
@@ -45,10 +50,14 @@ RUN apt-get update && apt-get install -y \
     curl \
     tmux \
     gnupg \
+    unzip \
     && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y nodejs \
-    && npm install -g @anthropic-ai/claude-code \
+    && curl -LsSf https://astral.sh/uv/install.sh | sh \
+    && curl -fsSL https://bun.sh/install | bash \
     && rm -rf /var/lib/apt/lists/*
+
+ENV PATH="/root/.cargo/bin:/root/.local/bin:/root/.bun/bin:${PATH}"
 
 # Create non-root user for security
 RUN if getent passwd 1000; then \
@@ -74,6 +83,7 @@ COPY --from=builder /usr/local/bin /usr/local/bin
 COPY --chown=vscode:vscode pyproject.toml ./
 COPY --chown=vscode:vscode cc_bridge/ ./cc_bridge/
 COPY --chown=vscode:vscode README.md ./
+COPY --chown=vscode:vscode dockers/mcp.json /home/vscode/.claude/mcp.json
 
 # Create necessary directories for Claude Code
 RUN mkdir -p /home/vscode/.claude/hooks && \
@@ -87,11 +97,17 @@ RUN mkdir -p /home/vscode/.claude/hooks && \
 USER vscode
 
 # Set working directory
-WORKDIR /workspaces/${PROJECT_NAME:-cc-bridge}
+ARG PROJECT_NAME=cc-bridge
+WORKDIR /workspaces/${PROJECT_NAME}
 
 # Set default environment variables
 ENV PYTHONUNBUFFERED=1
-ENV PATH="/home/vscode/.local/bin:${PATH}"
+ENV PATH="/home/vscode/.local/bin:/home/vscode/.cargo/bin:/home/vscode/.bun/bin:${PATH}"
+
+# Install uv, bun and global packages for vscode user
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
+    && curl -fsSL https://bun.sh/install | bash \
+    && /home/vscode/.bun/bin/bun install -g @anthropic-ai/claude-code @augmentcode/auggie
 
 # Health check to verify container is running
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
