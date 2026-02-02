@@ -96,7 +96,7 @@ def setup_logging(
 
     # Add console handler if not already present
     if not any(
-        isinstance(h, logging.StreamHandler) and (h.stream == sys.stderr or h.stream == sys.stdout)
+        isinstance(h, logging.StreamHandler) and h.stream in (sys.stderr, sys.stdout)
         for h in root_logger.handlers
     ):
         console_handler = logging.StreamHandler(sys.stderr)
