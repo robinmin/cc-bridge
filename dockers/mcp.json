@@ -1,0 +1,53 @@
+{
+    "mcpServers": {
+        "shadcn": {
+            "command": "bunx",
+            "args": [
+                "shadcn@latest",
+                "mcp"
+            ]
+        },
+        "ref": {
+            "command": "bunx",
+            "args": [
+                "ref-tools-mcp@latest"
+            ]
+        },
+        "auggie": {
+            "command": "auggie",
+            "args": [
+                "--mcp"
+            ]
+        },
+        "brave-search": {
+            "command": "bunx",
+            "args": [
+                "@modelcontextprotocol/server-brave-search"
+            ]
+        },
+        "wandb": {
+            "command": "uvx",
+            "args": [
+                "--from",
+                "git+https://github.com/wandb/wandb-mcp-server",
+                "wandb_mcp_server"
+            ]
+        },
+        "jupyter": {
+            "command": "uvx",
+            "args": [
+                "jupyter-mcp-server",
+                "--transport",
+                "stdio",
+                "--jupyter-url",
+                "$JUPYTER_URL",
+                "--jupyter-token",
+                "$JUPYTER_TOKEN",
+                "--document-id",
+                "notebook.ipynb",
+                "--start-new-runtime",
+                "false"
+            ]
+        }
+    }
+}

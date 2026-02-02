@@ -2,13 +2,18 @@
 Tests for server command.
 """
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 
 from cc_bridge.commands import server
-from cc_bridge.commands.server import RateLimiter, app
+from cc_bridge.commands.server import (
+    RateLimiter,
+    app,
+    get_instance_manager_dep,
+    get_telegram_client_dep,
+)
 
 
 @pytest.mark.asyncio
@@ -43,30 +48,42 @@ async def test_webhook_endpoint(mock_get_config):
     mock_conf.get.return_value = None
     mock_get_config.return_value = mock_conf
 
-    # Create client directly without context manager to avoid closure issues
-    transport = ASGITransport(app=app)
-    client = AsyncClient(transport=transport, base_url="http://test")
+    # Mock dependencies
+    mock_manager = MagicMock()
+    mock_manager.list_instances.return_value = []
 
-    payload = {
-        "update_id": 12345,
-        "message": {
-            "message_id": 1,
-            "from": {"id": 123456, "first_name": "Test"},
-            "chat": {"id": 123456, "type": "private"},
-            "date": 1234567890,
-            "text": "Test message",
-        },
-    }
+    mock_telegram = MagicMock()
+    mock_telegram.send_message = AsyncMock()
 
-    response = await client.post("/webhook", json=payload)
+    app.dependency_overrides[get_instance_manager_dep] = lambda: mock_manager
+    app.dependency_overrides[get_telegram_client_dep] = lambda: mock_telegram
 
-    assert response.status_code == 200
-    # Response is "error" because no running Claude instances are expected
-    assert response.json()["status"] == "error"
-    assert "instance" in response.json()["reason"]
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            payload = {
+                "update_id": 12345,
+                "message": {
+                    "message_id": 1,
+                    "from": {"id": 123456, "first_name": "Test"},
+                    "chat": {"id": 123456, "type": "private"},
+                    "date": 1234567890,
+                    "text": "Test message",
+                },
+            }
 
-    # Close client explicitly
-    await client.aclose()
+            response = await client.post("/webhook", json=payload)
+
+            assert response.status_code == 200
+            # Response is "error" because no running Claude instances are expected
+            assert response.json()["status"] == "error"
+            assert "instance" in response.json()["reason"]
+
+            # Close client explicitly
+            await client.aclose()
+    finally:
+        # Clear overrides
+        app.dependency_overrides.clear()
 
 
 @pytest.mark.asyncio

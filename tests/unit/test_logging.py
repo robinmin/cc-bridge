@@ -13,7 +13,7 @@ from pathlib import Path
 
 import structlog
 
-from cc_bridge.logging import get_logger, reset_logging, setup_logging
+from cc_bridge.packages.logging import get_logger, reset_logging, setup_logging
 
 
 class TestSetupLogging:

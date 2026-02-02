@@ -1,0 +1,62 @@
+# Example configuration for cc-bridge with FIFO daemon mode
+# Location: ~/.config/cc-bridge/config.yaml
+
+# Telegram Bot Configuration
+telegram:
+  bot_token: "123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11"
+  chat_id: 123456789
+  webhook_url: "https://your-domain.com/webhook"
+
+# Server Configuration
+server:
+  host: "0.0.0.0"
+  port: 8080
+  reload: false  # Set to true for development with auto-reload
+
+# Docker Configuration with FIFO Mode
+docker:
+  # Communication mode: "fifo" (daemon) or "exec" (legacy)
+  communication_mode: fifo
+
+  # Docker network for container communication
+  network: claude-network
+
+  # Prefer Docker instances over tmux
+  preferred: true
+
+  # Auto-discover containers with cc-bridge labels
+  auto_discovery: true
+
+  # Directory for named pipes (FIFO communication)
+  pipe_dir: /tmp/cc-bridge/pipes
+
+  # Session tracking configuration
+  session:
+    idle_timeout: 300  # seconds (5 minutes) before session marked idle
+    request_timeout: 120  # seconds (2 minutes) before request timeout
+    max_history: 100  # maximum conversation turns to keep in memory
+
+  # Health monitoring configuration
+  health:
+    enabled: true
+    check_interval: 30  # seconds between health checks
+    max_consecutive_failures: 3  # failures before triggering recovery
+    recovery_delay: 5  # seconds to wait before recovery attempt
+
+# Logging Configuration
+logging:
+  level: INFO  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+  format: json  # json or text
+  file: ~/.local/state/cc-bridge/logs/bridge.log
+  max_bytes: 10485760  # 10MB
+  backup_count: 5
+
+# Rate Limiting
+rate_limit:
+  enabled: true
+  requests_per_minute: 10  # per chat_id
+
+# Cloudflare Tunnel (optional)
+tunnel:
+  auto_start: false
+  url: ""  # Auto-generated when started
