@@ -11,7 +11,7 @@ from typing import Literal
 
 from cc_bridge.core.docker_compat import is_docker_available
 from cc_bridge.core.instances import get_instance_manager
-from cc_bridge.logging import get_logger
+from cc_bridge.packages.logging import get_logger
 
 logger = get_logger(__name__)
 

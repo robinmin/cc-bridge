@@ -17,8 +17,8 @@ from cc_bridge.config import get_config
 from cc_bridge.core.docker_compat import is_docker_available
 from cc_bridge.core.instances import InstanceManager, get_instance_manager
 from cc_bridge.core.validation import safe_tmux_session_name, validate_instance_name
-from cc_bridge.logging import get_logger
 from cc_bridge.models.instances import ClaudeInstance
+from cc_bridge.packages.logging import get_logger
 
 logger = get_logger(__name__)
 

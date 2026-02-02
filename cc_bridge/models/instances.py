@@ -21,6 +21,12 @@ class ClaudeInstance(BaseModel):
     )
     last_activity: datetime | None = Field(default=None, description="Last activity timestamp")
 
+    # Communication mode for Docker instances
+    communication_mode: Literal["exec", "fifo"] = Field(
+        default="fifo",
+        description="Docker communication mode: exec (legacy) or fifo (daemon mode)",
+    )
+
     # Tmux-specific fields
     pid: int | None = Field(default=None, description="Process ID (tmux instances)")
     tmux_session: str | None = Field(default=None, description="tmux session name")

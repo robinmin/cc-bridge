@@ -13,8 +13,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from cc_bridge.core.validation import validate_instance_name
-from cc_bridge.logging import get_logger
 from cc_bridge.models.instances import ClaudeInstance, InstancesData
+from cc_bridge.packages.logging import get_logger
 
 logger = get_logger(__name__)
 

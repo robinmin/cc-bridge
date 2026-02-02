@@ -13,7 +13,7 @@ import typer
 from cc_bridge.constants import EXIT_ERROR
 from cc_bridge.core.docker_compat import ensure_docker_available
 from cc_bridge.core.instances import get_instance_manager
-from cc_bridge.logging import get_logger
+from cc_bridge.packages.logging import get_logger
 
 logger = get_logger(__name__)
 

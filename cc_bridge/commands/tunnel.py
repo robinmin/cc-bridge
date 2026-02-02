@@ -12,7 +12,7 @@ import time
 
 import httpx
 
-from cc_bridge.logging import get_logger
+from cc_bridge.packages.logging import get_logger
 
 logger = get_logger(__name__)
 

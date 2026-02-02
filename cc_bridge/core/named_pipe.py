@@ -13,7 +13,7 @@ from contextlib import AbstractAsyncContextManager as AsyncContextManagerType
 from pathlib import Path
 from types import TracebackType
 
-from cc_bridge.logging import get_logger
+from cc_bridge.packages.logging import get_logger
 
 logger = get_logger(__name__)
 

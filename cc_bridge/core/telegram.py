@@ -13,8 +13,8 @@ import asyncio
 
 import httpx
 
-from cc_bridge.exceptions import TelegramTimeoutError
-from cc_bridge.logging import get_logger
+from cc_bridge.packages.exceptions import TelegramTimeoutError
+from cc_bridge.packages.logging import get_logger
 
 logger = get_logger(__name__)
 

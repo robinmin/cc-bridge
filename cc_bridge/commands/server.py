@@ -31,9 +31,9 @@ from cc_bridge.constants import (
 from cc_bridge.core.instance_interface import get_instance_adapter
 from cc_bridge.core.instances import get_instance_manager
 from cc_bridge.core.telegram import TelegramClient
-from cc_bridge.logging import get_logger
 from cc_bridge.models.instances import ClaudeInstance
 from cc_bridge.models.telegram import Update
+from cc_bridge.packages.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -360,40 +360,57 @@ async def health():
 async def _select_instance(instances: list) -> ClaudeInstance | None:
     """
     Select the best instance to use from a list.
+    Favors running instances, but will return a stopped one if none are running
+    (allowing the caller to attempt an auto-start).
 
     Args:
         instances: List of ClaudeInstance objects
 
     Returns:
-        Selected instance or None if no running instance found
+        Selected instance or None if no instance found
     """
     settings_obj = get_config()
     docker_preferred = settings_obj.get("docker.preferred", False)
     instance_manager = get_instance_manager()
 
-    # Filter running instances by checking actual status
+    # Categorize instances by status
     running = []
+    stopped = []
+
     for i in instances:
         status = await instance_manager.aget_instance_status(i.name)
         if status == "running":
             running.append(i)
+        elif status in ["stopped", "exited", "created", "no_pid"]:
+            stopped.append(i)
 
-    if not running:
-        return None
+    # First priority: Running instances
+    if running:
+        # If only one running instance, use it
+        if len(running) == 1:
+            return running[0]
 
-    # If only one running instance, use it
-    if len(running) == 1:
+        # Select based on preference
+        for instance in running:
+            if (docker_preferred and instance.instance_type == "docker") or (
+                not docker_preferred and instance.instance_type == "tmux"
+            ):
+                return instance
+
+        # Fallback to first running instance
         return running[0]
 
-    # Select based on preference
-    for instance in running:
-        if (docker_preferred and instance.instance_type == "docker") or (
-            not docker_preferred and instance.instance_type == "tmux"
-        ):
-            return instance
+    # Second priority: Stopped instances (caller will try to start)
+    if stopped:
+        # Select based on preference
+        for instance in stopped:
+            if (docker_preferred and instance.instance_type == "docker") or (
+                not docker_preferred and instance.instance_type == "tmux"
+            ):
+                return instance
+        return stopped[0]
 
-    # Fallback to first running instance
-    return running[0]
+    return None
 
 
 @app.post("/webhook")
@@ -504,10 +521,7 @@ async def telegram_webhook(  # noqa: PLR0911, PLR0912, PLR0915
             elif text == "/status":
                 # Check instance status
                 instances = instance_manager.list_instances()
-                if instances:
-                    instance = instances[0]
-                else:
-                    instance = None
+                instance = await _select_instance(instances)
 
                 config_obj = get_config()
                 tunnel_url = config_obj.get("tunnel.url", "")
@@ -515,9 +529,11 @@ async def telegram_webhook(  # noqa: PLR0911, PLR0912, PLR0915
                 status_text = "📊 **Service Status**\n\n"
                 status_text += "✅ Server: Running\n"
                 if instance:
-                    status_text += f"🔌 Instance: {instance.name}\n"
+                    active_status = await instance_manager.aget_instance_status(instance.name)
+                    status_icon = "🟢" if active_status == "running" else "🔴"
+                    status_text += f"{status_icon} Instance: {instance.name} ({active_status})\n"
                 else:
-                    status_text += "🔌 Instance: None\n"
+                    status_text += "🔌 Instance: None found\n"
 
                 if tunnel_url:
                     # Extract domain from URL for display (avoid showing full URL)
@@ -525,7 +541,7 @@ async def telegram_webhook(  # noqa: PLR0911, PLR0912, PLR0915
                     domain = parsed.netloc or tunnel_url
                     status_text += f"🟢 Tunnel: Active ({domain})\n"
                 else:
-                    status_text += "⚠️  Tunnel: Not configured\n"
+                    status_text += "⚠️ Tunnel: Not configured\n"
 
                 if telegram_client:
                     logger.debug(f"=> {status_text}")
@@ -538,11 +554,52 @@ async def telegram_webhook(  # noqa: PLR0911, PLR0912, PLR0915
                         "Just send me a message and I'll forward it to Claude Code!\n\n"
                         "Commands:\n"
                         "/status - Check service status\n"
+                        "/clear - Clear Claude conversation\n"
+                        "/stop - Interrupt Claude current action\n"
+                        "/resume - Re-start/Resume the instance\n"
                         "/help - Show this message\n\n"
                         "Your messages are sent directly to your Claude Code instance."
                     )
                     logger.debug(f"=> {help_message}")
                     await telegram_client.send_message(chat_id, help_message)
+                return {"status": "ok"}
+            elif text in ("/clear", "/stop", "/resume"):
+                # These commands require an instance
+                instances = instance_manager.list_instances()
+                instance = await _select_instance(instances)
+
+                if not instance:
+                    if telegram_client:
+                        await telegram_client.send_message(
+                            chat_id, "⚠️ No Claude instance found to execute command."
+                        )
+                    return {"status": "error", "reason": "no instance"}
+
+                adapter = await instance_manager.aget_adapter(instance.name)
+
+                if text == "/stop":
+                    logger.info("Interrupting instance", instance=instance.name)
+                    if await adapter.interrupt():
+                        msg = f"⏹ Claude instance '{instance.name}' interrupted."
+                    else:
+                        msg = f"⚠️ Failed to interrupt Claude instance '{instance.name}'."
+                elif text == "/clear":
+                    logger.info("Cleaning conversation", instance=instance.name)
+                    if await adapter.clear_conversation():
+                        msg = f"🧹 Claude instance '{instance.name}' conversation cleared."
+                    else:
+                        msg = f"⚠️ Failed to clear conversation for '{instance.name}'."
+                elif text == "/resume":
+                    logger.info("Resuming instance", instance=instance.name)
+                    if await adapter.is_running():
+                        msg = f"✅ Claude instance '{instance.name}' is already running."
+                    elif await adapter.start():
+                        msg = f"🚀 Claude instance '{instance.name}' started and resumed."
+                    else:
+                        msg = f"⚠️ Failed to start/resume Claude instance '{instance.name}'."
+
+                if telegram_client:
+                    await telegram_client.send_message(chat_id, msg)
                 return {"status": "ok"}
             else:
                 # Unknown command - ignore
@@ -568,15 +625,15 @@ async def telegram_webhook(  # noqa: PLR0911, PLR0912, PLR0915
                 await telegram_client.send_message(chat_id, msg)
             return {"status": "error", "reason": "no instance"}
 
-        # Select instance based on configuration and running status
+        # Select instance based on configuration and preference
         instance = await _select_instance(instances)
         if not instance:
-            logger.warning("No running Claude instance found")
+            logger.warning("No suitable Claude instance found")
             if telegram_client:
-                msg = "⚠️ No running Claude instance found. Start one with: cc-bridge claude start <name>"
+                msg = "⚠️ No suitable Claude instance found. Please check your instances with 'cc-bridge claude list'."
                 logger.debug(f"=> {msg}")
                 await telegram_client.send_message(chat_id, msg)
-            return {"status": "error", "reason": "no running instance"}
+            return {"status": "error", "reason": "no usable instance"}
 
         # Assert for type checker - we've already checked instance is not None
         assert instance is not None
@@ -592,16 +649,22 @@ async def telegram_webhook(  # noqa: PLR0911, PLR0912, PLR0915
                 await telegram_client.send_message(chat_id, msg)
             return {"status": "error", "reason": "unsupported instance"}
 
-        # Check if instance is running
+        # Check if instance is running and try to start if not
         if not adapter.is_running():
-            logger.warning(
-                "Instance not running", instance=instance.name, type=instance.instance_type
-            )
-            if telegram_client:
-                msg = f"⚠️ Claude instance '{instance.name}' is not running."
-                logger.debug(f"=> {msg}")
-                await telegram_client.send_message(chat_id, msg)
-            return {"status": "error", "reason": "instance not running"}
+            logger.info("Instance not running, attempting to start", instance=instance.name)
+            if await adapter.start():
+                logger.info("Instance started successfully", instance=instance.name)
+            else:
+                logger.warning(
+                    "Instance not running and failed to start",
+                    instance=instance.name,
+                    type=instance.instance_type,
+                )
+                if telegram_client:
+                    msg = f"⚠️ Claude instance '{instance.name}' is not running and could not be started automatically."
+                    logger.debug(f"=> {msg}")
+                    await telegram_client.send_message(chat_id, msg)
+                return {"status": "error", "reason": "instance not running"}
 
         # Update instance activity
         await instance_manager.update_instance_activity(instance.name)

@@ -9,7 +9,7 @@ import asyncio
 from collections.abc import Callable
 from typing import Any
 
-from cc_bridge.logging import get_logger
+from cc_bridge.packages.logging import get_logger
 
 logger = get_logger(__name__)
 

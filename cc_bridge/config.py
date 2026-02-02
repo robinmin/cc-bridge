@@ -50,6 +50,7 @@ class Config:
             "auto_discovery": True,
             "container_label": "cc-bridge.instance",
             "preferred": False,
+            "communication_mode": "fifo",  # "exec" (legacy) or "fifo" (daemon mode)
         },
         "instances": {
             "data_file": "~/.claude/bridge/instances.json",

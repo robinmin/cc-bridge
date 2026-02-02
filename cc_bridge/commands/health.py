@@ -5,9 +5,11 @@ This module implements health checks for:
 - Telegram webhook connectivity
 - tmux session status
 - Hook functionality
+- Docker daemon mode instances (FIFO health, agent status)
 """
 
 import asyncio
+import os
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -216,6 +218,180 @@ def check_hook() -> dict[str, Any]:
         }
 
 
+async def check_docker_daemon() -> dict[str, Any]:  # noqa: PLR0912
+    """
+    Check Docker daemon mode instances health.
+
+    Returns:
+        Health check result with status and details
+    """
+    try:
+        from cc_bridge.core.instances import InstanceManager
+
+        # Check if Docker is available
+        try:
+            import docker
+
+            client = docker.from_env()
+            client.ping()
+        except Exception:
+            return {
+                "status": "unhealthy",
+                "message": "Docker is not available or not running",
+                "docker_available": False,
+            }
+
+        # Get instance manager
+        manager = InstanceManager()
+
+        # Check Docker instances in FIFO mode
+        unhealthy_instances = []
+        healthy_instances = []
+        total_fifo_instances = 0
+
+        for name, instance in manager._instances.items():
+            if instance.instance_type == "docker" and instance.communication_mode == "fifo":
+                total_fifo_instances += 1
+
+                # Check if container is running
+                try:
+                    container = client.containers.get(instance.container_id)
+                    if container.status != "running":
+                        unhealthy_instances.append(
+                            {
+                                "name": name,
+                                "reason": "Container not running",
+                                "status": container.status,
+                            }
+                        )
+                        continue
+                except Exception:
+                    unhealthy_instances.append({"name": name, "reason": "Container not found"})
+                    continue
+
+                # Check FIFO pipes
+                from cc_bridge.core.named_pipe import NamedPipeChannel
+
+                pipe_dir = "/tmp/cc-bridge/pipes"  # Default
+                try:
+                    from cc_bridge.config import get_config
+
+                    cfg = get_config()
+                    if cfg:
+                        pipe_dir = cfg.get("docker", {}).get("pipe_dir", pipe_dir)
+                except Exception:
+                    pass
+
+                channel = NamedPipeChannel(instance_name=name, pipe_dir=pipe_dir)
+
+                # Check if pipes exist
+                input_exists = Path(channel.input_pipe_path).exists()
+                output_exists = Path(channel.output_pipe_path).exists()
+
+                if not input_exists or not output_exists:
+                    unhealthy_instances.append(
+                        {
+                            "name": name,
+                            "reason": "FIFO pipes missing",
+                            "input_pipe": input_exists,
+                            "output_pipe": output_exists,
+                        }
+                    )
+                else:
+                    healthy_instances.append(name)
+
+        if total_fifo_instances == 0:
+            return {
+                "status": "healthy",
+                "message": "No Docker daemon mode instances configured",
+                "docker_available": True,
+                "total_fifo_instances": 0,
+            }
+        elif unhealthy_instances:
+            return {
+                "status": "unhealthy",
+                "message": f"{len(unhealthy_instances)} of {total_fifo_instances} instances unhealthy",
+                "docker_available": True,
+                "total_fifo_instances": total_fifo_instances,
+                "healthy_instances": healthy_instances,
+                "unhealthy_instances": unhealthy_instances,
+            }
+        else:
+            return {
+                "status": "healthy",
+                "message": f"All {total_fifo_instances} Docker daemon instances healthy",
+                "docker_available": True,
+                "total_fifo_instances": total_fifo_instances,
+                "healthy_instances": healthy_instances,
+            }
+    except ImportError as e:
+        return {
+            "status": "unhealthy",
+            "message": f"Required module not available: {e}",
+            "docker_available": False,
+        }
+    except Exception as e:
+        return {
+            "status": "unhealthy",
+            "message": f"Error checking Docker daemon: {e}",
+            "docker_available": False,
+        }
+
+
+def check_fifo_pipes() -> dict[str, Any]:
+    """
+    Check FIFO pipe directory health.
+
+    Returns:
+        Health check result with status and details
+    """
+    from cc_bridge.config import get_config
+
+    config = get_config()
+    pipe_dir = Path(config.get("docker", {}).get("pipe_dir", "/tmp/cc-bridge/pipes"))
+
+    try:
+        # Check if pipe directory exists
+        if not pipe_dir.exists():
+            return {
+                "status": "warning",
+                "message": f"Pipe directory does not exist: {pipe_dir}",
+                "pipe_dir": str(pipe_dir),
+                "directory_exists": False,
+            }
+
+        # Check if directory is writable
+        if not os.access(pipe_dir, os.W_OK):
+            return {
+                "status": "unhealthy",
+                "message": f"Pipe directory is not writable: {pipe_dir}",
+                "pipe_dir": str(pipe_dir),
+                "directory_exists": True,
+                "writable": False,
+            }
+
+        # Count FIFO pipes in directory
+        fifo_count = 0
+        for item in pipe_dir.iterdir():
+            if item.is_fifo():
+                fifo_count += 1
+
+        return {
+            "status": "healthy",
+            "message": f"Pipe directory is healthy ({fifo_count} FIFOs found)",
+            "pipe_dir": str(pipe_dir),
+            "directory_exists": True,
+            "writable": True,
+            "fifo_count": fifo_count,
+        }
+    except Exception as e:
+        return {
+            "status": "unhealthy",
+            "message": f"Error checking pipe directory: {e}",
+            "pipe_dir": str(pipe_dir),
+        }
+
+
 async def run_all_checks() -> dict[str, Any]:
     """
     Run all health checks.
@@ -227,6 +403,8 @@ async def run_all_checks() -> dict[str, Any]:
         "telegram": await check_telegram(),
         "tmux": check_tmux(),
         "hook": check_hook(),
+        "docker_daemon": await check_docker_daemon(),
+        "fifo_pipes": check_fifo_pipes(),
     }
 
     all_healthy = all(check.get("status") == "healthy" for check in checks.values())

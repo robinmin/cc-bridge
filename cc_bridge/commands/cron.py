@@ -7,7 +7,7 @@ This module provides safe crontab modification with backup and rollback capabili
 import subprocess
 from pathlib import Path
 
-from cc_bridge.logging import get_logger
+from cc_bridge.packages.logging import get_logger
 
 logger = get_logger(__name__)
 

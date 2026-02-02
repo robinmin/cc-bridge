@@ -8,7 +8,7 @@ Docker SDK is a required dependency for cc-bridge.
 import docker as docker_module
 from docker.errors import DockerException
 
-from cc_bridge.logging import get_logger
+from cc_bridge.packages.logging import get_logger
 
 logger = get_logger(__name__)
 

@@ -11,7 +11,7 @@ from pathlib import Path
 from cc_bridge.commands import cron, tunnel
 from cc_bridge.config import Config
 from cc_bridge.core.telegram import TelegramClient
-from cc_bridge.logging import get_logger
+from cc_bridge.packages.logging import get_logger
 
 logger = get_logger(__name__)
 
