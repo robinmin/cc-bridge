@@ -9,7 +9,7 @@ for managing the Telegram-Claude bridge.
 from typer import Typer
 
 from cc_bridge.config import get_config
-from cc_bridge.logging import get_logger, setup_logging
+from cc_bridge.packages.logging import get_logger, setup_logging
 
 # Initialize configuration
 config = get_config()
@@ -121,9 +121,11 @@ def tunnel(
 
 
 # Register docker commands as a sub-command group
+from cc_bridge.commands.bot import app as bot_app  # noqa: E402
 from cc_bridge.commands.docker_cmd import docker_app  # noqa: E402
 
 app.add_typer(docker_app, name="docker")
+app.add_typer(bot_app, name="bot")
 
 
 # Register claude-* commands as individual top-level commands
