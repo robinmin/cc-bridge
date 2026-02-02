@@ -5,7 +5,7 @@
 
 # Variables
 PYTHON := python3
-UV := uv
+UV := VIRTUAL_ENV= uv
 PACKAGE_NAME := cc-bridge
 PYTHON_VERSION := 3.10
 
@@ -20,6 +20,10 @@ help:
 	@echo "Usage: make [target]"
 	@echo ""
 	@grep -E '^## ' $(MAKEFILE_LIST) | sed 's/^## //' | awk -F': ' '{printf "  %-18s %s\n", $$1, $$2}'
+	@echo ""
+	@echo "Usage: cc-bridge [command]"
+	@echo ""
+	@./.venv/bin/cc-bridge --help
 
 ## status: Run system health check
 status:
