@@ -3,7 +3,8 @@
     "allow": [
       "mcp__ref__ref_search_documentation",
       "mcp__ref__ref_read_url",
-      "Bash(./.venv/bin/cc-bridge:*)"
+      "Bash(./.venv/bin/cc-bridge:*)",
+      "Bash(make:*)"
     ]
   }
 }
