@@ -3,10 +3,9 @@
 <plist version="1.0">
 <dict>
 	<key>KeepAlive</key>
-	<dict>
-		<key>SuccessfulExit</key>
-		<false/>
-	</dict>
+	<true/>
+	<key>ThrottleInterval</key>
+	<integer>10</integer>
 	<key>Label</key>
 	<string>homebrew.mxcl.cloudflared</string>
 	<key>LimitLoadToSessionType</key>

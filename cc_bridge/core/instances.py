@@ -232,6 +232,9 @@ class InstanceManager:
             if instance:
                 for key, value in kwargs.items():
                     setattr(instance, key, value)
+                # Clear status cache for this instance since metadata changed
+                if name in self._status_cache:
+                    del self._status_cache[name]
                 self._save()
             return instance
 
@@ -310,13 +313,30 @@ class InstanceManager:
                 loop = asyncio.get_running_loop()
                 client = await loop.run_in_executor(None, get_docker_client)
 
-                def get_status():
-                    container = client.containers.get(instance.container_id)
-                    return container.status
+                def check_container_status(cid):
+                    try:
+                        container = client.containers.get(cid)
+                        return container.status
+                    except Exception:
+                        return None
 
-                return await loop.run_in_executor(None, get_status)
-            except Exception:
-                return "stopped"
+                status = await loop.run_in_executor(None, check_container_status, instance.container_id)
+                if status is None:
+                    # Container ID might be stale, try refreshing discovery
+                    logger.info(f"Container {instance.container_id} not found, refreshing discovery...")
+                    await self.refresh_discovery()
+                    
+                    # Try again with potentially updated ID
+                    updated_instance = self._instances.get(instance.name)
+                    if updated_instance and updated_instance.container_id != instance.container_id:
+                        return await loop.run_in_executor(None, check_container_status, updated_instance.container_id) or "stopped"
+                    
+                    return "stopped"
+                
+                return status
+            except Exception as e:
+                logger.warning(f"Error fetching Docker status for {instance.name}: {e}")
+                return "error"
         else:
             # Tmux instance - check PID
             if instance.pid is None:
@@ -363,10 +383,14 @@ class InstanceManager:
                         self._instances[instance.name] = instance
                         logger.info(f"Discovered Docker instance: {instance.name}")
                     else:
-                        # Update existing instance's status
+                        # Update existing instance's metadata and status
                         existing = self._instances[instance.name]
                         existing.status = instance.status
-                        logger.debug(f"Updated Docker instance status: {instance.name}")
+                        existing.container_id = instance.container_id
+                        existing.container_name = instance.container_name
+                        existing.image_name = instance.image_name
+                        existing.docker_network = instance.docker_network
+                        logger.debug(f"Updated Docker instance metadata: {instance.name}")
 
                 if discovered:
                     self._save()

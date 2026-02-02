@@ -42,10 +42,11 @@ class Config:
             "session": "claude",
             "auto_attach": True,
         },
+        "project_name": "cc-bridge",
         "docker": {
             "enabled": True,
             "network": "claude-network",
-            "named_pipe_path": "/tmp/cc-bridge-{instance}.fifo",
+            "pipe_dir": "/tmp/cc-bridge/${PROJECT_NAME}/pipes",
             "auto_discovery": True,
             "container_label": "cc-bridge.instance",
             "preferred": False,
@@ -191,6 +192,7 @@ class Config:
             "DOCKER_ENABLED": ("docker.enabled", lambda v: v.lower() in ("true", "1", "yes")),
             "DOCKER_NETWORK": "docker.network",
             "CCBRIDGE_TUNNEL_URL": "tunnel.url",
+            "PROJECT_NAME": "project_name",
         }
 
         for env_var, config_mapping in env_mappings.items():
@@ -327,6 +329,7 @@ class Config:
     PATH_CONFIG_FIELDS: ClassVar[list[tuple[str, ...]]] = [
         ("logging", "file"),
         ("instances", "data_file"),
+        ("docker", "pipe_dir"),
         # Add new path fields here as needed
     ]
 

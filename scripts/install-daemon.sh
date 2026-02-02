@@ -16,7 +16,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 PLIST_SOURCE="${PROJECT_ROOT}/contrib/com.cc-bridge.daemon.plist"
 PLIST_DEST="/Library/LaunchDaemons/com.cc-bridge.daemon.plist"
-LOG_DIR="/opt/homebrew/var/log/cc-bridge"
+LOG_DIR="/Users/$(logname)/.claude/bridge/logs"
 
 # Helper functions
 log_info() {

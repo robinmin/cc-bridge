@@ -35,9 +35,9 @@ app = Typer(
 
 @app.command()
 def server(
-    reload: bool = False,
-    host: str = "0.0.0.0",
-    port: int = 8080,
+    reload: bool = config.get("server.reload", False),
+    host: str = config.get("server.host", "0.0.0.0"),
+    port: int = config.get("server.port", 8080),
 ):
     """
     Start the FastAPI webhook server.

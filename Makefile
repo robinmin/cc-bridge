@@ -1,4 +1,4 @@
-.PHONY: dev test test-quick lint format typecheck fix all fix-all install build clean help start stop restart setup setup-service service-uninstall daemon-start daemon-stop daemon-restart setup-daemon daemon-uninstall
+.PHONY: dev test test-quick lint format typecheck fix all fix-all install build clean help status start stop restart setup setup-service service-uninstall daemon-start daemon-stop daemon-restart setup-daemon daemon-uninstall
 
 # Default target
 .DEFAULT_GOAL := help
@@ -20,6 +20,10 @@ help:
 	@echo "Usage: make [target]"
 	@echo ""
 	@grep -E '^## ' $(MAKEFILE_LIST) | sed 's/^## //' | awk -F': ' '{printf "  %-18s %s\n", $$1, $$2}'
+
+## status: Run system health check
+status:
+	@./scripts/health-check.sh
 
 # =============================================================================
 # Setup
@@ -122,6 +126,8 @@ fix-all: fix
 ## start: Start cc-bridge service
 start:
 	@echo "Starting cc-bridge service..."
+	@lsof -ti :8080 >/dev/null && echo "Clearing port 8080..." || true
+	@lsof -ti :8080 | xargs kill -9 2>/dev/null || true
 	@launchctl start homebrew.mxcl.cc-bridge
 	@echo "Service started."
 
@@ -129,12 +135,17 @@ start:
 stop:
 	@echo "Stopping cc-bridge service..."
 	@launchctl stop homebrew.mxcl.cc-bridge
+	@lsof -ti :8080 >/dev/null && echo "Clearing port 8080..." || true
+	@lsof -ti :8080 | xargs kill -9 2>/dev/null || true
 	@echo "Service stopped."
 
 ## restart: Restart cc-bridge service
 restart:
 	@echo "Restarting cc-bridge service..."
-	@launchctl kickstart -k gui/$$(id -u)/homebrew.mxcl.cc-bridge
+	@launchctl stop homebrew.mxcl.cc-bridge 2>/dev/null || true
+	@lsof -ti :8080 >/dev/null && echo "Clearing port 8080..." || true
+	@lsof -ti :8080 | xargs kill -9 2>/dev/null || true
+	@launchctl start homebrew.mxcl.cc-bridge
 	@echo "Service restarted."
 
 ## setup-service: Install deps + LaunchAgent (recommended)
@@ -157,6 +168,8 @@ service-uninstall:
 ## daemon-start: Start system daemon
 daemon-start:
 	@echo "Starting cc-bridge daemon..."
+	@sudo lsof -ti :8080 >/dev/null && echo "Clearing port 8080..." || true
+	@sudo lsof -ti :8080 | xargs sudo kill -9 2>/dev/null || true
 	@sudo launchctl start com.cc-bridge.daemon || { echo "Run 'make setup-daemon' first."; exit 1; }
 	@echo "Daemon started."
 
@@ -164,12 +177,17 @@ daemon-start:
 daemon-stop:
 	@echo "Stopping cc-bridge daemon..."
 	@sudo launchctl stop com.cc-bridge.daemon || { echo "Daemon not running."; exit 1; }
+	@sudo lsof -ti :8080 >/dev/null && echo "Clearing port 8080..." || true
+	@sudo lsof -ti :8080 | xargs sudo kill -9 2>/dev/null || true
 	@echo "Daemon stopped."
 
 ## daemon-restart: Restart system daemon
 daemon-restart:
 	@echo "Restarting cc-bridge daemon..."
-	@sudo launchctl kickstart -k system/com.cc-bridge.daemon || { echo "Run 'make setup-daemon' first."; exit 1; }
+	@sudo launchctl stop com.cc-bridge.daemon 2>/dev/null || true
+	@sudo lsof -ti :8080 >/dev/null && echo "Clearing port 8080..." || true
+	@sudo lsof -ti :8080 | xargs sudo kill -9 2>/dev/null || true
+	@sudo launchctl start com.cc-bridge.daemon || { echo "Run 'make setup-daemon' first."; exit 1; }
 	@echo "Daemon restarted."
 
 ## setup-daemon: Install deps + LaunchDaemon (servers)
@@ -184,6 +202,14 @@ setup-daemon: install
 daemon-uninstall:
 	@echo "Uninstalling cc-bridge daemon..."
 	@sudo ./scripts/uninstall-daemon.sh
+
+## monitor: Monitor server logs
+monitor:
+	@tail -f /Users/robin/.claude/bridge/logs/server.log
+
+## talk: Talk to Claude inside Docker (e.g., make talk msg="Hello")
+talk:
+	@docker exec -it claude-cc-bridge claude -p --allow-dangerously-skip-permissions -c "$(msg)"
 
 # =============================================================================
 # Build

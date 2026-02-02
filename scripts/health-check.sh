@@ -20,7 +20,7 @@ CONFIG_FILE="$HOME/.claude/bridge/config.toml"
 INSTANCES_FILE="$HOME/.claude/bridge/instances.json"
 TMUX_SOCKET="$HOME/.claude/bridge/tmux.sock"
 SERVER_URL="${CC_BRIDGE_SERVER_URL:-http://localhost:8080}"
-LOG_FILE="$HOME/.claude/bridge/logs/bridge.log"
+LOG_FILE="$HOME/.claude/bridge/logs/server.log"
 
 # Load .env if it exists
 if [ -f "$PROJECT_ROOT/.env" ]; then
@@ -224,36 +224,55 @@ check_server() {
     else
         log_info "Skipped (Token missing)"
     fi
+}
 
-    # Cloudflared tunnel status
-    echo -n "Cloudflared: "
-    if command -v cloudflared >/dev/null 2>&1; then
-        CLOUDFLARED_PID=$(pgrep -f "cloudflared" 2>/dev/null | head -1)
-        if [ -n "$CLOUDFLARED_PID" ]; then
-            # Get tunnel info if possible
-            CLOUDFLARED_CMD=$(ps -p "$CLOUDFLARED_PID" -o args= 2>/dev/null | head -1)
-            if echo "$CLOUDFLARED_CMD" | grep -q "tunnel"; then
-                log_ok "Running (PID: $CLOUDFLARED_PID)"
+check_launchd_services() {
+    log_section "System Daemons (/Library/LaunchDaemons)"
+    SERVICES=(
+        "com.cc-bridge.daemon:cc-bridge server"
+        "com.cloudflare.cloudflared.daemon:cloudflared" 
+        "dev.orbstack.OrbStack.privhelper:OrbStack"
+    )
 
-                # Verify webhook URL is reachable through tunnel
-                if [ -n "$WEBHOOK_URL" ] && [ "$WEBHOOK_URL" != "Not set" ]; then
-                    echo -n "Tunnel connectivity: "
-                    # Extract base URL from webhook URL (remove /webhook path)
-                    TUNNEL_BASE_URL=$(echo "$WEBHOOK_URL" | sed 's|/webhook$||')
-                    if curl -s -f --connect-timeout 5 "$TUNNEL_BASE_URL/health" >/dev/null 2>&1; then
-                        log_ok "Reachable ($TUNNEL_BASE_URL)"
-                    else
-                        log_warn "Not reachable externally ($TUNNEL_BASE_URL)"
-                    fi
-                fi
-            else
-                log_ok "Running (PID: $CLOUDFLARED_PID)"
-            fi
-        else
-            log_error "Not running (webhook will not receive updates)"
+    for entry in "${SERVICES[@]}"; do
+        service="${entry%%:*}"
+        pattern="${entry#*:}"
+        
+        printf "  %-35s " "${service}:"
+        # Try launchctl first (works if user has enough perms or running as sudo)
+        PID=$(launchctl list "$service" 2>/dev/null | grep -i "\"PID\" =" | awk '{print $3}' | tr -d '";' || true)
+        if [ -z "$PID" ]; then
+            PID=$(launchctl list | grep "$service" | awk '{print $1}' | grep -v "-" || true)
         fi
-    else
-        log_error "Not installed (https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/)"
+        
+        # Fallback to pgrep on the specific process pattern
+        if [ -z "$PID" ]; then
+            PID=$(pgrep -f "$pattern" 2>/dev/null | head -1 || true)
+        fi
+        
+        if [ -n "$PID" ]; then
+            log_ok "Running (PID: $PID)"
+        else
+            # Final check - strictly for the plist label
+            PID=$(sudo launchctl list | grep "$service" | awk '{print $1}' | grep -v "-" || true)
+            if [ -n "$PID" ]; then
+                log_ok "Running (PID: $PID)"
+            else
+                log_error "NOT RUNNING"
+            fi
+        fi
+    done
+
+    # Verify tunnel connectivity if cloudflared is running
+    CLOUDFLARED_PROC_PID=$(pgrep -f "cloudflared" 2>/dev/null | head -1 || true)
+    if [ -n "$CLOUDFLARED_PROC_PID" ] && [ -n "${WEBHOOK_URL:-}" ] && [ "$WEBHOOK_URL" != "Not set" ]; then
+        echo -n "Tunnel connectivity: "
+        TUNNEL_BASE_URL=$(echo "$WEBHOOK_URL" | sed 's|/webhook$||')
+        if curl -s -f --connect-timeout 5 "$TUNNEL_BASE_URL/health" >/dev/null 2>&1; then
+            log_ok "Reachable ($TUNNEL_BASE_URL)"
+        else
+            log_warn "Not reachable externally ($TUNNEL_BASE_URL)"
+        fi
     fi
 }
 
@@ -282,23 +301,61 @@ check_resource_lists() {
 
     echo ""
     # Docker Containers
-    echo -e "${MAGENTA}Docker Instances (for ${PROJECT_NAME:-cc-bridge}):${NC}"
+    echo -e "${MAGENTA}Docker Instances:${NC}"
     if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
-        # Try docker compose first
-        CONTAINERS=$(docker ps --filter "name=claude-${PROJECT_NAME:-cc-bridge}" --filter "label=cc-bridge.instance" --format "table {{.Names}}\t{{.Status}}\t{{.Image}}" 2>/dev/null || true)
-        
-        # Fallback to broader label filter if nothing found with name
+        # Show all cc-bridge related containers (running and stopped)
+        CONTAINERS=$(docker ps -a --filter "name=claude-" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" 2>/dev/null || true)
+
+        # Also check for cc-bridge labeled containers
         if [ -z "$(echo "$CONTAINERS" | tail -n +2)" ]; then
-            CONTAINERS=$(docker ps --filter "label=cc-bridge.instance" --format "table {{.Names}}\t{{.Status}}\t{{.Image}}" 2>/dev/null || true)
+            CONTAINERS=$(docker ps -a --filter "label=cc-bridge.instance" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" 2>/dev/null || true)
         fi
 
         if [ -n "$(echo "$CONTAINERS" | tail -n +2)" ]; then
             echo "$CONTAINERS" | sed 's/^/  /'
         else
-            echo "  (No relevant containers running)"
+            echo "  (No cc-bridge containers found)"
         fi
     else
         echo "  (Docker not available or not running)"
+    fi
+
+    echo ""
+    # Named Pipes - check multiple locations
+    PIPE_DIR="${PIPE_DIR_HOST:-/tmp/cc-bridge/${PROJECT_NAME:-cc-bridge}/pipes}"
+    ALT_PIPE_DIRS="/tmp/cc-bridge-pipes /tmp/cc-bridge"
+    FOUND_PIPE_DIR=""
+
+    # Find the first existing pipe directory
+    if [ -d "$PIPE_DIR" ]; then
+        FOUND_PIPE_DIR="$PIPE_DIR"
+    else
+        for dir in $ALT_PIPE_DIRS; do
+            if [ -d "$dir" ] && [ -n "$(find "$dir" -name "*.fifo" 2>/dev/null)" ]; then
+                FOUND_PIPE_DIR="$dir"
+                break
+            fi
+        done
+    fi
+
+    if [ -n "$FOUND_PIPE_DIR" ]; then
+        echo -e "${MAGENTA}Named Pipes (${FOUND_PIPE_DIR}):${NC}"
+        PIPES=$(find "$FOUND_PIPE_DIR" -name "*.fifo" 2>/dev/null || true)
+        if [ -n "$PIPES" ]; then
+            echo "$PIPES" | while read -r pipe; do
+                PIPE_NAME=$(basename "$pipe")
+                if [ -p "$pipe" ]; then
+                    echo -e "  ${GREEN}✓${NC} $PIPE_NAME"
+                else
+                    echo -e "  ${YELLOW}⚠${NC} $PIPE_NAME (not a pipe)"
+                fi
+            done
+        else
+            echo "  (No pipes found)"
+        fi
+    else
+        echo -e "${MAGENTA}Named Pipes:${NC}"
+        echo "  (No pipe directory found)"
     fi
 }
 
@@ -336,12 +393,16 @@ check_consistency() {
     # Process status
     echo -n "Watchdog processes: "
     if [ -f "$INSTANCES_FILE" ]; then
-        DEAD_COUNT=$(python3 -c "import json; instances = json.load(open('$INSTANCES_FILE'))['instances']; [print(f'{n}:{i.get(\"pid\", \"\")}') for n, i in instances.items()]" 2>/dev/null | while read -r entry; do
+        DEAD_COUNT=$(python3 -c "import json; instances = json.load(open('$INSTANCES_FILE'))['instances']; [print(f'{n}:{i.get(\"instance_type\", \"\")}:{i.get(\"pid\", \"\")}') for n, i in instances.items()]" 2>/dev/null | while read -r entry; do
             name=$(echo "$entry" | cut -d: -f1)
-            pid=$(echo "$entry" | cut -d: -f2)
-            if [ -n "$pid" ] && ! ps -p "$pid" >/dev/null 2>&1; then
+            type=$(echo "$entry" | cut -d: -f2)
+            pid=$(echo "$entry" | cut -d: -f3)
+            
+            # For tmux instances, check if PID is alive
+            if [ "$type" = "tmux" ] && [ -n "$pid" ] && ! ps -p "$pid" >/dev/null 2>&1; then
                 echo "DEAD"
             fi
+            # Docker instances don't have a host PID, their health is checked in the Docker section
         done | wc -l | tr -d ' ')
         
         if [ "$DEAD_COUNT" -eq 0 ]; then
@@ -366,6 +427,7 @@ main() {
     check_config_files
     check_connectivity
     check_server
+    check_launchd_services
     check_resource_lists
     check_consistency
 

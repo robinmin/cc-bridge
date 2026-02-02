@@ -195,20 +195,20 @@ class DockerInstance(InstanceInterface):
     """
     Adapter for Docker-based Claude instances.
 
-    Uses named pipes for communication with containerized Claude Code.
+    Uses 'docker exec' streams to communicate with the containerized agent.
     """
 
     def __init__(
         self,
         instance: ClaudeInstance,
-        pipe_dir: str = "/tmp/cc-bridge-pipes",
+        pipe_dir: str | None = None,
     ):
         """
         Initialize Docker instance adapter.
 
         Args:
             instance: ClaudeInstance with instance_type="docker"
-            pipe_dir: Directory containing named pipe files
+            pipe_dir: (Deprecated) Directory containing named pipe files
         """
         super().__init__(instance)
         if instance.instance_type != "docker":
@@ -218,11 +218,10 @@ class DockerInstance(InstanceInterface):
             )
 
         from cc_bridge.core.docker_compat import get_docker_client
-        from cc_bridge.core.named_pipe import NamedPipeChannel
 
-        self.pipe_dir = pipe_dir
-        self.named_pipe = NamedPipeChannel(instance.name, pipe_dir)
         self.docker_client = None
+        self.process: asyncio.subprocess.Process | None = None
+        self._lock = asyncio.Lock()
 
         try:
             self.docker_client = get_docker_client()
@@ -233,18 +232,94 @@ class DockerInstance(InstanceInterface):
                 e,
             ) from e
 
+    async def _ensure_process(self) -> None:
+        """Ensure the 'docker exec' process is running."""
+        async with self._lock:
+            if self.process is not None:
+                if self.process.returncode is None:
+                    return
+                self.process = None
+
+            self.logger.info(f"Starting 'docker exec' for container {self.instance.container_id}")
+
+            # Start the container agent via docker exec
+            # We set PYTHONPATH to ensure it uses the volume-mounted code
+            # Capture stderr to help debug agent communication
+            self.process = await asyncio.create_subprocess_exec(
+                "docker",
+                "exec",
+                "-i",
+                "-e", "PYTHONPATH=.",
+                self.instance.container_id,
+                "python3",
+                "-m",
+                "cc_bridge.agents.container_agent",
+                "--log-level", "DEBUG",
+                "--claude-args=--allow-dangerously-skip-permissions",
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+
+            # Start a task to relay agent stderr to our logger
+            asyncio.create_task(self._relay_agent_stderr())
+
+    async def _relay_agent_stderr(self) -> None:
+        """Relay agent stderr to the main server logs."""
+        if not self.process or not self.process.stderr:
+            return
+
+        try:
+            while True:
+                line = await self.process.stderr.readline()
+                if not line:
+                    break
+                
+                log_line = line.decode("utf-8", errors="ignore").strip()
+                if log_line:
+                    self.logger.info(f"[AGENT] {log_line}")
+                    
+        except Exception as e:
+            self.logger.error(f"Error relaying agent stderr: {e}")
+
     async def send_command(self, text: str) -> AsyncIterator[str]:  # type: ignore[override]
-        """Send command to Docker container and stream response."""
+        """Send command to Docker container via exec stream."""
         if not self.is_running():
             raise InstanceOperationError(
                 "Container is not running",
                 self.instance.name,
             )
 
+        await self._ensure_process()
+
+        if not self.process or not self.process.stdin or not self.process.stdout:
+            raise InstanceOperationError(
+                "Failed to establish communication stream",
+                self.instance.name,
+            )
+
         try:
-            async for line in self.named_pipe.send_and_receive(text):
-                yield line
+            # Send command to agent stdin
+            data = (text + "\n").encode("utf-8")
+            self.process.stdin.write(data)
+            await self.process.stdin.drain()
+
+            # Read response from agent stdout
+            while True:
+                # Use chunked read instead of readline to avoid hangs on non-newline output
+                chunk = await asyncio.wait_for(self.process.stdout.read(1024), timeout=30.0)
+                if not chunk:
+                    break
+                
+                yield chunk.decode("utf-8", errors="ignore")
+                
+                if self.process.returncode is not None:
+                    break
+
+        except asyncio.TimeoutError:
+            self.logger.warning("Read from exec stream timed out")
         except Exception as e:
+            self.logger.error(f"Error in exec stream: {e}")
             raise InstanceOperationError(
                 f"Command failed: {e}",
                 self.instance.name,
@@ -255,14 +330,12 @@ class DockerInstance(InstanceInterface):
         """Send command to Docker container and wait for completion."""
         try:
             output_parts = []
-            async for line in self.named_pipe.send_and_receive(text, timeout=timeout):
+            async for line in self.send_command(text):
                 output_parts.append(line)
 
-            output = "\n".join(output_parts)
+            output = "".join(output_parts)
             return True, output
 
-        except asyncio.TimeoutError:
-            return False, f"Command timed out after {timeout} seconds"
         except Exception as e:
             return False, str(e)
 
@@ -311,11 +384,12 @@ class DockerInstance(InstanceInterface):
             }
 
     def cleanup(self) -> None:
-        """Clean up named pipes."""
-        try:
-            self.named_pipe.close()
-        except Exception as e:
-            self.logger.warning(f"Error cleaning up named pipes: {e}")
+        """Clean up exec process."""
+        if self.process:
+            try:
+                self.process.terminate()
+            except Exception:
+                pass
 
 
 def get_instance_adapter(instance: ClaudeInstance) -> InstanceInterface:

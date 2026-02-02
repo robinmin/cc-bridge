@@ -96,10 +96,10 @@ def setup_logging(
 
     # Add console handler if not already present
     if not any(
-        isinstance(h, logging.StreamHandler) and h.stream == sys.stdout
+        isinstance(h, logging.StreamHandler) and (h.stream == sys.stderr or h.stream == sys.stdout)
         for h in root_logger.handlers
     ):
-        console_handler = logging.StreamHandler(sys.stdout)
+        console_handler = logging.StreamHandler(sys.stderr)
         console_handler.setLevel(log_level)
         console_handler.setFormatter(formatter)
         root_logger.addHandler(console_handler)
@@ -117,9 +117,11 @@ def setup_logging(
         file_handler.setFormatter(formatter)
         root_logger.addHandler(file_handler)
 
-    # Configure uvicorn logging
+    # Configure third-party logging to be less noisy
     logging.getLogger("uvicorn").setLevel(logging.WARNING)
     logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+    logging.getLogger("urllib3").setLevel(logging.WARNING)
+    logging.getLogger("docker").setLevel(logging.WARNING)
 
     # Mark logging as configured
     _logging_configured = True

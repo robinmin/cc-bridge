@@ -64,14 +64,23 @@ class NamedPipeChannel(AsyncContextManagerType["NamedPipeChannel"]):
 
         for pipe_path in [self.input_pipe_path, self.output_pipe_path]:
             if pipe_path.exists():
-                # Remove existing pipe
+                import stat
+                if stat.S_ISFIFO(os.stat(pipe_path).st_mode):
+                    self.logger.debug(f"Named pipe already exists: {pipe_path}")
+                    continue
+                # Remove if it's not a FIFO
                 pipe_path.unlink()
 
             try:
-                os.mkfifo(pipe_path, mode=0o660)
+                os.mkfifo(pipe_path, mode=0o666)
+                os.chmod(pipe_path, 0o666)
                 self.logger.debug(f"Created named pipe: {pipe_path}")
             except OSError as e:
-                raise RuntimeError(f"Failed to create pipe {pipe_path}: {e}") from e
+                # If chmod fails it might already exist or we might not own it
+                # We try to continue anyway if mkfifo succeeded
+                if not pipe_path.exists():
+                    raise RuntimeError(f"Failed to create pipe {pipe_path}: {e}") from e
+                self.logger.warning(f"Could not set permissions on {pipe_path}: {e}")
 
         self._pipes_created = True
         self.logger.info(f"Named pipes created: {self.input_pipe_path}, {self.output_pipe_path}")
@@ -100,42 +109,22 @@ class NamedPipeChannel(AsyncContextManagerType["NamedPipeChannel"]):
         loop = asyncio.get_running_loop()
 
         async def try_open_and_write() -> None:
-            """Try to open pipe and write command with timeout."""
-            start_time = loop.time()
+            """Open pipe and write command."""
+            # Blocking open in executor - waits for reader naturally
+            fd = await loop.run_in_executor(
+                None, lambda: os.open(self.input_pipe_path, os.O_WRONLY)
+            )
 
-            while True:
-                try:
-                    # Try non-blocking first
-                    fd = await loop.run_in_executor(
-                        None, lambda: os.open(self.input_pipe_path, os.O_WRONLY | os.O_NONBLOCK)
-                    )
-
-                    try:
-                        # Write the command with newline
-                        data = (text + "\n").encode("utf-8")
-                        await loop.run_in_executor(None, lambda d=data, f=fd: os.write(f, d))
-                        self.logger.debug(f"Command written successfully: {len(data)} bytes")
-                        return
-                    finally:
-                        await loop.run_in_executor(None, lambda f=fd: os.close(f))
-
-                except OSError as e:
-                    # Check if we've exceeded timeout
-                    elapsed = loop.time() - start_time
-                    if elapsed > timeout:
-                        raise asyncio.TimeoutError(
-                            f"No reader connected to pipe {self.input_pipe_path} within {timeout}s"
-                        ) from None
-
-                    if e.errno == errno.ENXIO:
-                        # No reader yet, wait and retry
-                        self.logger.debug("No reader on pipe, waiting...")
-                        await asyncio.sleep(0.1)
-                    else:
-                        raise RuntimeError(f"Failed to open pipe: {e}") from e
+            try:
+                # Write the command with newline
+                data = (text + "\n").encode("utf-8")
+                await loop.run_in_executor(None, lambda d=data, f=fd: os.write(f, d))
+                self.logger.debug(f"Command written successfully: {len(data)} bytes")
+            finally:
+                await loop.run_in_executor(None, lambda f=fd: os.close(f))
 
         try:
-            await try_open_and_write()
+            await asyncio.wait_for(try_open_and_write(), timeout=timeout)
         except asyncio.TimeoutError:
             raise
         except Exception as e:
@@ -161,25 +150,31 @@ class NamedPipeChannel(AsyncContextManagerType["NamedPipeChannel"]):
         if not self._pipes_created and not self.output_pipe_path.exists():
             raise RuntimeError("Output pipe does not exist. Call create_pipes() first.")
 
-        self.logger.debug("Reading response from pipe...")
-
         try:
-            # Open pipe for reading (non-blocking)
-            fd = os.open(self.output_pipe_path, os.O_RDONLY | os.O_NONBLOCK)
+            # Open pipe for reading (blocks until container agent opens for writing)
+            loop = asyncio.get_running_loop()
+            fd = await loop.run_in_executor(
+                None, lambda: os.open(self.output_pipe_path, os.O_RDONLY)
+            )
 
             try:
                 # Set up for async reading
                 buffer = b""
-                start_time = asyncio.get_running_loop().time()
+                start_time = loop.time()
 
                 while True:
                     # Check timeout
-                    elapsed = asyncio.get_running_loop().time() - start_time
+                    elapsed = loop.time() - start_time
                     if elapsed > timeout:
                         raise asyncio.TimeoutError(f"Read timeout after {timeout} seconds")
 
                     try:
-                        # Try to read data
+                        # Try to read data (non-blocking for the actual read loop)
+                        # We use O_NONBLOCK after the initial blocking open
+                        import fcntl
+                        flags = fcntl.fcntl(fd, fcntl.F_GETFL)
+                        fcntl.fcntl(fd, fcntl.F_SETFL, flags | os.O_NONBLOCK)
+
                         data = os.read(fd, 4096)
                         if data:
                             buffer += data
@@ -213,17 +208,28 @@ class NamedPipeChannel(AsyncContextManagerType["NamedPipeChannel"]):
         Send command and stream response.
 
         Convenience method that combines write_command and read_response.
+        Opens reader and writer in parallel to avoid FIFO deadlocks.
 
         Args:
             command: Command to send
             timeout: Maximum time to wait for response
-
-        Yields:
-            Response lines as they arrive
         """
-        await self.write_command(command, timeout=timeout)
-        async for line in self.read_response(timeout=timeout):
+        # Start reading task in background so it can handshake concurrently with writer
+        reader_iterator = self.read_response(timeout=timeout)
+        
+        # We need to start the iterator to trigger the open call
+        # But wait, read_response is an async generator, the code inside only runs
+        # when we start iterating.
+        
+        # Let's refactor to ensure the reader open happens concurrently.
+        # Actually, the simplest way is to put the write and read in separate tasks.
+        
+        write_task = asyncio.create_task(self.write_command(command, timeout=timeout))
+        
+        async for line in reader_iterator:
             yield line
+            
+        await write_task
 
     def close(self) -> None:
         """
@@ -240,14 +246,6 @@ class NamedPipeChannel(AsyncContextManagerType["NamedPipeChannel"]):
                     self.logger.debug(f"Removed pipe: {pipe_path}")
             except OSError as e:
                 self.logger.warning(f"Failed to remove pipe {pipe_path}: {e}")
-
-        # Try to remove the directory if it's empty
-        try:
-            if self.pipe_dir.exists() and not any(self.pipe_dir.iterdir()):
-                self.pipe_dir.rmdir()
-                self.logger.debug(f"Removed pipe directory: {self.pipe_dir}")
-        except OSError:
-            pass
 
         self._pipes_created = False
 

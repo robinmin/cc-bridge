@@ -56,13 +56,11 @@
     <key>WorkingDirectory</key>
     <string>/Users/robin/xprojects/cc-bridge</string>
 
-    <!-- Standard output log file -->
+    <!-- Standard output and error unified log file -->
     <key>StandardOutPath</key>
-    <string>/opt/homebrew/var/log/cc-bridge/server.log</string>
-
-    <!-- Standard error log file -->
+    <string>/Users/robin/.claude/bridge/logs/server.log</string>
     <key>StandardErrorPath</key>
-    <string>/opt/homebrew/var/log/cc-bridge/server.error.log</string>
+    <string>/Users/robin/.claude/bridge/logs/server.log</string>
 
     <!-- Resource limits -->
     <key>SoftResourceLimits</key>

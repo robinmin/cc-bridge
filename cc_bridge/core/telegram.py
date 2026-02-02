@@ -272,12 +272,18 @@ class TelegramClient:
         url = f"{self.base_url}/sendMessage"
 
         async def _do_send():
+            # Escape HTML if parse_mode is HTML
+            escaped_text = text
+            if parse_mode == "HTML":
+                import html
+                escaped_text = html.escape(text)
+
             client = await self._get_client()
             response = await client.post(
                 url,
                 json={
                     "chat_id": chat_id,
-                    "text": text,
+                    "text": escaped_text,
                     "parse_mode": parse_mode,
                     "disable_web_page_preview": disable_web_page_preview,
                 },

@@ -262,6 +262,10 @@ async def lifespan(app: FastAPI):
 
     logger.info("Starting cc-bridge server", shutdown_timeout=shutdown_handler._timeout)
 
+    # Initial Docker discovery
+    instance_manager = get_instance_manager()
+    await instance_manager.refresh_discovery()
+
     yield
 
     # Graceful shutdown
@@ -524,31 +528,28 @@ async def telegram_webhook(  # noqa: PLR0911, PLR0912, PLR0915
                     status_text += "⚠️  Tunnel: Not configured\n"
 
                 if telegram_client:
+                    logger.debug(f"=> {status_text}")
                     await telegram_client.send_message(chat_id, status_text)
                 return {"status": "ok"}
             elif text == "/help":
                 if telegram_client:
-                    await telegram_client.send_message(
-                        chat_id,
+                    help_message = (
                         "📖 **cc-bridge Help**\n\n"
                         "Just send me a message and I'll forward it to Claude Code!\n\n"
                         "Commands:\n"
                         "/status - Check service status\n"
                         "/help - Show this message\n\n"
-                        "Your messages are sent directly to your Claude Code instance.",
+                        "Your messages are sent directly to your Claude Code instance."
                     )
+                    logger.debug(f"=> {help_message}")
+                    await telegram_client.send_message(chat_id, help_message)
                 return {"status": "ok"}
             else:
                 # Unknown command - ignore
                 return {"status": "ignored", "reason": "unknown command"}
 
-        import sys
-
-        print(
-            f"[DEBUG] Received message: chat_id={chat_id}, text={text[:50]}",
-            file=sys.stderr,
-            flush=True,
-        )
+        logger.info("Received message from Telegram", chat_id=chat_id, text=text[:50])
+        logger.debug(f"<= {text}")
 
         # Verify chat ID is authorized
         settings_obj = get_config()
@@ -562,10 +563,9 @@ async def telegram_webhook(  # noqa: PLR0911, PLR0912, PLR0915
         if not instances:
             logger.warning("No Claude instances found")
             if telegram_client:
-                await telegram_client.send_message(
-                    chat_id,
-                    "⚠️ No Claude instance running. Start one with: cc-bridge claude start <name>",
-                )
+                msg = "⚠️ No Claude instance running. Start one with: cc-bridge claude start <name>"
+                logger.debug(f"=> {msg}")
+                await telegram_client.send_message(chat_id, msg)
             return {"status": "error", "reason": "no instance"}
 
         # Select instance based on configuration and running status
@@ -573,10 +573,9 @@ async def telegram_webhook(  # noqa: PLR0911, PLR0912, PLR0915
         if not instance:
             logger.warning("No running Claude instance found")
             if telegram_client:
-                await telegram_client.send_message(
-                    chat_id,
-                    "⚠️ No running Claude instance found. Start one with: cc-bridge claude start <name>",
-                )
+                msg = "⚠️ No running Claude instance found. Start one with: cc-bridge claude start <name>"
+                logger.debug(f"=> {msg}")
+                await telegram_client.send_message(chat_id, msg)
             return {"status": "error", "reason": "no running instance"}
 
         # Assert for type checker - we've already checked instance is not None
@@ -588,10 +587,9 @@ async def telegram_webhook(  # noqa: PLR0911, PLR0912, PLR0915
         except (ValueError, NotImplementedError) as e:
             logger.warning("Instance adapter creation failed", instance=instance.name, error=str(e))
             if telegram_client:
-                await telegram_client.send_message(
-                    chat_id,
-                    f"⚠️ Instance '{instance.name}' is not supported: {e}",
-                )
+                msg = f"⚠️ Instance '{instance.name}' is not supported: {e}"
+                logger.debug(f"=> {msg}")
+                await telegram_client.send_message(chat_id, msg)
             return {"status": "error", "reason": "unsupported instance"}
 
         # Check if instance is running
@@ -600,10 +598,9 @@ async def telegram_webhook(  # noqa: PLR0911, PLR0912, PLR0915
                 "Instance not running", instance=instance.name, type=instance.instance_type
             )
             if telegram_client:
-                await telegram_client.send_message(
-                    chat_id,
-                    f"⚠️ Claude instance '{instance.name}' is not running.",
-                )
+                msg = f"⚠️ Claude instance '{instance.name}' is not running."
+                logger.debug(f"=> {msg}")
+                await telegram_client.send_message(chat_id, msg)
             return {"status": "error", "reason": "instance not running"}
 
         # Update instance activity
@@ -640,14 +637,14 @@ async def telegram_webhook(  # noqa: PLR0911, PLR0912, PLR0915
                             clean_output[:MAX_MESSAGE_LENGTH] + TELEGRAM_TRUNCATED_MESSAGE_SUFFIX
                         )
 
+                    logger.debug(f"=> {clean_output}")
                     await telegram_client.send_message(chat_id, clean_output)
                     logger.info("Response sent", chat_id=chat_id, length=len(clean_output))
             # Command failed or timed out
             elif telegram_client:
-                await telegram_client.send_message(
-                    chat_id,
-                    f"⚠️ Claude command timed out or failed. Output: {output[:200] if output else 'No output'}",
-                )
+                msg = f"⚠️ Claude command timed out or failed. Output: {output[:200] if output else 'No output'}"
+                logger.debug(f"=> {msg}")
+                await telegram_client.send_message(chat_id, msg)
 
             return {"status": "ok"}
 
@@ -656,10 +653,9 @@ async def telegram_webhook(  # noqa: PLR0911, PLR0912, PLR0915
             logger.bind(error_id=str(hash(str(e) + str(time.time())) % 10000000))
             logger.error("Command execution error", error=str(e), exc_info=True)
             if telegram_client:
-                await telegram_client.send_message(
-                    chat_id,
-                    "❌ Failed to execute command. Please try again later.",
-                )
+                msg = "❌ Failed to execute command. Please try again later."
+                logger.debug(f"=> {msg}")
+                await telegram_client.send_message(chat_id, msg)
             return JSONResponse(
                 status_code=500,
                 content={"status": "error", "reason": "Command execution failed"},
