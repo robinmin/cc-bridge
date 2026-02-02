@@ -1,245 +1,77 @@
-# Docker Integration for cc-bridge
+# Docker Integration for CC-Bridge
 
-This guide covers the Docker integration features of cc-bridge, which allow you to run Claude Code instances in Docker containers alongside traditional tmux sessions.
+CC-Bridge provides first-class support for Claude Code running inside Docker containers. This integration provides a sandboxed environment with full tool permissions while maintaining a seamless link to your local Telegram client.
 
-## Overview
+## 1. Architecture: The EXEC Stream
 
-cc-bridge supports two types of Claude Code instances:
-- **tmux instances** - Run Claude Code in tmux sessions on the host system
-- **Docker instances** - Run Claude Code in Docker containers with isolated environments
+Unlike traditional methods that rely on named pipes or shared files, CC-Bridge uses **Persistent Asynchronous EXEC Streams**.
 
-Docker instances provide:
-- Isolated development environments
-- Consistent dependencies across machines
-- Easy cleanup and management
-- Support for containerized workflows
+### 1.1 How it Works
 
-## Quick Start
+1. **Discovery**: CC-Bridge scans for containers with the label `cc-bridge.instance=claude`.
+2. **Bridge Agent**: It spawns a lightweight `cc_bridge.agents.container_agent` inside the container using `docker exec`.
+3. **Communication**: A bidirectional I/O stream is established between the host bridge and the container agent.
+4. **Tool Execution**: The agent handles command translation and ensures Claude's outputs are chunked and relayed back to the host in near real-time.
 
-### Prerequisites
+```mermaid
+graph TD
+    User([Telegram User]) <--> Bot[Telegram Bot API]
+    Bot <--> Bridge[CC-Bridge Server]
+    Bridge <--> |Docker EXEC Stream| Agent[Container Agent]
+    Agent <--> |Print Mode| Claude[Claude Code]
+```
 
-1. Install Docker Desktop or Docker Engine
-2. Ensure Docker daemon is running: `docker info`
-3. Install cc-bridge with Docker support
+## 2. Recommended Setup (Docker Compose)
 
-### Creating a Docker Instance
+The easiest way to get started is using the provided [docker-compose.yml](file:///Users/robin/xprojects/cc-bridge/dockers/docker-compose.yml).
 
-The easiest way to create a Docker instance is using `docker run` with the appropriate label:
+### 2.1 File Structure
+```text
+dockers/
+├── Dockerfile           # Multi-stage build
+├── docker-compose.yml   # Orchestration
+├── .env                 # API Keys & Config
+└── .claude/
+    └── settings.json    # YOLO Mode permissions
+```
+
+### 2.3 Volume Mounting Strategy
+To ensure a consistent experience, CC-Bridge uses a **Hybrid Volume Strategy**:
+- **Metadata**: Files like `settings.json` and `.claude.json` are mounted individually from the repo for version control.
+- **Plugins**: The host's `~/.claude/plugins` is mounted globally to ensure your installed plugins (and their cache) are synced between host and container.
+
+## 3. Real YOLO Mode
+
+To enable peak automation ("YOLO Mode") inside the container:
+
+1. **Disable Interactive Prompts**: CC-Bridge automatically generates `.claude.json` with `"trusted": true`.
+2. **Environment Flags**: In your `settings.json` (inside the container's `.claude/` folder), the following are enabled:
+   - `CLAUDE_CODE_ALLOW_WEB_TOOLS=1`
+   - `DISABLE_COST_WARNINGS=1`
+   - `CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY=1`
+   - `alwaysThinkingEnabled: true`
+
+## 4. Discovery & Management
+
+CC-Bridge finds your container automatically via labels:
 
 ```bash
-docker run -d \
-  --name claude-dev \
-  --label cc-bridge.instance=claude-dev \
-  -v $(pwd):/workspace \
-  -w /workspace \
-  anthropics/claude-code:latest
+# Verify discovery
+cc-bridge claude-list
 ```
 
-### Discovering Instances
+If the container is recreated (e.g., after `docker compose up -d`), CC-Bridge detects the new container ID automatically and re-establishes the EXEC stream.
 
-cc-bridge can auto-discover Docker instances:
+## 5. Manual Execution Helper
+
+Use the built-in Makefile helper to talk directly to your container for testing:
 
 ```bash
-# Discover all Docker instances
-cc-bridge docker discover
-
-# List all instances (both tmux and Docker)
-cc-bridge claude list
+make talk msg="What is your current directory?"
 ```
 
-## Configuration
+## 6. Troubleshooting
 
-Add a `[docker]` section to your `~/.claude/bridge/config.toml`:
-
-```toml
-[docker]
-# Enable Docker instance support
-enabled = true
-
-# Default Docker network for containers
-network = "claude-network"
-
-# Path pattern for named pipes (used for communication)
-named_pipe_path = "/tmp/cc-bridge-{instance}.fifo"
-
-# Auto-discover Docker containers on startup
-auto_discovery = true
-
-# Container label for discovery
-container_label = "cc-bridge.instance"
-
-# Prefer Docker over tmux for new instances
-preferred = false
-```
-
-## Docker CLI Commands
-
-cc-bridge provides Docker-specific management commands:
-
-```bash
-# List Docker instances
-cc-bridge docker list
-
-# Start a stopped container
-cc-bridge docker start <instance-name>
-
-# Stop a running container
-cc-bridge docker stop <instance-name>
-
-# View container logs
-cc-bridge docker logs <instance-name> --follow
-
-# Execute commands in a container
-cc-bridge docker exec <instance-name> -- ls -la
-
-# Discover Docker containers
-cc-bridge docker discover
-```
-
-## Unified Instance Management
-
-The `cc-bridge claude` command works with both tmux and Docker instances:
-
-```bash
-# Start an instance (type auto-detected or configured)
-cc-bridge claude start my-instance
-
-# List all instances (shows type)
-cc-bridge claude list
-
-# Show instance status (type-specific info)
-cc-bridge claude status my-instance
-
-# Stop an instance
-cc-bridge claude stop my-instance
-```
-
-### Type Detection
-
-cc-bridge automatically detects instance types using:
-1. Existing instance metadata
-2. Docker container discovery
-3. Process/tmux session checks
-4. Configuration defaults
-
-Force a specific type with the `--type` flag:
-
-```bash
-cc-bridge claude start my-instance --type docker
-cc-bridge claude start my-instance --type tmux
-```
-
-## Communication Architecture
-
-Docker instances communicate with the host using named pipes:
-
-```
-┌─────────────────┐
-│  cc-bridge     │
-│  (host)        │
-└────────┬────────┘
-         │ Named Pipes
-         │ (FIFO)
-┌────────▼────────┐
-│  Container      │
-│  Agent          │
-│  (bridge)       │
-└────────┬────────┘
-         │ stdin/stdout
-┌────────▼────────┐
-│  Claude Code    │
-└─────────────────┘
-```
-
-### Named Pipes
-
-Two pipes are used per instance:
-- Input pipe: Host writes commands → Container reads
-- Output pipe: Container writes responses → Host reads
-
-Pipes are created in `/tmp/cc-bridge-pipes/` by default.
-
-## Docker Compose Integration
-
-Create a `docker-compose.yml` for your Claude Code workspace:
-
-```yaml
-version: '3.8'
-services:
-  claude:
-    image: anthropics/claude-code:latest
-    container_name: claude-dev
-    labels:
-      - cc-bridge.instance=claude-dev
-    volumes:
-      - .:/workspace
-    working_dir: /workspace
-    # Mount pipes directory
-    volumes:
-      - ./pipes:/tmp/cc-bridge-pipes:rw
-```
-
-Start with:
-```bash
-docker-compose up -d
-cc-bridge docker discover
-```
-
-## Troubleshooting
-
-### Docker Not Available
-
-```
-❌ Docker is not available. Install Docker to use this command.
-```
-
-**Solution:** Install Docker Desktop or Docker Engine and ensure the daemon is running.
-
-### Container Not Found
-
-```
-❌ Docker instance 'my-instance' not found.
-```
-
-**Solution:** Run `cc-bridge docker discover` or create the container with the `cc-bridge.instance` label.
-
-### Permission Denied
-
-```
-❌ Permission denied. Ensure your user has Docker permissions.
-```
-
-**Solution:** Add your user to the `docker` group:
-```bash
-sudo usermod -aG docker $USER
-newgrp docker
-```
-
-### Communication Issues
-
-If commands are not reaching the container:
-
-1. Check that the container agent is running
-2. Verify named pipes exist: `ls -la /tmp/cc-bridge-pipes/`
-3. Check container logs: `cc-bridge docker logs <instance>`
-
-## Migration from tmux to Docker
-
-To migrate existing tmux instances to Docker:
-
-1. Create Docker containers with same names
-2. Discover instances: `cc-bridge docker discover`
-3. Update configuration to prefer Docker: `docker.preferred = true`
-4. Stop tmux instances: `cc-bridge claude stop <name> --type tmux`
-
-## Limitations
-
-- The `attach` command only works with tmux instances (use `docker exec` for Docker)
-- Named pipes require volume mounts for container access
-- Container restart behavior depends on Docker restart policy
-
-## Next Steps
-
-- [Docker Architecture](DOCKER_ARCHITECTURE.md) - Technical details
-- [Docker Migration Guide](DOCKER_MIGRATION.md) - Step-by-step migration
-- [Configuration Reference](CONFIGURATION.md) - All configuration options
+- **No Internet**: Ensure you have performed the one-time interactive setup to accept the terminal theme and security warnings: `docker exec -it claude-cc-bridge claude --allow-dangerously-skip-permissions`.
+- **Instance Not Found**: Ensure your container has the label `cc-bridge.instance=claude`.
+- **Plugin Mismatch**: Verify that `~/.claude/plugins` is accessible on your host machine.

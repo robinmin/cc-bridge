@@ -1,8 +1,8 @@
 # CC-Bridge Developer Specification
 
-**Version**: 1.0.0
-**Last Updated**: 2025-01-27
-**Status**: Production Ready
+**Version**: 0.1.0
+**Last Updated**: 2026-02-02
+**Status**: Beta / Production Ready
 
 ---
 
@@ -128,7 +128,8 @@ CC-Bridge is a production-ready Python application that bridges Telegram bots wi
 ### 2.2 Module Architecture
 
 ```
-cc_bridge/
+├── agents/                   # Special purpose agents
+│   └── container_agent.py    # Bridge agent running inside Docker
 ├── cli.py                    # Main CLI entry point
 ├── config.py                 # Configuration management
 ├── logging.py                # Logging setup
@@ -143,13 +144,14 @@ cc_bridge/
 │   ├── bot.py               # Bot commands sync
 │   └── logs.py              # Log streaming
 ├── core/                     # Business logic
-│   ├── telegram.py          # Telegram API client
-│   ├── instances.py         # Instance manager
-│   ├── instance_interface.py # Instance adapter interface
+│   ├── telegram.py          # Telegram API client with HTML escaping
+│   ├── instances.py         # Instance manager (sync/async)
+│   ├── instance_interface.py # Abstract instance adapter
+│   ├── docker_compat.py     # Docker SDK wrapper
+│   ├── docker_discovery.py  # Label-based discovery
 │   ├── tmux.py              # tmux session adapter
-│   ├── docker.py            # Docker container adapter
-│   ├── claude.py            # Claude Code integration
-│   └── parser.py            # Message parsing
+│   ├── parser.py            # Message parsing
+│   └── validation.py        # Input validation
 └── models/                   # Data models
     ├── telegram.py          # Telegram models
     ├── config.py            # Configuration models

@@ -1,7 +1,7 @@
 # CC-Bridge User Manual
 
-**Version**: 1.0.0
-**Last Updated**: 2025-01-27
+**Version**: 0.1.0
+**Last Updated**: 2026-02-02
 
 ---
 
@@ -33,12 +33,13 @@ CC-Bridge is a Telegram bot bridge that enables you to interact with Claude Code
 ### 1.2 Key Features
 
 - ✅ **Remote Access**: Interact with Claude Code from anywhere via Telegram
-- ✅ **Real-time Responses**: Get instant responses from Claude Code
-- ✅ **Code Execution**: Run code and receive output in Telegram
-- ✅ **File Operations**: Read and write files through Claude Code
-- ✅ **Session Management**: Manage multiple Claude Code sessions
-- ✅ **Secure**: Encrypted communication via Telegram
-- ✅ **Cross-platform**: Works on macOS, Linux, and Windows
+- ✅ **Real-time Responses**: Get instant responses from Claude Code via chunked streaming
+- ✅ **Docker Optimized**: First-class container support with automatic discovery
+- ✅ **YOLO Mode**: Peak automation with reasoning-boosted "Always Thinking" mode
+- ✅ **File Operations**: Full read/write/edit capabilities through Claude Code
+- ✅ **Session Management**: Manage multiple isolated environments
+- ✅ **Secure**: Encrypted communication with HTML-safe message layering
+- ✅ **Cross-platform**: Works on macOS, Linux, and Windows (via Docker)
 
 ### 1.3 Use Cases
 
@@ -386,31 +387,22 @@ Example: If you set `PORT=9000` as an environment variable, it will override the
 
 ## 4. Getting Started
 
-### 4.1 Quick Start (Recommended)
+### 4.1 Quick Start (Docker Recommended)
 
-The fastest way to get started with CC-Bridge is using the automated setup:
-
-```bash
-# Step 1: Run the automated setup wizard
-cc-bridge setup
-```
-
-The wizard will guide you through:
-1. **Enter your bot token** (from @BotFather)
-2. **Send `/start` to your bot** (auto-detects your chat ID)
-3. **Wait for tunnel setup** (auto-starts Cloudflare tunnel)
-4. **Confirm webhook registration** (automatic)
-
-That's it! The setup wizard handles everything automatically.
+The fastest and most stable way to run CC-Bridge is using Docker Compose.
 
 ```bash
-# Step 2: Start a Claude instance
-cc-bridge claude start my-instance
+# Step 1: Start the container environment
+docker compose -f dockers/docker-compose.yml up -d
+
+# Step 2: Perform one-time interactive setup (Trust workspace)
+docker exec -it claude-cc-bridge claude --allow-dangerously-skip-permissions
 
 # Step 3: Start the server
 cc-bridge server
 
-# Step 4: Test by sending a message to your bot
+# Step 4: Test via host OS
+make talk msg="Check the weather in Sunnyvale"
 ```
 
 **Example output:**
@@ -1205,7 +1197,35 @@ cp .env.backup .env
 
 ---
 
-## 11. Advanced / Professional Usage
+## 11. Advanced / Professional Usage ⭐ NEW
+
+### 11.1 Real YOLO Mode
+For maximum automation, CC-Bridge supports **Real YOLO Mode**. This disables all safety confirmations and interaction pauses, allowing Claude to work at peak speed.
+
+**Features:**
+- Disabled **Cost Warnings**: No more "This might cost $..." prompts.
+- Disabled **Feedback Surveys**: Seamless session transitions.
+- **Always Thinking**: Enabled by default for complex reasoning tasks.
+- **Auto-Discovery**: Automatic MCP server detection.
+
+**How to Enable:**
+Update your `dockers/.claude/settings.json` with the YOLO flags (see [Docker Integration Guide](DOCKER_INTEGRATION.md) for details).
+
+### 11.2 The 'make talk' Helper
+Instead of opening a Telegram client to test small things, use the `make talk` helper from your terminal:
+
+```bash
+make talk msg="Explain the CC-Bridge architecture in one sentence"
+```
+
+This runs the command directly in the container using the bridge agent and returns the output immediately to your shell.
+
+### 11.3 Performance Monitoring
+Stream bridge logs in real-time to monitor Kirin's activity:
+
+```bash
+make monitor
+```
 
 This section is for users who need fine-grained control over CC-Bridge beyond the automated setup.
 
@@ -1660,6 +1680,7 @@ When something isn't working, go through this checklist:
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 0.1.0 | 2026-02-02 | Initial Beta Release: Standardized Docker EXEC streaming, unified plugin management, and Real YOLO Mode. |
 | 1.2.0 | 2025-01-29 | Major architecture update: Documented direct webhook processing model, removed references to deprecated hook-based system |
 | 1.1.0 | 2025-01-27 | Major update: Added automated setup, `claude` command, simplified user flow, added Advanced/Professional section |
 | 1.0.0 | 2025-01-27 | Initial user manual |
