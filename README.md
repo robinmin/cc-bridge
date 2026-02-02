@@ -110,14 +110,16 @@ sequenceDiagram
 ## ✨ Features
 
 - 📱 **Telegram Integration**: Full control of Claude Code via Telegram webhooks.
-- 🐳 **Docker Native**: High-performance bidirectional named pipe communication for containerized agents.
+- 🐳 **Docker FIFO Mode**: Persistent daemon mode with named pipes for low-latency communication.
+- 🔄 **Session Tracking**: Conversation history and context persistence across requests.
+- 🏥 **Health Monitoring**: Automatic crash recovery and health checks for daemon instances.
+- 🔄 **Backward Compatible**: Legacy exec mode support for existing deployments.
 - 🪟 **Tmux Support**: Seamless integration with local tmux sessions.
 - 🔍 **Auto-Discovery**: Automatically detects running Docker containers via labels.
 - ⚡ **YOLO Mode**: Pre-configured "Always-YOLO" settings (auto-trust, disabled cost warnings).
 - 🛠️ **CLI First**: Powerful command-line interface for managing instances, tunnels, and configuration.
 - 🏗️ **FastAPI Backend**: Efficient, asynchronous architecture with graceful shutdown and rate limiting.
 - 🔒 **Security**: Chat ID authorization, rate limiting, input sanitization, and request size limits.
-- 🏥 **Health Monitoring**: Built-in health checks and instance status tracking.
 - 🌐 **Cloudflare Tunnel**: Optional tunnel support for remote access without port forwarding.
 
 ## 📁 Project Structure
@@ -340,6 +342,18 @@ cc-bridge config server.port 9000
 cc-bridge config server.port --delete
 ```
 
+## 🔄 Migration from Exec to FIFO Mode
+
+If you're upgrading from an older version using exec mode, see the [Migration Guide](docs/migration-guide.md) for step-by-step instructions.
+
+**Quick summary:**
+1. Update `~/.config/cc-bridge/config.yaml` with `communication_mode: fifo`
+2. Create pipe directory: `mkdir -p /tmp/cc-bridge/pipes`
+3. Restart cc-bridge
+4. Recreate instances with FIFO mode
+
+See [FIFO Mode Documentation](docs/fifo-mode.md) for detailed configuration options.
+
 ## 🛠️ Development
 
 ### Make Targets
@@ -388,21 +402,56 @@ make fix
 
 ## 🏗️ Architecture Details
 
-### Communication Channels
+### Communication Modes
 
-#### Docker (Named Pipes)
+cc-bridge supports two communication modes for Docker instances:
 
-For Docker containers, cc-bridge uses **named pipes (FIFOs)** for bidirectional communication:
+#### FIFO Mode (Daemon Mode - Recommended)
 
-- `{instance}.in.fifo` - Host writes commands, container reads
-- `{instance}.out.fifo` - Container writes responses, host reads
+**FIFO mode** uses persistent background processes with named pipes for communication:
 
-The container runs an agent (`cc_bridge.agents.container_agent.ContainerAgent`) that:
-1. Reads commands from the input pipe
-2. Executes via Claude Code CLI
-3. Streams output to the output pipe
+- Lower latency and overhead
+- Session tracking and persistence
+- Built-in health monitoring and recovery
+- Single persistent process per container
 
-#### tmux (Direct Integration)
+How it works:
+1. A persistent `container_agent.py` runs inside the container
+2. Two named pipes are created on the host:
+   - `{instance}.in.fifo` - Host writes commands, container reads
+   - `{instance}.out.fifo` - Container writes responses, host reads
+3. The agent reads commands, executes via Claude Code CLI, and streams output
+
+Configuration:
+```yaml
+docker:
+  communication_mode: fifo  # Daemon mode (default)
+  pipe_dir: /tmp/cc-bridge/pipes
+```
+
+See [FIFO Mode Documentation](docs/fifo-mode.md) for details.
+
+#### Exec Mode (Legacy)
+
+**Exec mode** uses one-shot `docker exec` commands for each request:
+
+- Simple but higher overhead
+- No session persistence
+- No background health monitoring
+
+Configuration:
+```yaml
+docker:
+  communication_mode: exec  # Legacy mode
+```
+
+Both modes can coexist, and you can specify the mode per instance when adding:
+```bash
+cc-bridge docker add my-instance --mode fifo
+cc-bridge docker add my-instance --mode exec
+```
+
+### tmux (Direct Integration)
 
 For tmux sessions, cc-bridge uses:
 - `tmux send-keys` to inject commands
@@ -528,10 +577,18 @@ make daemon-uninstall
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `docker.enabled` | bool | `true` | Enable Docker support |
+| `docker.communication_mode` | string | `fifo` | Communication mode: `fifo` (daemon) or `exec` (legacy) |
 | `docker.network` | string | `claude-network` | Docker network name |
 | `docker.preferred` | bool | `false` | Prefer Docker over tmux |
 | `docker.auto_discovery` | bool | `true` | Auto-discover containers |
-| `docker.pipe_dir` | string | `/tmp/cc-bridge-pipes` | Named pipe directory |
+| `docker.pipe_dir` | string | `/tmp/cc-bridge/pipes` | Named pipe directory (FIFO mode) |
+| `docker.session.idle_timeout` | int | `300` | Session idle timeout in seconds |
+| `docker.session.request_timeout` | int | `120` | Request timeout in seconds |
+| `docker.session.max_history` | int | `100` | Max conversation turns to keep |
+| `docker.health.enabled` | bool | `true` | Enable health monitoring (FIFO mode) |
+| `docker.health.check_interval` | int | `30` | Health check interval in seconds |
+| `docker.health.max_consecutive_failures` | int | `3` | Failures before recovery |
+| `docker.health.recovery_delay` | int | `5` | Seconds before recovery attempt |
 
 ### Logging Settings
 
