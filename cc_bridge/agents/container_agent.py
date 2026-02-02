@@ -8,16 +8,13 @@ the host system (via named pipes) and Claude Code (via stdin/stdout).
 
 import argparse
 import asyncio
-import os
-import signal
-import sys
-import errno
-from contextlib import contextmanager
-from pathlib import Path
 
 # Configure private logger to stderr to avoid polluting data stream (stdout)
 import logging
+import os
+import signal
 import sys
+from pathlib import Path
 
 # Private logger for this module
 logger = logging.getLogger("container_agent")
@@ -31,7 +28,7 @@ logger.addHandler(_handler)
 # Prevent propagation to root logger just in case
 logger.propagate = False
 
-from contextlib import contextmanager
+
 def open_fd(path: str | Path, flags: int):
     """
     Context manager for low-level file descriptor operations.
@@ -145,12 +142,12 @@ class ContainerAgent:
                 if line is None:
                     self.logger.info("Stdin reached EOF")
                     break
-                
+
                 command = line.strip()
                 if command:
                     self.logger.info(f"Received command from host: {command[:50]}...")
                     await self._send_to_claude(command)
-                    
+
         except asyncio.CancelledError:
             self.logger.debug("Stdin reader task cancelled")
         except Exception as e:
@@ -162,12 +159,12 @@ class ContainerAgent:
     async def _send_to_claude(self, command: str) -> None:
         """Run Claude in print mode with session continuity and relay output."""
         self.logger.info(f"Running Claude in print mode: {command[:50]}...")
-        
+
         try:
             # Build arguments: continue session + print mode + global args + user command
             # Note: flags must precede the command string (-c)
-            args = ["-p"] + self.claude_args + ["-c", command]
-            
+            args = ["-p", *self.claude_args, "-c", command]
+
             # Start transient Claude process
             proc = await asyncio.create_subprocess_exec(
                 "claude",
@@ -179,12 +176,14 @@ class ContainerAgent:
 
             # Task to relay stderr to help debugging
             async def relay_stderr():
-                if not proc.stderr: return
+                if not proc.stderr:
+                    return
                 try:
                     while True:
                         # Use chunked read for stderr too
                         chunk = await proc.stderr.read(1024)
-                        if not chunk: break
+                        if not chunk:
+                            break
                         log_line = chunk.decode("utf-8", errors="ignore").strip()
                         if log_line:
                             self.logger.info(f"[CLAUDE-STDERR] {log_line}")
@@ -201,7 +200,7 @@ class ContainerAgent:
                         chunk = await proc.stdout.read(1024)
                         if not chunk:
                             break
-                        
+
                         sys.stdout.buffer.write(chunk)
                         sys.stdout.buffer.flush()
                         self.logger.info(f"Relayed {len(chunk)} bytes to host stdout")
