@@ -1,796 +1,613 @@
-# claudecode-telegram
+# cc-bridge 🚀
 
-![demo](demo.gif)
+**cc-bridge** is a robust Telegram bot bridge for [Claude Code](https://github.com/anthropics/claude-code), enabling you to interact with your AI agent directly from your phone or any Telegram client.
 
-Telegram bot bridge for Claude Code. Send messages from Telegram, get responses back.
+It supports both local **tmux** sessions and **Docker** containers, featuring a high-performance FastAPI server that handles bidirectional communication with low latency.
 
-## How it works
+## Architecture Overview
 
 ```mermaid
-flowchart LR
-    A[Telegram] --> B[Cloudflare Tunnel]
-    B --> C[Bridge Server]
-    C -->|tmux send-keys| D[Claude Code]
-    D -->|Stop Hook| E[Read Transcript]
-    E -->|Send Response| A
+flowchart TB
+    subgraph "Client Layer"
+        TG[Telegram Bot API]
+        User[Telegram User]
+        User -->|Message| TG
+    end
+
+    subgraph "cc-bridge Server Layer"
+        Webhook["FastAPI Webhook<br/>/webhook endpoint"]
+        RateLimiter["Rate Limiter<br/>10 req/min"]
+        GracefulShutdown["Graceful Shutdown<br/>Handler"]
+        InstanceMgr["Instance Manager<br/>tmux + Docker"]
+        TelegramClient["Telegram Client<br/>httpx-based"]
+    end
+
+    subgraph "Instance Adapter Layer"
+        TmuxAdapter["TmuxAdapter<br/>tmux send-keys"]
+        DockerAdapter["DockerAdapter<br/>Named Pipes (FIFO)"]
+    end
+
+    subgraph "Claude Code Instances"
+        Tmux["tmux Session<br/>Claude Code CLI"]
+        subgraph Docker["Docker Container"]
+            Agent["Container Agent<br/>(agents/container_agent.py)"]
+            Claude["Claude Code CLI<br/>(Node.js process)"]
+            Agent -->|spawn/pipe| Claude
+        end
+    end
+
+    subgraph "Storage & Configuration"
+        Config["Config TOML<br/>~/.claude/bridge/config.toml"]
+        Instances["Instances JSON<br/>~/.claude/bridge/instances.json"]
+        Pipes["Named Pipes<br/>/tmp/cc-bridge-pipes/"]
+        Logs["Log Files<br/>~/.claude/bridge/logs/"]
+    end
+
+    TG -->|POST /webhook| Webhook
+    Webhook --> RateLimiter
+    RateLimiter --> InstanceMgr
+    InstanceMgr --> TmuxAdapter
+    InstanceMgr --> DockerAdapter
+    TmuxAdapter -->|tmux send-keys| Tmux
+    DockerAdapter -->|FIFO write/read| Pipes
+    Pipes --> Agent
+    Tmux --> TelegramClient
+    Agent --> TelegramClient
+    TelegramClient -->|sendMessage| TG
+
+    InstanceMgr -->|read/write| Instances
+    Webhook -->|load| Config
+    DockerAdapter -->|create| Pipes
+
+    GracefulShutdown -.->|tracks| Webhook
+
+    style TG fill:#0088cc,stroke:#006699,color:#fff
+    style Webhook fill:#009688,stroke:#00796b,color:#fff
+    style InstanceMgr fill:#673ab7,stroke:#5e35b1,color:#fff
+    style TmuxAdapter fill:#ff9800,stroke:#f57c00,color:#fff
+    style DockerAdapter fill:#4caf50,stroke:#388e3c,color:#fff
+    style Tmux fill:#7e57c2,stroke:#5e35b1,color:#fff
+    style Docker fill:#2196f3,stroke:#1976d2,color:#fff
 ```
 
-1. Bridge receives Telegram webhooks, injects messages into Claude Code via tmux
-2. Claude Code's Stop hook reads the transcript and sends response back to Telegram
-3. Only responds to Telegram-initiated messages (uses pending file as flag)
+## Request/Response Sequence Diagram (Inter-Process)
 
-## Install
+```mermaid
+sequenceDiagram
+    autonumber
+    participant User as Telegram User
+    participant TG as Telegram Bot API
+    participant Server as cc-bridge (Host Process)
+    participant Agent as Container Agent (Docker Process)
+    participant Claude as Claude Code (CLI Process)
 
-```bash
-# Prerequisites
-brew install tmux cloudflared
+    User->>TG: "Send message 'Hello Claude'"
+    TG->>Server: "POST /webhook"
 
-# Clone
-git clone https://github.com/hanxiao/claudecode-telegram
-cd claudecode-telegram
+    Note over Server: "Internal: Auth & Rate Limit Check"
+    
+    Server->>Server: "Internal: Instance Selection"
 
-# Setup Python env
-uv venv && source .venv/bin/activate
-uv pip install -e .
+    alt Docker Instance
+        Server->>Agent: "Write command to {name}.in.fifo"
+        Note over Agent: "Agent reads from FIFO"
+        Agent->>Claude: "Spawn/Pipe command to CLI"
+        Claude-->>Agent: "Stream stdout/stderr"
+        Agent->>Server: "Write output to {name}.out.fifo"
+    else tmux Instance
+        Server->>Claude: "tmux send-keys 'Hello Claude'"
+        Note over Claude: "CLI receives keys in session"
+        Server->>Claude: "tmux capture-pane"
+        Claude-->>Server: "Captured raw text"
+    end
+
+    Note over Server: "Clean & Format Output"
+    
+    Server->>TG: "POST sendMessage"
+    TG-->>User: "Receive response"
 ```
 
-## Quick Setup
+## ✨ Features
 
-The easiest way to get started is using the interactive setup wizard:
+- 📱 **Telegram Integration**: Full control of Claude Code via Telegram webhooks.
+- 🐳 **Docker Native**: High-performance bidirectional named pipe communication for containerized agents.
+- 🪟 **Tmux Support**: Seamless integration with local tmux sessions.
+- 🔍 **Auto-Discovery**: Automatically detects running Docker containers via labels.
+- ⚡ **YOLO Mode**: Pre-configured "Always-YOLO" settings (auto-trust, disabled cost warnings).
+- 🛠️ **CLI First**: Powerful command-line interface for managing instances, tunnels, and configuration.
+- 🏗️ **FastAPI Backend**: Efficient, asynchronous architecture with graceful shutdown and rate limiting.
+- 🔒 **Security**: Chat ID authorization, rate limiting, input sanitization, and request size limits.
+- 🏥 **Health Monitoring**: Built-in health checks and instance status tracking.
+- 🌐 **Cloudflare Tunnel**: Optional tunnel support for remote access without port forwarding.
+
+## 📁 Project Structure
+
+```
+cc-bridge/
+├── cc_bridge/
+│   ├── __init__.py              # Package init (v0.1.0)
+│   ├── cli.py                   # Typer CLI entry point
+│   ├── config.py                # Configuration management (TOML + env)
+│   ├── logging.py               # Structlog logging setup
+│   ├── constants.py             # Application constants
+│   ├── exceptions.py            # Custom exceptions
+│   │
+│   ├── agents/
+│   │   └── container_agent.py   # Docker container agent (FIFO communication)
+│   │
+│   ├── commands/
+│   │   ├── server.py            # FastAPI webhook server
+│   │   ├── claude.py            # Claude instance commands (start/stop/attach)
+│   │   ├── hook_stop.py         # Stop hook for sending responses
+│   │   ├── setup.py             # Interactive setup wizard
+│   │   ├── config.py            # Config management command
+│   │   ├── health.py            # Health check command
+│   │   ├── tunnel.py            # Cloudflare tunnel management
+│   │   ├── docker_cmd.py        # Docker commands
+│   │   ├── webhook.py           # Webhook management
+│   │   ├── cron.py              # Cron job management
+│   │   ├── bot.py               # Bot commands
+│   │   └── logs.py              # Log viewing
+│   │
+│   ├── core/
+│   │   ├── instances.py         # Instance lifecycle management
+│   │   ├── instance_interface.py  # Adapter interface + factory
+│   │   ├── tmux.py              # tmux session integration
+│   │   ├── docker_compat.py     # Docker SDK wrapper
+│   │   ├── docker_discovery.py  # Auto-discovery by label
+│   │   ├── docker_errors.py     # Docker error handling
+│   │   ├── telegram.py          # Telegram API client (httpx, retry logic)
+│   │   ├── named_pipe.py        # FIFO pipe communication
+│   │   ├── claude.py            # Claude Code CLI integration
+│   │   ├── validation.py        # Input validation utilities
+│   │   ├── instance_detector.py # Instance detection
+│   │   └── parser.py            # Output parsing
+│   │
+│   └── models/
+│       ├── config.py            # Config data models
+│       ├── instances.py         # Instance data models
+│       └── telegram.py          # Telegram update models
+│
+├── scripts/
+│   ├── install-service.sh       # LaunchAgent installer (macOS)
+│   ├── uninstall-service.sh     # LaunchAgent uninstaller
+│   ├── install-daemon.sh        # LaunchDaemon installer (root)
+│   ├── uninstall-daemon.sh      # LaunchDaemon uninstaller
+│   ├── health-check.sh          # Health check script
+│   └── test_pipes.py            # Named pipe testing
+│
+├── tests/                       # pytest tests
+│   ├── test_cli.py
+│   ├── test_commands/
+│   └── test_core/
+│
+├── Makefile                     # Make targets
+├── pyproject.toml              # Project configuration
+└── README.md                   # This file
+```
+
+## 🚀 Quick Start
+
+### 1. Installation
 
 ```bash
-# Run the setup wizard
+# Clone the repository
+git clone https://github.com/robinmin/cc-bridge
+cd cc-bridge
+
+# Install dependencies using uv
+uv sync
+
+# Or with make (interactive setup)
+make setup
+```
+
+### 2. Configuration
+
+Run the interactive setup wizard:
+
+```bash
 cc-bridge setup
 ```
 
-The setup wizard will guide you through:
-1. **Enter your Telegram bot token** (from @BotFather)
-2. **Auto-detect your Chat ID** - Send `/start` to your bot, we'll detect it automatically
-3. **Start Cloudflare Tunnel** - Automatically starts and extracts the tunnel URL
-4. **Auto-generate .env file** - Creates configuration from `.env.example`
-5. **Register Webhook** - Automatically configures Telegram webhook
-6. **Setup Health Checks** - Optionally configure crontab for automatic monitoring
+Or manually edit `~/.claude/bridge/config.toml`:
 
-**No manual configuration needed!** The wizard handles everything.
+```toml
+[telegram]
+bot_token = "123456:ABC-DEF1234..."
+chat_id = 123456789
+webhook_url = "https://your-domain.com/webhook"
 
-## Manual Setup
+[server]
+host = "0.0.0.0"
+port = 8080
 
-### 1. Create Telegram bot
+[docker]
+enabled = true
+network = "claude-network"
+preferred = false
+auto_discovery = true
 
-Bot receives your messages and sends Claude's responses back.
-
-```bash
-# Message @BotFather on Telegram, create bot, get token
+[logging]
+level = "INFO"
+format = "json"
+file = "~/.claude/bridge/logs/bridge.log"
 ```
 
-### 2. Configure Stop hook
-
-Hook triggers when Claude finishes responding, reads transcript, sends to Telegram.
+### 3. Start a Claude Instance
 
 ```bash
-cp hooks/send-to-telegram.sh ~/.claude/hooks/
-nano ~/.claude/hooks/send-to-telegram.sh  # set your bot token
-chmod +x ~/.claude/hooks/send-to-telegram.sh
+# Docker instance (recommended)
+cc-bridge claude start my-project --type docker
+
+# tmux instance
+cc-bridge claude start my-project --type tmux
 ```
 
-Add to `~/.claude/settings.json`:
+### 4. Start the Bridge Server
+
+```bash
+# Development mode with auto-reload
+make dev
+
+# Or production mode
+cc-bridge server
+```
+
+### 5. Set Up Webhook (Optional)
+
+For local development, use Cloudflare tunnel:
+
+```bash
+# Start tunnel
+cc-bridge tunnel --start
+
+# Set webhook via Telegram API
+curl -X POST "https://api.telegram.org/bot<TOKEN>/setWebhook?url=https://your-tunnel-url.ngrok.io/webhook"
+```
+
+## 📖 Usage
+
+### Server Commands
+
+```bash
+# Start server with auto-reload
+cc-bridge server --reload
+
+# Start server on specific port
+cc-bridge server --host 0.0.0.0 --port 9000
+
+# Health check
+cc-bridge health
+# Or: curl http://localhost:8080/health
+```
+
+### Instance Management
+
+```bash
+# List all instances
+cc-bridge claude-list
+
+# Start a new instance
+cc-bridge claude start my-session
+
+# Attach to a running instance
+cc-bridge claude-attach my-session
+
+# Restart an instance
+cc-bridge claude-restart my-session
+
+# Stop an instance
+cc-bridge claude-stop my-session
+```
+
+### Docker Commands
+
+```bash
+# List Docker instances
+cc-bridge docker list
+
+# Create a Docker instance
+cc-bridge docker create my-container
+
+# Stop a Docker instance
+cc-bridge docker stop my-container
+```
+
+### Tunnel Management
+
+```bash
+# Start Cloudflare tunnel
+cc-bridge tunnel --start
+
+# Stop tunnel
+cc-bridge tunnel --stop
+
+# Set auto-start on boot
+cc-bridge config tunnel.auto_start true
+```
+
+### Configuration Management
+
+```bash
+# Get config value
+cc-bridge config server.port
+
+# Set config value
+cc-bridge config server.port 9000
+
+# Delete config value
+cc-bridge config server.port --delete
+```
+
+## 🛠️ Development
+
+### Make Targets
+
+| Target | Description |
+|--------|-------------|
+| `make help` | Show all available commands |
+| `make status` | Run system health check |
+| `make setup` | Interactive setup wizard |
+| `make install` | Install dependencies using uv |
+| `make dev` | Start development server with auto-reload |
+| `make test` | Run pytest with coverage |
+| `make test-quick` | Run tests without coverage |
+| `make lint` | Run ruff linter |
+| `make format` | Format code with ruff |
+| `make typecheck` | Run ty type checker |
+| `make fix` | Auto-fix lint errors + format code |
+| `make all` | Run all checks (lint, format, typecheck, test) |
+| `make fix-all` | Auto-fix everything, then validate |
+| `make build` | Build distribution packages |
+| `make clean` | Clean build artifacts |
+
+### Running Tests
+
+```bash
+# Run all tests with coverage
+make test
+
+# Run specific test file
+uv run pytest tests/test_core/test_instances.py -v
+
+# Run with coverage HTML report
+uv run pytest --cov=cc_bridge --cov-report=html
+```
+
+### Code Quality
+
+```bash
+# Check code quality
+make lint
+make typecheck
+
+# Auto-fix issues
+make fix
+```
+
+## 🏗️ Architecture Details
+
+### Communication Channels
+
+#### Docker (Named Pipes)
+
+For Docker containers, cc-bridge uses **named pipes (FIFOs)** for bidirectional communication:
+
+- `{instance}.in.fifo` - Host writes commands, container reads
+- `{instance}.out.fifo` - Container writes responses, host reads
+
+The container runs an agent (`cc_bridge.agents.container_agent.ContainerAgent`) that:
+1. Reads commands from the input pipe
+2. Executes via Claude Code CLI
+3. Streams output to the output pipe
+
+#### tmux (Direct Integration)
+
+For tmux sessions, cc-bridge uses:
+- `tmux send-keys` to inject commands
+- `tmux capture-pane` to retrieve output
+- Session tracking via `tmux list-sessions`
+
+### Component Responsibilities
+
+| Component | Responsibility |
+|-----------|---------------|
+| `FastAPI Server` | Receive webhooks, rate limiting, request routing |
+| `TelegramClient` | API communication with retry logic |
+| `InstanceManager` | Instance lifecycle, status caching, discovery |
+| `TmuxAdapter` | tmux session communication |
+| `DockerAdapter` | Named pipe communication with containers |
+| `ContainerAgent` | In-container CLI execution |
+| `Config` | Layered configuration (defaults → file → env → CLI) |
+
+## 🔌 API Reference
+
+### Webhook Endpoint
+
+**POST** `/webhook`
+
+Receives Telegram updates and forwards to Claude Code.
+
+**Request Body:**
 ```json
 {
-  "hooks": {
-    "Stop": [{"hooks": [{"type": "command", "command": "~/.claude/hooks/send-to-telegram.sh"}]}]
+  "update_id": 123456789,
+  "message": {
+    "message_id": 1,
+    "from": {"id": 123456789, "first_name": "User"},
+    "chat": {"id": 123456789, "type": "private"},
+    "text": "Hello Claude"
   }
 }
 ```
 
-### 3. Start tmux + Claude
-
-tmux keeps Claude Code running persistently; bridge injects messages via `send-keys`.
-
-```bash
-tmux new -s claude
-claude --dangerously-skip-permissions
+**Response:**
+```json
+{"status": "ok"}
 ```
 
-### 4. Run bridge
+**Rate Limits:** 10 requests per minute per chat_id
 
-Bridge receives Telegram webhooks and injects messages into Claude Code.
+### Health Endpoint
 
-```bash
-## find out the TELEGRAM_BOT_TOKEN
-cat ~/.claude/hooks/send-to-telegram.sh|grep 'TELEGRAM_BOT_TOKEN='
-export TELEGRAM_BOT_TOKEN="your_token"
-python bridge.py
+**GET** `/health`
+
+Returns server health and instance status.
+
+**Response:**
+```json
+{
+  "status": "healthy",
+  "uptime_seconds": 3600.5,
+  "instances": {
+    "total": 2,
+    "running": 1,
+    "stopped": 1,
+    "tmux": 1,
+    "docker": 1
+  },
+  "pending_requests": 0,
+  "version": "0.1.0"
+}
 ```
 
-### 5. Expose via Cloudflare Tunnel
+## 🔧 Service Management
 
-Tunnel exposes local bridge to the internet so Telegram can reach it.
+### LaunchAgent (starts at login - recommended)
 
 ```bash
-cloudflared tunnel --url http://localhost:8080
+# Install service
+make setup-service
+
+# Control service
+make start      # Start service
+make stop       # Stop service
+make restart    # Restart service
+make monitor    # View logs (tail -f)
+
+# Uninstall
+make service-uninstall
 ```
 
-### 6. Set webhook
-
-Tells Telegram where to send message updates.
+### LaunchDaemon (starts at boot - for servers)
 
 ```bash
-export NEW_CF_TUNNEL="https://additions-samba-graph-stake.trycloudflare.com"
-curl "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook?url=${NEW_CF_TUNNEL}"
+# Install daemon
+make setup-daemon
+
+# Control daemon
+make daemon-start     # Start daemon
+make daemon-stop      # Stop daemon
+make daemon-restart   # Restart daemon
+
+# Uninstall
+make daemon-uninstall
 ```
 
-## Bot Commands
+## 📊 Configuration Reference
 
-| Command | Description |
-|---------|-------------|
-| `/status` | Check tmux session |
-| `/clear` | Clear conversation |
-| `/resume` | Pick session to resume (inline keyboard) |
-| `/continue_` | Auto-continue most recent |
-| `/loop <prompt>` | Start Ralph Loop (5 iterations) |
-| `/stop` | Interrupt Claude |
-| `/user_info` | Show your user info (multi-user) |
-| `/users` | List all users (admin only) |
+### Telegram Settings
 
-## Multi-User Support
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `telegram.bot_token` | string | - | Bot token from @BotFather |
+| `telegram.chat_id` | int | - | Authorized chat ID |
+| `telegram.webhook_url` | string | - | Webhook URL |
 
-The bridge supports multiple users with authentication, session isolation, and access control. See [MULTI_USER.md](MULTI_USER.md) for details.
+### Server Settings
 
-### Quick Start
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `server.host` | string | `0.0.0.0` | Server host |
+| `server.port` | int | `8080` | Server port |
+| `server.reload` | bool | `false` | Enable auto-reload |
 
-1. Enable multi-user mode in `~/.claude/bridge/config.toml`:
-   ```toml
-   [multi_user]
-   enabled = true
-   allowed_users = []  # Empty = all users allowed
-   admin_users = [123456789]  # Admin chat IDs
-   ```
+### Docker Settings
 
-2. Users are automatically created on first message
-3. Each user has isolated sessions
-4. Admins can manage users via `/users` command
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `docker.enabled` | bool | `true` | Enable Docker support |
+| `docker.network` | string | `claude-network` | Docker network name |
+| `docker.preferred` | bool | `false` | Prefer Docker over tmux |
+| `docker.auto_discovery` | bool | `true` | Auto-discover containers |
+| `docker.pipe_dir` | string | `/tmp/cc-bridge-pipes` | Named pipe directory |
 
-### Features
+### Logging Settings
 
-- **User Authentication**: Automatic user creation and management
-- **Session Isolation**: Each user has their own session context
-- **Access Control**: Optional allowlist for restricted access
-- **User Management**: Admin commands for user oversight
-- **Thread-Safe**: Concurrent user operations supported
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `logging.level` | string | `INFO` | Log level |
+| `logging.format` | string | `json` | Log format (json/text) |
+| `logging.file` | string | `~/.claude/bridge/logs/bridge.log` | Log file path |
+| `logging.max_bytes` | int | `10485760` | Max log size (10MB) |
+| `logging.backup_count` | int | `5` | Number of backups |
 
-## CLI Commands
+## 🔒 Security Features
 
-### Setup
+1. **Chat ID Authorization**: Only configured chat IDs can interact
+2. **Rate Limiting**: 10 requests per minute per chat
+3. **Request Size Limits**: Maximum request size enforced
+4. **Input Sanitization**: HTML escaping for Telegram messages
+5. **Instance Name Validation**: Security checks on instance names
+6. **Timeout Handling**: Configurable timeouts for all operations
 
-Interactive setup wizard for first-time configuration:
+## 🐛 Troubleshooting
 
-```bash
-cc-bridge setup
-```
-
-This will:
-- Prompt for your Telegram bot token
-- Verify the token with Telegram API
-- Create `~/.claude/bridge/config.toml` configuration file
-- Set up tmux session
-- Register bot commands with Telegram
-- Display next steps
-
-### Health Check
-
-Check the health status of the bridge components:
+### Instance not responding
 
 ```bash
-# Check all components
+# Check instance status
+cc-bridge claude-list
+
+# Check health
 cc-bridge health
 
-# Check specific component
-cc-bridge health --webhook    # Check Telegram API connectivity
-cc-bridge health --tmux       # Check tmux session status
-cc-bridge health --hook       # Check hook files
-cc-bridge health --token      # Check bot token validity
-cc-bridge health --config     # Check configuration
-```
-
-**Exit codes:**
-- `0` - All checks passed (healthy)
-- `1` - One or more checks failed (unhealthy)
-
-### Server
-
-Start the bridge server:
-
-```bash
-cc-bridge server
-```
-
-This starts the HTTP server that receives Telegram webhooks and forwards messages to Claude Code.
-
-**Example output:**
-```
-✓ Webhook: Connected (bot: @my_bot)
-✓ tmux: Session 'claude' running
-✓ Hook: Files present
-✓ Config: Loaded from ~/.claude/bridge/config.toml
-✓ Bot token: Valid
-
-Overall: Healthy
-```
-
-## Running as a Service (macOS)
-
-For automatic startup on boot and crash recovery, you can run cc-bridge as a Homebrew service on macOS.
-
-### Quick Installation
-
-```bash
-# Install the service
-./scripts/install-service.sh
-
-# Check service status
-launchctl list | grep cc-bridge
-
 # View logs
-tail -f /opt/homebrew/var/log/cc-bridge/server.log
+make monitor
 ```
 
-### Manual Service Management
+### Docker container not discovered
 
 ```bash
-# Start service
-launchctl start com.github.cc-bridge
+# Ensure container has the correct label
+docker inspect my-container | grep cc-bridge
 
-# Stop service
-launchctl stop com.github.cc-bridge
-
-# Restart service
-launchctl kickstart -k gui/$(id -u)/com.github.cc-bridge
+# Manually refresh discovery
+cc-bridge docker refresh
 ```
 
-### Uninstall Service
+### Webhook not receiving messages
 
 ```bash
-./scripts/uninstall-service.sh
+# Check webhook is set
+curl https://api.telegram.org/bot<TOKEN>/getWebhookInfo
+
+# Verify tunnel is running
+cc-bridge tunnel status
 ```
 
-### Service Features
-
-- **Automatic startup on boot** - Service starts when your Mac starts
-- **Automatic restart on crash** - launchd restarts the server if it crashes
-- **Standardized logging** - Logs stored in `/opt/homebrew/var/log/cc-bridge/`
-- **Easy management** - Use standard launchctl commands
-
-For detailed documentation, see [Service Management Guide](docs/service-management.md).
-
-### Config
-
-Configuration management for the bridge:
+### Port already in use
 
 ```bash
-# Get a configuration value
-cc-bridge config bot_token
+# Check what's using port 8080
+lsof -ti :8080
 
-# Set a configuration value
-cc-bridge config bot_token "new_token"
-
-# Set nested configuration value
-cc-bridge config telegram.bot_token "new_token"
-
-# Delete a configuration value
-cc-bridge config bot_token --delete
-
-# List all configuration values
-cc-bridge config --list
-
-# Edit config file in default editor
-cc-bridge config --edit
+# Kill the process
+lsof -ti :8080 | xargs kill -9
 ```
 
-**Supported configuration keys:**
+### UV Virtual Environment Mismatch
 
-- `bot_token` - Telegram bot token from @BotFather
-- `chat_id` - Your Telegram chat ID (auto-detected during setup)
-- `tmux_session` - tmux session name (default: `claude`)
-- `port` - Bridge server port (default: `8080`)
-- `telegram.bot_token` - Bot token (nested)
-- `telegram.chat_id` - Chat ID (nested)
-- `telegram.webhook_url` - Webhook URL (nested)
-- `server.host` - Server host (nested)
-- `server.port` - Server port (nested)
-- `instances.data_file` - Instance metadata file path (nested)
-- `logging.level` - Log level (nested)
-- `logging.format` - Log format (nested)
-- `logging.file` - Log file path (nested)
-- `health.enabled` - Enable health checks (nested)
-- `health.interval_minutes` - Health check interval (nested)
-- `tunnel.auto_start` - Auto-start tunnel on boot (nested)
-
-**Example:**
+If you see warnings about `VIRTUAL_ENV` mismatch from `uv`, ensure you are using the latest `Makefile` which automatically unsets the variable to target the local `.venv`:
 
 ```bash
-# Set bot token
-cc-bridge config bot_token "123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11"
-
-# Set nested value
-cc-bridge config telegram.webhook_url "https://my-tunnel.trycloudflare.com"
-
-# List all values
-cc-bridge config --list
-# Output:
-# Configuration values:
-# ----------------------------------------
-#   bot_token: 123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11
-#   tmux_session: claude
-#   port: 8080
-#   telegram.webhook_url: https://my-tunnel.trycloudflare.com
-# ----------------------------------------
-
-# Edit config file directly
-cc-bridge config --edit
-# Opens ~/.claude/bridge/config.toml in your default editor
+# Typical warning:
+# warning: `VIRTUAL_ENV=...` does not match the project environment path `.venv`
 ```
 
-### Claude
+The `make` targets are designed to be environment-agnostic.
 
-Manage Claude Code instances without touching tmux directly:
+## 📄 License
 
-```bash
-# Start a new instance (auto-detects type: tmux or Docker)
-cc-bridge claude start my-instance
-
-# Start with custom working directory
-cc-bridge claude start project-a --cwd ~/projects/project-a
-
-# Force specific instance type
-cc-bridge claude start my-instance --type docker
-cc-bridge claude start my-instance --type tmux
-
-# Start and attach immediately (tmux only)
-cc-bridge claude start my-instance --no-detach
-
-# List all instances (both tmux and Docker)
-cc-bridge claude list
-
-# Show detailed instance status
-cc-bridge claude status my-instance
-
-# Attach to a running instance (tmux only)
-cc-bridge claude attach my-instance
-
-# Stop an instance
-cc-bridge claude stop my-instance
-
-# Force stop without confirmation
-cc-bridge claude stop my-instance --force
-
-# Restart an instance
-cc-bridge claude restart my-instance
-```
-
-**Instance Types:**
-
-cc-bridge supports two types of Claude instances:
-- **tmux instances** (💻) - Run in tmux sessions on the host system
-- **Docker instances** (🐳) - Run in Docker containers with isolated environments
-
-**Type Auto-Detection:**
-
-The `start` command automatically detects the appropriate type:
-1. Checks existing instance metadata
-2. Discovers Docker containers by label
-3. Falls back to configuration preference (`docker.preferred`)
-4. Defaults to tmux for backward compatibility
-
-**Docker Instance Management:**
-
-For Docker-specific operations, use the docker command group:
-
-```bash
-# List only Docker instances
-cc-bridge docker list
-
-# Discover Docker containers
-cc-bridge docker discover
-
-# View container logs
-cc-bridge docker logs my-instance --follow
-
-# Execute commands in container
-cc-bridge docker exec my-instance -- ls -la
-
-# Start/stop containers
-cc-bridge docker start my-instance
-cc-bridge docker stop my-instance
-```
-
-**Features:**
-- **Automatic instance type detection** - Smart detection based on metadata and environment
-- **Docker container discovery** - Auto-discovers containers with `cc-bridge.instance` label
-- **Polymorphic instance management** - Unified commands work with both tmux and Docker
-- **Working directory support** - Each instance can have its own project folder
-- **Instance metadata** - Tracks type, status, PID, and activity timestamps
-- **Status monitoring** - Check if instances are running, stopped, or crashed
-- **Safe operations** - Validates paths and handles errors gracefully
-
-**Example output:**
-
-```bash
-$ cc-bridge claude start project-a --cwd ~/projects/project-a
-✅ Started Claude instance 'project-a' (type: tmux)
-   Session: claude-project-a
-   Working directory: /Users/you/projects/project-a
-
-$ cc-bridge claude list
-Found 2 instance(s):
-
-🟢 project-a (💻 tmux)
-   Session: claude-project-a
-   Working directory: /Users/you/projects/project-a
-   Status: running
-   Created: 2025-01-27 14:30
-
-🟢 docker-dev (🐳 docker)
-   Container: abc123def456
-   Image: anthropics/claude-code:latest
-   Status: running
-   Created: 2025-01-28 10:15
-
-$ cc-bridge claude status project-a
-🟢 project-a (💻 tmux)
-   Status: running
-   Created: 2025-01-27 14:30
-   Session: claude-project-a
-   Working directory: /Users/you/projects/project-a
-   PID: 12345
-   Last activity: 2025-01-28 11:20
-```
-
-**For more Docker integration details, see [Docker Integration Guide](docs/DOCKER_INTEGRATION.md).**
-
-**Instance Status:**
-- 🟢 **running** - Instance is active and responding
-- 🔴 **stopped** - Instance process has terminated
-- ⚪ **no_pid** - Instance metadata exists but no PID assigned
-
-
-### Tunnel
-
-Manage Cloudflare tunnel for exposing the local bridge to the internet:
-
-```bash
-# Start tunnel (defaults to port 8080)
-cc-bridge tunnel-start
-
-# Start tunnel on custom port
-cc-bridge tunnel-start --port 3000
-
-# Check tunnel status
-cc-bridge tunnel-status
-
-# Stop tunnel
-cc-bridge tunnel-stop
-```
-
-**Tunnel start** automatically:
-1. Starts `cloudflared` process
-2. Extracts the quick tunnel URL
-3. Sets Telegram webhook to the tunnel URL
-4. Saves tunnel state for status checking
-
-**Example output:**
-```
-  Starting Cloudflare tunnel...
-  Waiting for tunnel URL...
-  cloudflared: https://abc123.trycloudflare.com
-✓ Tunnel started: https://abc123.trycloudflare.com
-  Setting Telegram webhook...
-✓ Telegram webhook set
-
-Tunnel is running. Press Ctrl+C to stop.
-```
-
-**Prerequisites:**
-- Install `cloudflared`: `brew install cloudflared`
-- Bot token must be configured (run `cc-bridge setup`)
-
-### Webhook
-
-Manage Telegram webhooks manually:
-
-```bash
-# Set webhook URL
-cc-bridge webhook set https://example.com/webhook
-
-# Test webhook connectivity (tests current webhook or specific URL)
-cc-bridge webhook test
-cc-bridge webhook test https://example.com/webhook
-
-# Get current webhook information
-cc-bridge webhook info
-
-# Delete webhook
-cc-bridge webhook delete
-```
-
-**Webhook set** configures Telegram to send updates to your specified URL.
-
-**Webhook test** verifies that your webhook URL is reachable.
-
-**Webhook info** displays:
-- Current webhook URL
-- Pending update count
-- Last error message (if any)
-
-**Webhook delete** removes the webhook configuration.
-
-**Example output:**
-```
-cc-bridge webhook set https://example.com/webhook
-  Setting webhook to https://example.com/webhook...
-✓ Webhook set to https://example.com/webhook
-
-cc-bridge webhook test
-  Testing webhook connectivity to https://example.com/webhook...
-✓ Webhook test successful
-
-cc-bridge webhook info
-  Getting webhook info...
-Current webhook: https://example.com/webhook
-Pending updates: 0
-Last error: None
-
-cc-bridge webhook delete
-  Deleting webhook...
-✓ Webhook deleted
-```
-
-## Docker Deployment (Alternative)
-
-### Why Docker?
-
-Docker deployment offers an alternative to the tmux-based approach with several advantages:
-- **Isolated environment** - No dependency conflicts with host system
-- **Reproducible builds** - Same environment across development and production
-- **Easy deployment** - Single command to start the entire stack
-- **Health monitoring** - Built-in health checks and automatic restarts
-- **Log management** - Centralized logging with rotation
-- **Security** - Container boundaries for safe `--dangerously-skip-permissions` usage
-
-### Quick Start with Docker
-
-```bash
-# 1. Copy environment file
-cp .env.example.docker .env
-
-# 2. Edit .env and set ANTHROPIC_API_KEY or ANTHROPIC_AUTH_TOKEN (and optionally ANTHROPIC_BASE_URL)
-nano .env
-
-# 3. Ensure OrbStack is running (macOS)
-orb start
-
-# 4. Start the container
-docker-compose up -d
-
-# 5. View logs
-docker-compose logs -f claude-agent
-
-# 6. Stop the container
-docker-compose down
-```
-
-### Documentation
-
-For complete Docker setup instructions, troubleshooting, and advanced configuration, see [Docker Setup Guide](docs/docker-setup.md).
-
----
-
-## Legacy Docker Deployment (Bridge Server)
-
-Note: The following Docker setup is for the bridge server component only. For running Claude Code itself in Docker, see the section above.
-
-### Quick Start with Docker Compose
-
-The easiest way to run the bridge in production is using Docker Compose:
-
-```bash
-# 1. Copy environment file
-cp .env.example .env
-
-# 2. Edit .env and set your TELEGRAM_BOT_TOKEN
-nano .env
-
-# 3. Start the container
-docker-compose up -d
-
-# 4. Check logs
-docker-compose logs -f cc-bridge
-
-# 5. Check health status
-docker-compose ps
-
-# 6. Stop the container
-docker-compose down
-```
-
-### With Cloudflare Tunnel (Public Exposure)
-
-```bash
-# Start with tunnel profile
-docker-compose --profile tunnel up -d
-
-# Get tunnel URL from logs
-docker-compose logs cloudflared | grep trycloudflare.com
-```
-
-### Manual Docker Build
-
-```bash
-# Build image
-docker build -t cc-bridge:latest .
-
-# Run container
-docker run -d \
-  --name cc-bridge \
-  --restart unless-stopped \
-  -p 8080:8080 \
-  -e TELEGRAM_BOT_TOKEN="your_token" \
-  -v $(pwd)/config:/home/bridge/.claude/bridge \
-  -v $(pwd)/logs:/home/bridge/.claude/bridge/logs \
-  -v ~/.claude:/home/bridge/.claude \
-  cc-bridge:latest
-
-# View logs
-docker logs -f cc-bridge
-
-# Stop container
-docker stop cc-bridge
-docker rm cc-bridge
-```
-
-### Docker Health Checks
-
-The container includes built-in health checks:
-
-```bash
-# Check health status
-docker ps
-# HEALTHY status appears under STATUS column
-
-# Inspect health check details
-docker inspect cc-bridge | jq '.[0].State.Health'
-
-# View health check logs
-docker inspect cc-bridge | jq '.[0].State.Health.Log'
-```
-
-**Health check configuration:**
-- Interval: 30 seconds
-- Timeout: 10 seconds
-- Start period: 5 seconds
-- Retries: 3
-
-### Multi-Stage Build
-
-The Dockerfile uses a multi-stage build for optimization:
-
-**Stage 1 (Builder):**
-- Installs build dependencies (gcc)
-- Copies project files
-- Installs Python packages
-
-**Stage 2 (Runtime):**
-- Installs runtime dependencies only (tmux, curl)
-- Copies Python packages from builder
-- Creates non-root user
-- Sets up health checks
-
-**Benefits:**
-- Smaller final image size (no build tools)
-- Improved security (non-root user)
-- Faster deployments (cached layers)
-
-### Volume Mounts
-
-| Volume | Purpose | Host Path | Container Path |
-|--------|---------|-----------|----------------|
-| Configuration | Persist bot token and settings | `./config` | `/home/bridge/.claude/bridge` |
-| Logs | Store bridge logs | `./logs` | `/home/bridge/.claude/bridge/logs` |
-| Claude Config | Mount Claude Code directory | `~/.claude` | `/home/bridge/.claude` |
-
-### Docker Compose Profiles
-
-The `docker-compose.yml` supports profiles for different deployment scenarios:
-
-**Default (bridge only):**
-```bash
-docker-compose up -d
-```
-
-**With tunnel (public exposure):**
-```bash
-docker-compose --profile tunnel up -d
-```
-
-### Environment Variables in Docker
-
-All environment variables can be set via:
-1. `.env` file (recommended)
-2. `docker-compose.yml` environment section
-3. `docker run -e` flag
-
-**Example:**
-```bash
-# Via .env file
-echo "PORT=3000" >> .env
-
-# Via docker-compose.yml
-environment:
-  - PORT=3000
-
-# Via docker run
-docker run -e PORT=3000 cc-bridge:latest
-```
-
-### Production Considerations
-
-**Security:**
-- Container runs as non-root user (UID 1000)
-- No sensitive data in image (use env vars/secrets)
-- Health checks for monitoring
-- Log rotation prevents disk overflow
-
-**Networking:**
-- Default bridge network isolation
-- Port 8080 exposed to host
-- Cloudflare tunnel for public exposure
-
-**Persistence:**
-- Configuration stored in mounted volume
-- Logs stored in mounted volume
-- Session data in Claude Code directory
-
-### Troubleshooting Docker
-
-**Container won't start:**
-```bash
-# Check logs
-docker-compose logs cc-bridge
-
-# Verify environment variables
-docker-compose config
-
-# Check if port is in use
-lsof -i :8080
-```
-
-**Health check failing:**
-```bash
-# Check container status
-docker ps
-
-# Inspect health check
-docker inspect cc-bridge | jq '.[0].State.Health'
-
-# Test endpoint manually
-curl http://localhost:8080/
-```
-
-**Permission issues with volumes:**
-```bash
-# Fix volume permissions
-sudo chown -R 1000:1000 ./config ./logs
-
-# Or run as root (not recommended)
-# Remove USER bridge from Dockerfile
-```
-
-### Environment Variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `TELEGRAM_BOT_TOKEN` | required | Bot token from BotFather |
-| `TMUX_SESSION` | `claude` | tmux session name |
-| `PORT` | `8080` | Bridge port |
-| `LOG_LEVEL` | `INFO` | Logging level |
-| `CLAUDE_CONFIG_DIR` | `~/.claude` | Claude Code config path |
-# cc-bridge
+MIT © [Robin Min](mailto:robin@example.com)
