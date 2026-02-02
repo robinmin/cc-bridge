@@ -16,11 +16,18 @@ services:
 
     # Volume mounts
     volumes:
-      # Individual file mounts for Claude configuration to avoid hiding plugins in the image
+      # Individual file mounts for Claude configuration
       - ./.claude/settings.json:/home/vscode/.claude/settings.json:rw
       - ./.claude/.claude.json:/home/vscode/.claude/.claude.json:rw
       - ./.claude/CLAUDE.md:/home/vscode/.claude/CLAUDE.md:rw
+      
+      # Persistent state and authentication from host
+      - ~/.claude.json:/home/vscode/.claude.json:rw
       - ~/.claude/plugins:/home/vscode/.claude/plugins:rw
+      - ~/.claude/statsig:/home/vscode/.claude/statsig:rw
+      - ~/.claude/session-env:/home/vscode/.claude/session-env:rw
+      - ~/.claude/bridge:/home/vscode/.claude/bridge:rw
+      - ~/.claude/hooks:/home/vscode/.claude/hooks:rw
 
       # DYNAMIC mount for the current project folder
       # This allows the container to access and modify project files
