@@ -6,7 +6,6 @@ and containerized Claude Code instances using Unix named pipes.
 """
 
 import asyncio
-import errno
 import os
 import warnings
 from collections.abc import AsyncIterator
@@ -65,7 +64,8 @@ class NamedPipeChannel(AsyncContextManagerType["NamedPipeChannel"]):
         for pipe_path in [self.input_pipe_path, self.output_pipe_path]:
             if pipe_path.exists():
                 import stat
-                if stat.S_ISFIFO(os.stat(pipe_path).st_mode):
+
+                if stat.S_ISFIFO(pipe_path.stat().st_mode):
                     self.logger.debug(f"Named pipe already exists: {pipe_path}")
                     continue
                 # Remove if it's not a FIFO
@@ -73,7 +73,7 @@ class NamedPipeChannel(AsyncContextManagerType["NamedPipeChannel"]):
 
             try:
                 os.mkfifo(pipe_path, mode=0o666)
-                os.chmod(pipe_path, 0o666)
+                pipe_path.chmod(0o666)
                 self.logger.debug(f"Created named pipe: {pipe_path}")
             except OSError as e:
                 # If chmod fails it might already exist or we might not own it
@@ -172,6 +172,7 @@ class NamedPipeChannel(AsyncContextManagerType["NamedPipeChannel"]):
                         # Try to read data (non-blocking for the actual read loop)
                         # We use O_NONBLOCK after the initial blocking open
                         import fcntl
+
                         flags = fcntl.fcntl(fd, fcntl.F_GETFL)
                         fcntl.fcntl(fd, fcntl.F_SETFL, flags | os.O_NONBLOCK)
 
@@ -216,19 +217,19 @@ class NamedPipeChannel(AsyncContextManagerType["NamedPipeChannel"]):
         """
         # Start reading task in background so it can handshake concurrently with writer
         reader_iterator = self.read_response(timeout=timeout)
-        
+
         # We need to start the iterator to trigger the open call
         # But wait, read_response is an async generator, the code inside only runs
         # when we start iterating.
-        
+
         # Let's refactor to ensure the reader open happens concurrently.
         # Actually, the simplest way is to put the write and read in separate tasks.
-        
+
         write_task = asyncio.create_task(self.write_command(command, timeout=timeout))
-        
+
         async for line in reader_iterator:
             yield line
-            
+
         await write_task
 
     def close(self) -> None:
