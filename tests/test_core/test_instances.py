@@ -93,7 +93,7 @@ class TestInstanceManager:
         """Should return 'no_pid' for instance without PID."""
         await instance_manager.create_instance(name="test", tmux_session="claude-test")
 
-        status = instance_manager.get_instance_status("test")
+        status = await instance_manager.aget_instance_status("test")
         assert status == "no_pid"
 
     @pytest.mark.asyncio
