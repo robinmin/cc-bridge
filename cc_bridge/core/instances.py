@@ -304,40 +304,7 @@ class InstanceManager:
         Returns:
             Actual status string
         """
-        if instance.instance_type == "docker":
-            # Check Docker container status
-            try:
-                from cc_bridge.core.docker_compat import get_docker_client
-
-                # Docker SDK is blocking, wrap in executor for hygiene if in event loop
-                loop = asyncio.get_running_loop()
-                client = await loop.run_in_executor(None, get_docker_client)
-
-                def check_container_status(cid):
-                    try:
-                        container = client.containers.get(cid)
-                        return container.status
-                    except Exception:
-                        return None
-
-                status = await loop.run_in_executor(None, check_container_status, instance.container_id)
-                if status is None:
-                    # Container ID might be stale, try refreshing discovery
-                    logger.info(f"Container {instance.container_id} not found, refreshing discovery...")
-                    await self.refresh_discovery()
-                    
-                    # Try again with potentially updated ID
-                    updated_instance = self._instances.get(instance.name)
-                    if updated_instance and updated_instance.container_id != instance.container_id:
-                        return await loop.run_in_executor(None, check_container_status, updated_instance.container_id) or "stopped"
-                    
-                    return "stopped"
-                
-                return status
-            except Exception as e:
-                logger.warning(f"Error fetching Docker status for {instance.name}: {e}")
-                return "error"
-        else:
+        if instance.instance_type != "docker":
             # Tmux instance - check PID
             if instance.pid is None:
                 return "no_pid"
@@ -348,6 +315,42 @@ class InstanceManager:
                 return "running"
             except OSError:
                 return "stopped"
+
+        # Check Docker container status
+        try:
+            from cc_bridge.core.docker_compat import get_docker_client
+
+            # Docker SDK is blocking, wrap in executor for hygiene if in event loop
+            loop = asyncio.get_running_loop()
+            client = await loop.run_in_executor(None, get_docker_client)
+
+            def check_container_status(cid):
+                try:
+                    container = client.containers.get(cid)
+                    return container.status
+                except Exception:
+                    return None
+
+            status = await loop.run_in_executor(None, check_container_status, instance.container_id)
+            if status is None:
+                # Container ID might be stale, try refreshing discovery
+                logger.info(f"Container {instance.container_id} not found, refreshing discovery...")
+                await self.refresh_discovery()
+
+                # Try again with potentially updated ID
+                updated_instance = self._instances.get(instance.name)
+                if updated_instance and updated_instance.container_id != instance.container_id:
+                    status = await loop.run_in_executor(
+                        None, check_container_status, updated_instance.container_id
+                    )
+
+                if status is None:
+                    status = "stopped"
+
+            return status
+        except Exception as e:
+            logger.warning(f"Error fetching Docker status for {instance.name}: {e}")
+            return "error"
 
     async def update_instance_activity(self, name: str) -> None:
         """
