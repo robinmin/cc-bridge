@@ -93,7 +93,11 @@ class SessionState:
     @property
     def is_active(self) -> bool:
         """Check if session is active (not idle and has active turn)."""
-        return self.status == "active" and not self.is_idle and self.active_turn is not None
+        return (
+            self.status == "active"
+            and not self.is_idle
+            and self.active_turn is not None
+        )
 
     @property
     def success_rate(self) -> float:
@@ -111,7 +115,9 @@ class SessionState:
         self.total_requests += 1
         self.active_turn = turn
 
-    def complete_turn(self, request_id: str, response: str, error: str | None = None) -> None:
+    def complete_turn(
+        self, request_id: str, response: str, error: str | None = None
+    ) -> None:
         """Complete a turn with response."""
         turn = self._find_turn(request_id)
         if turn:
@@ -194,7 +200,9 @@ class SessionTracker:
     def _create_session_unlocked(self, instance_name: str) -> SessionState:
         """Create a new session without acquiring lock (must already hold lock)."""
         if instance_name in self._sessions:
-            self.logger.warning(f"Session already exists for {instance_name}, returning existing")
+            self.logger.warning(
+                f"Session already exists for {instance_name}, returning existing"
+            )
             return self._sessions[instance_name]
 
         session = SessionState(
@@ -264,7 +272,8 @@ class SessionTracker:
             session.status = "active"
 
             self.logger.debug(
-                f"Started request {request_id[:8]} for {instance_name}: " f"{request[:50]}..."
+                f"Started request {request_id[:8]} for {instance_name}: "
+                f"{request[:50]}..."
             )
 
             return request_id, session
@@ -301,7 +310,9 @@ class SessionTracker:
         async with self._lock:
             return {name: session.to_dict() for name, session in self._sessions.items()}
 
-    async def get_history(self, instance_name: str, limit: int = 10) -> list[dict[str, Any]]:
+    async def get_history(
+        self, instance_name: str, limit: int = 10
+    ) -> list[dict[str, Any]]:
         """Get conversation history for an instance."""
         async with self._lock:
             session = self._sessions.get(instance_name)
@@ -382,7 +393,9 @@ class SessionTracker:
                 # Check for idle sessions
                 if session.is_idle:
                     session.status = "idle"
-                    self.logger.info(f"Session {instance_name} is idle ({session.idle_time:.1f}s)")
+                    self.logger.info(
+                        f"Session {instance_name} is idle ({session.idle_time:.1f}s)"
+                    )
                 elif session.status == "idle" and not session.is_idle:
                     session.status = "active"
                     self.logger.info(f"Session {instance_name} is active again")
@@ -391,7 +404,9 @@ class SessionTracker:
                 if timeout_callback and session.is_idle:
                     await timeout_callback(instance_name, session)
 
-    async def cleanup_inactive_sessions(self, max_inactive_time: float = 3600.0) -> list[str]:
+    async def cleanup_inactive_sessions(
+        self, max_inactive_time: float = 3600.0
+    ) -> list[str]:
         """
         Clean up sessions that have been inactive for too long.
 

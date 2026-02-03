@@ -402,7 +402,7 @@ docker exec -it claude-cc-bridge claude --allow-dangerously-skip-permissions
 cc-bridge server
 
 # Step 4: Test via host OS
-make talk msg="Check the weather in Sunnyvale"
+make docker-talk msg="Check the weather in Sunnyvale"
 ```
 
 **Example output:**
@@ -1211,20 +1211,20 @@ For maximum automation, CC-Bridge supports **Real YOLO Mode**. This disables all
 **How to Enable:**
 Update your `dockers/.claude/settings.json` with the YOLO flags (see [Docker Integration Guide](DOCKER_INTEGRATION.md) for details).
 
-### 11.2 The 'make talk' Helper
-Instead of opening a Telegram client to test small things, use the `make talk` helper from your terminal:
+### 11.2 The 'make docker-talk' Helper
+Instead of opening a Telegram client to test small things, use the `make docker-talk` helper from your terminal:
 
 ```bash
-make talk msg="Explain the CC-Bridge architecture in one sentence"
+make docker-talk msg="Explain the CC-Bridge architecture in one sentence"
 ```
 
-This runs the command directly in the container using the bridge agent and returns the output immediately to your shell.
+This is equivalent to sending a message to your bot but happens instantly over the Docker stream.
 
-### 11.3 Performance Monitoring
-Stream bridge logs in real-time to monitor Kirin's activity:
+### 11.3 System Monitoring
+To keep an eye on everything, we recommend keeping a terminal window open with the server logs:
 
 ```bash
-make monitor
+make logs-monitor
 ```
 
 This section is for users who need fine-grained control over CC-Bridge beyond the automated setup.

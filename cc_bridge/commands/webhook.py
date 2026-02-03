@@ -1,123 +1,149 @@
 """
-Webhook command implementation.
+Webhook management command for Telegram.
 
-This module implements manual webhook management commands:
-- Set webhook
-- Test webhook
-- Delete webhook
+This module provides CLI commands for manually setting, getting, and deleting
+Telegram bot webhooks.
 """
 
-import sys
+import asyncio
+from typing import Annotated, Optional
 
 import httpx
+import typer
+
+from cc_bridge.config import get_config
+from cc_bridge.core.telegram import TelegramClient
+from cc_bridge.packages.logging import get_logger
+
+logger = get_logger(__name__)
+
+app = typer.Typer(help="Manage Telegram bot webhooks")
 
 
-async def set_webhook(url: str, bot_token: str) -> bool:
-    """
-    Set Telegram webhook URL.
+async def set_webhook(url: str) -> bool:
+    """Set the Telegram bot webhook URL."""
+    config = get_config()
+    bot_token = config.get("telegram.bot_token")
 
-    Args:
-        url: Webhook URL
-        bot_token: Telegram bot token
+    if not bot_token:
+        logger.error("telegram.bot_token not found in configuration")
+        return False
 
-    Returns:
-        True if webhook set successfully
-    """
-    # TODO: Implement webhook setting (Task 0011)
-    api_url = f"https://api.telegram.org/bot{bot_token}/setWebhook"
-    async with httpx.AsyncClient() as client:
-        response = await client.post(api_url, json={"url": url})
-        return response.json().get("ok", False)
-
-
-async def get_webhook_info(bot_token: str) -> dict:
-    """
-    Get current webhook information.
-
-    Args:
-        bot_token: Telegram bot token
-
-    Returns:
-        Webhook information
-    """
-    # TODO: Implement webhook info retrieval (Task 0011)
-    api_url = f"https://api.telegram.org/bot{bot_token}/getWebhookInfo"
-    async with httpx.AsyncClient() as client:
-        response = await client.get(api_url)
-        return response.json()
+    async with TelegramClient(bot_token) as client:
+        try:
+            result = await client.set_webhook(url)
+            return result.get("ok", False)
+        except Exception as e:
+            logger.error(f"Failed to set webhook: {e}")
+            return False
 
 
-async def delete_webhook(bot_token: str) -> bool:
-    """
-    Delete Telegram webhook.
+async def get_webhook_info() -> dict:
+    """Get current Telegram bot webhook information."""
+    config = get_config()
+    bot_token = config.get("telegram.bot_token")
 
-    Args:
-        bot_token: Telegram bot token
+    if not bot_token:
+        logger.error("telegram.bot_token not found in configuration")
+        return {"ok": False, "error": "Missing bot token"}
 
-    Returns:
-        True if webhook deleted successfully
-    """
-    # TODO: Implement webhook deletion (Task 0011)
-    api_url = f"https://api.telegram.org/bot{bot_token}/deleteWebhook"
-    async with httpx.AsyncClient() as client:
-        response = await client.post(api_url)
-        return response.json().get("ok", False)
-
-
-async def test_webhook(bot_token: str) -> bool:
-    """
-    Test webhook by sending a test request.
-
-    Args:
-        bot_token: Telegram bot token
-
-    Returns:
-        True if webhook test succeeded
-    """
-    # TODO: Implement webhook test (Task 0011)
-    info = await get_webhook_info(bot_token)
-    return info.get("ok", False)
+    async with TelegramClient(bot_token) as client:
+        try:
+            return await client.get_webhook_info()
+        except Exception as e:
+            logger.error(f"Failed to get webhook info: {e}")
+            return {"ok": False, "error": str(e)}
 
 
-async def main(action: str, url: str | None = None) -> int:
-    """
-    Main entry point for webhook command.
+async def delete_webhook() -> bool:
+    """Delete the Telegram bot webhook."""
+    config = get_config()
+    bot_token = config.get("telegram.bot_token")
 
-    Args:
-        action: Action to perform (set, test, delete, info)
-        url: Webhook URL (for set action)
+    if not bot_token:
+        logger.error("telegram.bot_token not found in configuration")
+        return False
 
-    Returns:
-        Exit code (0 for success, 1 for error)
-    """
+    async with TelegramClient(bot_token) as client:
+        try:
+            result = await client.delete_webhook()
+            return result.get("ok", False)
+        except Exception as e:
+            logger.error(f"Failed to delete webhook: {e}")
+            return False
+
+
+async def test_webhook(url: str) -> bool:
+    """Test a webhook URL by sending a mock update."""
+    config = get_config()
+    chat_id = config.get("telegram.chat_id", 1)
+
+    payload = {
+        "update_id": 1,
+        "message": {
+            "message_id": 1,
+            "from": {"id": chat_id, "is_bot": False, "first_name": "Test"},
+            "chat": {"id": chat_id, "type": "private"},
+            "date": 123456789,
+            "text": "/status",
+        },
+    }
+
     try:
-        # TODO: Get bot token from config (Task 0011)
-        bot_token = "your_bot_token"
-
-        if action == "set":
-            if not url:
-                print("Error: --url required for set action")
-                return 1
-            success = await set_webhook(url, bot_token)
-            print(f"Webhook {'set' if success else 'failed to set'}")
-
-        elif action == "test":
-            success = await test_webhook(bot_token)
-            print(f"Webhook {'passed' if success else 'failed'} test")
-
-        elif action == "delete":
-            success = await delete_webhook(bot_token)
-            print(f"Webhook {'deleted' if success else 'failed to delete'}")
-
-        elif action == "info":
-            info = await get_webhook_info(bot_token)
-            print(f"Webhook info: {info}")
-
-        else:
-            print(f"Unknown action: {action}")
-            return 1
-
-        return 0 if success else 1
+        async with httpx.AsyncClient() as client:
+            response = await client.post(url, json=payload, timeout=10.0)
+            if response.status_code == 200:
+                print(f"✅ Webhook test successful: {response.json()}")
+                return True
+            else:
+                print(
+                    f"❌ Webhook test failed (HTTP {response.status_code}): {response.text}"
+                )
+                return False
     except Exception as e:
-        print(f"Error: {e}", file=sys.stderr)
-        return 1
+        print(f"❌ Webhook test failed with error: {e}")
+        return False
+
+
+@app.command()
+def main(
+    set: Annotated[Optional[str], typer.Option("--set", help="Set webhook URL")] = None,
+    get: Annotated[
+        bool, typer.Option("--get", help="Get current webhook info")
+    ] = False,
+    delete: Annotated[
+        bool, typer.Option("--delete", help="Delete current webhook")
+    ] = False,
+    test: Annotated[
+        Optional[str],
+        typer.Option("--test", help="Test a webhook URL with a mock update"),
+    ] = None,
+):
+    """
+    Manage Telegram bot webhooks.
+    """
+    if set:
+        if asyncio.run(set_webhook(set)):
+            print(f"✅ Webhook set to: {set}")
+        else:
+            print("❌ Failed to set webhook.")
+            raise typer.Exit(1)
+    elif get:
+        info = asyncio.run(get_webhook_info())
+        print(f"📊 Webhook Info: {info}")
+    elif delete:
+        if asyncio.run(delete_webhook()):
+            print("✅ Webhook deleted.")
+        else:
+            print("❌ Failed to delete webhook.")
+            raise typer.Exit(1)
+    elif test:
+        if not asyncio.run(test_webhook(test)):
+            raise typer.Exit(1)
+    else:
+        print("Please specify an action (--set, --get, --delete, or --test).")
+        print("Use --help for more information.")
+
+
+if __name__ == "__main__":
+    app()

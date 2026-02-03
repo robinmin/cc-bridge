@@ -94,7 +94,7 @@ class DockerDiscoverer:
         try:
             containers = client.containers.list(
                 filters={"label": self.container_label},
-                all=False,  # Only running containers
+                all=True,  # Include stopped containers
             )
 
             for container in containers:
@@ -120,7 +120,7 @@ class DockerDiscoverer:
         instances = []
 
         try:
-            containers = client.containers.list(all=False)  # Only running containers
+            containers = client.containers.list(all=True)  # Include stopped containers
 
             for container in containers:
                 image_name = container.image.tags[0] if container.image.tags else ""
@@ -147,7 +147,7 @@ class DockerDiscoverer:
         instances = []
 
         try:
-            containers = client.containers.list(all=False)  # Only running containers
+            containers = client.containers.list(all=True)  # Include stopped containers
 
             for container in containers:
                 # Check if container has a 'claude' process running
@@ -200,13 +200,17 @@ class DockerDiscoverer:
                 status="running" if container.status == "running" else "stopped",
                 container_id=container.id,
                 container_name=container.name,
-                image_name=container.image.tags[0] if container.image.tags else container.image.id,
+                image_name=container.image.tags[0]
+                if container.image.tags
+                else container.image.id,
                 docker_network=network_name,
                 created_at=datetime.now(),
             )
 
         except Exception as e:
-            logger.warning(f"Failed to convert container {container.id} to instance: {e}")
+            logger.warning(
+                f"Failed to convert container {container.id} to instance: {e}"
+            )
             return None
 
     def discover_by_name(self, name: str) -> ClaudeInstance | None:

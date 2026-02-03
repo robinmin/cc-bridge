@@ -105,13 +105,13 @@ curl http://localhost:8080/health
 
 ```bash
 # Start the service
-make start
+make agent-start
 
 # Stop the service
-make stop
+make agent-stop
 
 # Restart the service
-make restart
+make agent-restart
 ```
 
 **Using launchctl directly:**

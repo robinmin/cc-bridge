@@ -83,7 +83,9 @@ class NamedPipeChannel(AsyncContextManagerType["NamedPipeChannel"]):
                 self.logger.warning(f"Could not set permissions on {pipe_path}: {e}")
 
         self._pipes_created = True
-        self.logger.info(f"Named pipes created: {self.input_pipe_path}, {self.output_pipe_path}")
+        self.logger.info(
+            f"Named pipes created: {self.input_pipe_path}, {self.output_pipe_path}"
+        )
 
     async def write_command(self, text: str, timeout: float = 30.0) -> None:
         """
@@ -166,7 +168,9 @@ class NamedPipeChannel(AsyncContextManagerType["NamedPipeChannel"]):
                     # Check timeout
                     elapsed = loop.time() - start_time
                     if elapsed > timeout:
-                        raise asyncio.TimeoutError(f"Read timeout after {timeout} seconds")
+                        raise asyncio.TimeoutError(
+                            f"Read timeout after {timeout} seconds"
+                        )
 
                     try:
                         # Try to read data (non-blocking for the actual read loop)
@@ -204,33 +208,28 @@ class NamedPipeChannel(AsyncContextManagerType["NamedPipeChannel"]):
         except OSError as e:
             raise RuntimeError(f"Failed to read from pipe: {e}") from e
 
-    async def send_and_receive(self, command: str, timeout: float = 30.0) -> AsyncIterator[str]:
+    async def send_and_receive(
+        self, command: str, timeout: float = 30.0
+    ) -> AsyncIterator[str]:
         """
         Send command and stream response.
 
-        Convenience method that combines write_command and read_response.
-        Opens reader and writer in parallel to avoid FIFO deadlocks.
+        Writes command first (unblocking agent's read), then reads response.
+        This ordering is critical to avoid FIFO deadlock.
 
         Args:
             command: Command to send
             timeout: Maximum time to wait for response
         """
-        # Start reading task in background so it can handshake concurrently with writer
-        reader_iterator = self.read_response(timeout=timeout)
+        self.logger.info(f"[FIFO] Sending command ({len(command)} chars)...")
 
-        # We need to start the iterator to trigger the open call
-        # But wait, read_response is an async generator, the code inside only runs
-        # when we start iterating.
+        # CRITICAL: Write first to unblock the agent's input pipe read
+        await self.write_command(command, timeout=timeout)
+        self.logger.info("[FIFO] Command written, now waiting for response...")
 
-        # Let's refactor to ensure the reader open happens concurrently.
-        # Actually, the simplest way is to put the write and read in separate tasks.
-
-        write_task = asyncio.create_task(self.write_command(command, timeout=timeout))
-
-        async for line in reader_iterator:
+        # Now read the response (agent should be processing and writing to output pipe)
+        async for line in self.read_response(timeout=timeout):
             yield line
-
-        await write_task
 
     def close(self) -> None:
         """

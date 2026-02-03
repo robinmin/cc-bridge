@@ -92,6 +92,16 @@ addopts = [
     "--cov-report=html",
 ]
 asyncio_mode = "auto"
+
+[tool.ruff]
+# Allow appropriate complexity for complex functions
+# per-file-ignores = [
+#     "cc_bridge/commands/hook_stop.py: ["PLR0912"],  # parse_claude_transcript - complex parsing
+#     "cc_bridge/core/health_monitor.py: ["PLR0911", "PLR0912"],  # check functions - comprehensive error handling
+#     "cc_bridge/core/webhook_server.py": ["PLR0915"],  # create_webhook_app - app factory pattern
+# ]
+ignore = ["PLR0911", "PLR0912", "PLR0915"]
+
 markers = [
     "asyncio: mark test as async",
     "integration: mark test as integration test",

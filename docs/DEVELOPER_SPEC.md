@@ -135,7 +135,6 @@ CC-Bridge is a production-ready Python application that bridges Telegram bots wi
 ├── logging.py                # Logging setup
 ├── commands/                 # CLI command implementations
 │   ├── server.py            # FastAPI server command
-│   ├── webhook.py           # Webhook management
 │   ├── claude.py            # Claude instance management
 │   ├── health.py            # Health checks
 │   ├── setup.py             # Setup wizard
@@ -1159,7 +1158,7 @@ def test_config_deep_merge(test_config_dir: Path):
 
 ```bash
 # Run all tests
-make test
+make code-test
 
 # Run specific test file
 uv run pytest tests/test_config.py
@@ -1189,7 +1188,7 @@ git clone https://github.com/hanxiao/claudecode-telegram
 cd cc-bridge
 
 # Install dependencies
-make install
+make env-install
 
 # Create development config
 cp example.config.toml ~/.claude/bridge/config.toml
@@ -1210,33 +1209,33 @@ export TMUX_SESSION="claude"
 2. **Run Tests**
    ```bash
    # Run affected tests
-   make test
+   make code-test
    ```
 
 3. **Type Check**
    ```bash
-   make typecheck
+   make code-typecheck
    ```
 
 4. **Lint**
    ```bash
-   make lint
+   make code-lint
    ```
 
 5. **Format**
    ```bash
-   make format
+   make code-format
    ```
 
 6. **Run All Checks**
    ```bash
-   make all
+   make code-all
    ```
 
 7. **Test Manually**
    ```bash
    # Run dev server
-   make dev
+   make bridge-dev
    ```
 
 ### 8.3 Code Quality Standards

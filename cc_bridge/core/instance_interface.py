@@ -51,7 +51,9 @@ class InstanceInterface(ABC):
         pass
 
     @abstractmethod
-    async def send_command_and_wait(self, text: str, timeout: float = 30.0) -> tuple[bool, str]:
+    async def send_command_and_wait(
+        self, text: str, timeout: float = 30.0
+    ) -> tuple[bool, str]:
         """
         Send a command and wait for completion.
 
@@ -127,7 +129,9 @@ class InstanceInterface(ABC):
 class InstanceOperationError(Exception):
     """Base exception for instance operation errors."""
 
-    def __init__(self, message: str, instance_name: str, original_error: Exception | None = None):
+    def __init__(
+        self, message: str, instance_name: str, original_error: Exception | None = None
+    ):
         """
         Initialize instance operation error.
 
@@ -287,12 +291,14 @@ class DockerInstance(InstanceInterface):
         config = get_config()
 
         # Determine communication mode (from instance or config default)
-        self.communication_mode = instance.communication_mode or config.get("docker", {}).get(
-            "communication_mode", "fifo"
-        )
+        self.communication_mode = instance.communication_mode or config.get(
+            "docker", {}
+        ).get("communication_mode", "fifo")
 
         # Pipe directory for FIFO communication
-        self.pipe_dir = pipe_dir or config.get("docker", {}).get("pipe_dir", "/tmp/cc-bridge/pipes")
+        self.pipe_dir = pipe_dir or config.get("docker", {}).get(
+            "pipe_dir", "/tmp/cc-bridge/pipes"
+        )
 
         # Expand ${PROJECT_NAME} in pipe_dir
         project_name = config.get("project_name", "cc-bridge")
@@ -322,7 +328,9 @@ class DockerInstance(InstanceInterface):
                     return
                 self.process = None
 
-            self.logger.info(f"Starting 'docker exec' for container {self.instance.container_id}")
+            self.logger.info(
+                f"Starting 'docker exec' for container {self.instance.container_id}"
+            )
 
             # Start the container agent via docker exec
             # We set PYTHONPATH to ensure it uses the volume-mounted code
@@ -331,15 +339,13 @@ class DockerInstance(InstanceInterface):
                 "docker",
                 "exec",
                 "-i",
+                # Pass log level env var
                 "-e",
-                "PYTHONPATH=.",
+                "AGENT_LOG_LEVEL=DEBUG",
                 str(self.instance.container_id),
-                "python3",
-                "-m",
-                "cc_bridge.agents.container_agent",
-                "--log-level",
-                "DEBUG",
-                "--claude-args=--allow-dangerously-skip-permissions",
+                "bun",
+                "run",
+                "cc_bridge/agents/container_agent.ts",
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
@@ -363,10 +369,104 @@ class DockerInstance(InstanceInterface):
 
                 log_line = line.decode("utf-8", errors="ignore").strip()
                 if log_line:
-                    self.logger.info(f"[AGENT] {log_line}")
+                    from cc_bridge.config import get_config
+
+                    config = get_config()
+                    project = config.get("project_name", "cc-bridge")
+                    self.logger.info(
+                        f"[agent:{project}:{self.instance.name}] {log_line}"
+                    )
 
         except Exception as e:
             self.logger.error(f"Error relaying agent stderr: {e}")
+
+    async def _is_agent_running(self) -> bool:
+        """Check if the container agent is running inside the container."""
+        if not self.docker_client:
+            self.logger.debug("[agent-check] No Docker client available")
+            return False
+
+        try:
+            container = self.docker_client.containers.get(self.instance.container_id)
+            if container.status != "running":
+                self.logger.info(
+                    f"[agent-check] Container not running (status={container.status})"
+                )
+                return False
+
+            # Use ps aux to check for agent process
+            result = container.exec_run("ps aux")
+            output = result.output.decode("utf-8", errors="ignore")
+            is_running = "cc_bridge.agents.container_agent" in output
+            self.logger.info(f"[agent-check] Agent running: {is_running}")
+            return is_running
+        except Exception as e:
+            self.logger.info(f"[agent-check] Check failed: {e}")
+            return False
+
+    async def _ensure_agent_running(self) -> None:
+        """Ensure the container agent is running (for FIFO mode)."""
+        if await self._is_agent_running():
+            self.logger.info(
+                f"[agent-startup] Agent already running for {self.instance.name}, skipping startup"
+            )
+            return
+
+        self.logger.info(
+            f"[agent-startup] Starting container agent for {self.instance.name} in daemon mode"
+        )
+
+        # Build the command to run in the container
+        # We use -d (detached) to run it as a daemon
+        try:
+            # We must use docker exec -d via subprocess or SDK
+            # The SDK's exec_run(detach=True) is one way,
+            # but sometimes it's more reliable to use the CLI for detached background processes
+            cmd = [
+                "docker",
+                "exec",
+                # Remove -d to keep attached for stdout/stderr capture
+                "-i",
+                str(self.instance.container_id),
+                "python3",
+                "-m",
+                "cc_bridge.agents.container_agent",
+                "--mode",
+                "daemon",
+                f"--input-pipe=/tmp/cc-bridge-pipes/{self.instance.name}.in.fifo",
+                f"--output-pipe=/tmp/cc-bridge-pipes/{self.instance.name}.out.fifo",
+                '--claude-args="--allow-dangerously-skip-permissions"',
+            ]
+
+            self.process = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+
+            # Start relay task for stderr (logs)
+            task = asyncio.create_task(self._relay_agent_stderr())
+            self._background_tasks.add(task)
+            task.add_done_callback(self._background_tasks.discard)
+
+            # Wait a moment for agent to initialize
+            await asyncio.sleep(2)
+
+            if self.process.returncode is not None:
+                stdout, stderr = await self.process.communicate()
+                self.logger.error(f"Agent failed to start: {stderr.decode()}")
+                raise InstanceOperationError(
+                    f"Agent startup failed with code {self.process.returncode}",
+                    self.instance.name,
+                )
+
+        except Exception as e:
+            self.logger.error(f"Error starting agent: {e}")
+            raise InstanceOperationError(
+                f"Failed to start container agent: {e}",
+                self.instance.name,
+                e,
+            ) from e
 
     async def _ensure_fifo_initialized(self) -> None:
         """Ensure FIFO pipes are created and ready."""
@@ -386,13 +486,18 @@ class DockerInstance(InstanceInterface):
             f"{self._pipe_channel.output_pipe_path}"
         )
 
-    async def _send_command_fifo(self, text: str) -> AsyncIterator[str]:
+    async def _send_command_fifo(
+        self, text: str, timeout: float = 120.0
+    ) -> AsyncIterator[str]:
         """Send command via named pipes (daemon mode) with session tracking."""
         if not self.is_running():
             raise InstanceOperationError(
                 "Container is not running",
                 self.instance.name,
             )
+
+        # Ensure agent is running in the container
+        await self._ensure_agent_running()
 
         await self._ensure_fifo_initialized()
 
@@ -411,15 +516,29 @@ class DockerInstance(InstanceInterface):
 
         try:
             # Start request in session tracker
-            request_id, session = await session_tracker.start_request(self.instance.name, text)
+            request_id, session = await session_tracker.start_request(
+                self.instance.name, text
+            )
 
             # Send command and stream response via FIFO
+            start_time = asyncio.get_running_loop().time()
+            self.logger.info(
+                f"[{self.instance.name}] Waiting for response (timeout={timeout}s)..."
+            )
+
             async for line in self._pipe_channel.send_and_receive(
                 command=text,
-                timeout=60.0,  # Longer timeout for daemon mode
+                timeout=timeout,
             ):
                 response_buffer.append(line)
                 yield line
+
+            elapsed = asyncio.get_running_loop().time() - start_time
+            total_chars = sum(len(x) for x in response_buffer)
+            self.logger.info(
+                f"[{self.instance.name}] Response received in {elapsed:.2f}s "
+                f"({total_chars} chars)"
+            )
 
             # Complete request successfully
             await session_tracker.complete_request(
@@ -430,7 +549,14 @@ class DockerInstance(InstanceInterface):
             )
 
         except asyncio.TimeoutError:
-            self.logger.warning("FIFO communication timed out")
+            elapsed = (
+                asyncio.get_running_loop().time() - start_time
+                if "start_time" in locals()
+                else -1
+            )
+            self.logger.warning(
+                f"[{self.instance.name}] Timeout waiting for response after {elapsed:.2f}s"
+            )
             # Complete request with error
             if request_id:
                 await session_tracker.complete_request(
@@ -440,7 +566,7 @@ class DockerInstance(InstanceInterface):
                     error="Request timeout",
                 )
             raise InstanceOperationError(
-                "FIFO communication timed out",
+                f"FIFO communication timed out after {elapsed:.2f}s",
                 self.instance.name,
             ) from None
         except Exception as e:
@@ -459,7 +585,9 @@ class DockerInstance(InstanceInterface):
                 e,
             ) from e
 
-    async def _send_command_exec(self, text: str) -> AsyncIterator[str]:
+    async def _send_command_exec(
+        self, text: str, timeout: float = 120.0
+    ) -> AsyncIterator[str]:
         """Send command via docker exec (legacy mode)."""
         if not self.is_running():
             raise InstanceOperationError(
@@ -481,20 +609,42 @@ class DockerInstance(InstanceInterface):
             self.process.stdin.write(data)
             await self.process.stdin.drain()
 
+            start_time = asyncio.get_running_loop().time()
+            self.logger.info(f"[{self.instance.name}] Waiting for exec response...")
+            response_buffer = []
+
             # Read response from agent stdout
             while True:
                 # Use chunked read instead of readline to avoid hangs on non-newline output
-                chunk = await asyncio.wait_for(self.process.stdout.read(1024), timeout=30.0)
+                chunk = await asyncio.wait_for(
+                    self.process.stdout.read(1024), timeout=30.0
+                )
                 if not chunk:
                     break
 
-                yield chunk.decode("utf-8", errors="ignore")
+                decoded_chunk = chunk.decode("utf-8", errors="ignore")
+                response_buffer.append(decoded_chunk)
+                yield decoded_chunk
 
                 if self.process.returncode is not None:
                     break
 
+            elapsed = asyncio.get_running_loop().time() - start_time
+            total_chars = sum(len(x) for x in response_buffer)
+            self.logger.info(
+                f"[{self.instance.name}] Exec response received in {elapsed:.2f}s "
+                f"({total_chars} chars)"
+            )
+
         except asyncio.TimeoutError:
-            self.logger.warning("Read from exec stream timed out")
+            elapsed = (
+                asyncio.get_running_loop().time() - start_time
+                if "start_time" in locals()
+                else -1
+            )
+            self.logger.warning(
+                f"[{self.instance.name}] Exec stream timed out after {elapsed:.2f}s"
+            )
         except Exception as e:
             self.logger.error(f"Error in exec stream: {e}")
             raise InstanceOperationError(
@@ -503,23 +653,27 @@ class DockerInstance(InstanceInterface):
                 e,
             ) from e
 
-    async def send_command(self, text: str) -> AsyncIterator[str]:  # type: ignore[override]
+    async def send_command(
+        self, text: str, timeout: float = 120.0
+    ) -> AsyncIterator[str]:  # type: ignore[override]
         """Send command to Docker container via configured communication mode."""
         # Route to appropriate implementation based on communication mode
         if self.communication_mode == "fifo":
             self.logger.debug(f"Using FIFO mode for command to {self.instance.name}")
-            async for line in self._send_command_fifo(text):
+            async for line in self._send_command_fifo(text, timeout=timeout):
                 yield line
         else:  # exec mode (legacy)
             self.logger.debug(f"Using exec mode for command to {self.instance.name}")
-            async for line in self._send_command_exec(text):
+            async for line in self._send_command_exec(text, timeout=timeout):
                 yield line
 
-    async def send_command_and_wait(self, text: str, timeout: float = 30.0) -> tuple[bool, str]:  # noqa: ARG002
+    async def send_command_and_wait(
+        self, text: str, timeout: float = 120.0
+    ) -> tuple[bool, str]:
         """Send command to Docker container and wait for completion."""
         try:
             output_parts = []
-            async for line in self.send_command(text):
+            async for line in self.send_command(text, timeout=timeout):
                 output_parts.append(line)
 
             output = "".join(output_parts)
@@ -557,15 +711,25 @@ class DockerInstance(InstanceInterface):
             if not self.docker_client:
                 return False
 
-            self.logger.info(f"Attempting to start Docker container {self.instance.container_id}")
+            self.logger.info(
+                f"Attempting to start Docker container {self.instance.container_id}"
+            )
             try:
-                container = self.docker_client.containers.get(self.instance.container_id)
+                container = self.docker_client.containers.get(
+                    self.instance.container_id
+                )
                 container.start()
                 # Wait a moment for status to update
                 await asyncio.sleep(1)
                 # Refresh container status
                 container.reload()
-                return container.status == "running"
+
+                if container.status == "running":
+                    # If in FIFO mode, also start the agent
+                    if self.communication_mode == "fifo":
+                        await self._ensure_agent_running()
+                    return True
+                return False
             except Exception as e:
                 self.logger.error(f"Failed to start Docker container: {e}")
                 return False
@@ -593,7 +757,9 @@ class DockerInstance(InstanceInterface):
                 "network": self.instance.docker_network,
                 "status": container.status,
                 "communication_mode": self.communication_mode,
-                "pipe_dir": self.pipe_dir if self.communication_mode == "fifo" else None,
+                "pipe_dir": self.pipe_dir
+                if self.communication_mode == "fifo"
+                else None,
                 "fifo_initialized": self._fifo_initialized,
                 "created": attrs.get("Created"),
                 "ports": attrs.get("NetworkSettings", {}).get("Ports", {}),

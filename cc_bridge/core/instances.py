@@ -65,7 +65,9 @@ class InstanceManager:
             auto_discover: Whether to auto-discover Docker instances on init
             docker_enabled: Whether Docker instances are enabled
         """
-        self.instances_file = Path(instances_file or self.DEFAULT_INSTANCES_FILE).expanduser()
+        self.instances_file = Path(
+            instances_file or self.DEFAULT_INSTANCES_FILE
+        ).expanduser()
         self.instances_file.parent.mkdir(parents=True, exist_ok=True)
         self._instances: dict[str, ClaudeInstance] = {}
         self._auto_discover = auto_discover
@@ -84,6 +86,21 @@ class InstanceManager:
                 data = json.loads(self.instances_file.read_text())
                 instances_data = InstancesData.model_validate(data)
                 self._instances = instances_data.instances
+
+                # Clear stale tmux PIDs on load to prevent watchdog warnings
+                for name, instance in self._instances.items():
+                    if instance.instance_type == "tmux" and instance.pid:
+                        try:
+                            # Signal 0 checks if process exists
+                            os.kill(instance.pid, 0)
+                        except OSError:
+                            # Process is dead, clear PID and set status
+                            logger.info(
+                                f"Clearing stale PID {instance.pid} for tmux instance {name}"
+                            )
+                            instance.pid = None
+                            instance.status = "stopped"
+
                 logger.debug("Loaded instances", instances=list(self._instances.keys()))
             except Exception as e:
                 logger.warning("Failed to load instances", error=str(e))
@@ -282,7 +299,9 @@ class InstanceManager:
         actual_status = await self._afetch_actual_status(instance)
 
         # Update cache
-        self._status_cache[name] = CachedStatus(status=actual_status, timestamp=datetime.now())
+        self._status_cache[name] = CachedStatus(
+            status=actual_status, timestamp=datetime.now()
+        )
 
         # Update metadata if status changed
         if instance.status != actual_status:
@@ -331,15 +350,22 @@ class InstanceManager:
                 except Exception:
                     return None
 
-            status = await loop.run_in_executor(None, check_container_status, instance.container_id)
+            status = await loop.run_in_executor(
+                None, check_container_status, instance.container_id
+            )
             if status is None:
                 # Container ID might be stale, try refreshing discovery
-                logger.info(f"Container {instance.container_id} not found, refreshing discovery...")
+                logger.info(
+                    f"Container {instance.container_id} not found, refreshing discovery..."
+                )
                 await self.refresh_discovery()
 
                 # Try again with potentially updated ID
                 updated_instance = self._instances.get(instance.name)
-                if updated_instance and updated_instance.container_id != instance.container_id:
+                if (
+                    updated_instance
+                    and updated_instance.container_id != instance.container_id
+                ):
                     status = await loop.run_in_executor(
                         None, check_container_status, updated_instance.container_id
                     )
@@ -393,7 +419,9 @@ class InstanceManager:
                         existing.container_name = instance.container_name
                         existing.image_name = instance.image_name
                         existing.docker_network = instance.docker_network
-                        logger.debug(f"Updated Docker instance metadata: {instance.name}")
+                        logger.debug(
+                            f"Updated Docker instance metadata: {instance.name}"
+                        )
 
                 if discovered:
                     self._save()

@@ -34,7 +34,9 @@ class LoggingConfig(BaseModel):
 
     level: str = Field(default="INFO", description="Log level")
     format: str = Field(default="json", description="Log format (json or text)")
-    file: str = Field(default="~/.claude/bridge/logs/bridge.log", description="Log file path")
+    file: str = Field(
+        default="~/.claude/bridge/logs/bridge.log", description="Log file path"
+    )
     max_bytes: int = Field(default=10485760, description="Max log file size in bytes")
     backup_count: int = Field(default=5, ge=0, description="Number of backup files")
 

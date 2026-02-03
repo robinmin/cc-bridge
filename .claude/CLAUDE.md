@@ -70,7 +70,7 @@ cc-bridge/
 │   └── CLAUDE.md               # This file - project instructions for Claude
 │
 ├── cc_bridge/                 # Main application package
-│   ├── __init__.py             # Package init with backward compatibility proxies
+│   ├── __init__.py             # Package init
 │   ├── cli.py                  # Main Typer CLI entry point
 │   ├── config.py               # Layered configuration (CLI/Env/TOML)
 │   ├── constants.py            # Shared system-wide constants
@@ -83,31 +83,31 @@ cc-bridge/
 │   │   ├── bot.py              # Telegram bot command synchronization
 │   │   ├── claude.py           # Instance lifecycle management (start/stop/list)
 │   │   ├── config.py           # Configuration management CLI
-│   │   ├── cron.py             # Periodic background tasks
 │   │   ├── docker_cmd.py       # Docker instance management commands
 │   │   ├── health.py           # System status and diagnostic CLI
 │   │   ├── hook_stop.py        # Terminal hook for Claude response completion
-│   │   ├── logs.py             # Log management and streaming CLI
-│   │   ├── server.py           # FastAPI Webhook Server (primary bridge logic)
+│   │   ├── server.py           # FastAPI Webhook Server entry point
 │   │   ├── setup.py            # Interactive project setup wizard
 │   │   ├── tunnel.py           # cloudflared tunnel lifecycle management
-│   │   └── webhook.py          # Manual webhook and port management tools
+│   │   └── webhook.py          # Manual webhook management tools
 │   │
 │   ├── core/                   # Core Business Logic & Infrastructure
-│   │   ├── claude.py           # Low-level Claude Code CLI wrappers
 │   │   ├── docker_compat.py    # Docker SDK initialization and compatibility
 │   │   ├── docker_discovery.py # Automatic detection of compatible containers
 │   │   ├── docker_errors.py    # Specialized Docker exception handling
 │   │   ├── health_monitor.py   # Background health check logic
-│   │   ├── instance_detector.py# Multi-adapter instance state detection
 │   │   ├── instance_interface.py# Abstract base + adapters for Docker/Tmux parity
+│   │   ├── instance_lifecycle.py# Low-level instance lifecycle (tmux/path logic)
+│   │   ├── instance_operations.py# High-level instance orchestration
 │   │   ├── instances.py        # Persistence layer for instance state (instances.json)
 │   │   ├── named_pipe.py       # FIFO-based IPC for daemon-mode Docker
-│   │   ├── parser.py           # Result parsing and stream cleaning
-│   │   ├── session_tracker.py  # Async state tracking for request/response pairs
 │   │   ├── telegram.py         # Httpx wrapper for Telegram Bot API
-│   │   ├── tmux.py             # Low-level tmux keys injection and pane capture
-│   │   └── validation.py       # Input sanitization and safety checks
+│   │   ├── validation.py       # Input sanitization and safety checks
+│   │   └── webhook/            # FastAPI Webhook Server implementation
+│   │       ├── app.py          # App factory and lifespan
+│   │       ├── handlers.py     # Request handlers
+│   │       ├── middleware.py   # Rate limiting and graceful shutdown
+│   │       └── utils.py        # Text cleaning and sanitization
 │   │
 │   ├── packages/               # Reusable cross-cutting utilities
 │   │   ├── exceptions.py       # Generic system-wide exception definitions
@@ -117,6 +117,16 @@ cc-bridge/
 │       ├── config.py           # Configuration schema
 │       ├── instances.py        # Instance state schema
 │       └── telegram.py         # Telegram update/message schema
+│
+├── tests/                      # Comprehensive test suite
+│   ├── unit/                    # Unit tests (isolated component testing)
+│   │   ├── commands/           # CLI command tests
+│   │   ├── core/               # Core business logic tests
+│   │   ├── models/             # Pydantic model tests
+│   │   └── test_*.py           # Other unit test files
+│   │
+│   └── integration/             # Integration tests (end-to-end workflows)
+│       └── test_fifo_communication.py
 │
 ├── contrib/                    # System Integration & OS-level assets
 │   ├── cc-bridge.rb            # Homebrew Formula

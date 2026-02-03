@@ -1,55 +1,28 @@
-import asyncio
-import sys
+"""
+Bot command management for Telegram.
 
-import httpx
+This module provides CLI commands for managing Telegram bot commands.
+Bot command logic has been moved to TelegramClient in core/telegram.py.
+"""
+
+import asyncio
+
 import typer
 
 from cc_bridge.config import get_config
+from cc_bridge.core.telegram import DEFAULT_BOT_COMMANDS, TelegramClient
 
 app = typer.Typer(help="Manage Telegram bot commands")
-
-
-async def set_bot_commands(bot_token: str, commands: list[dict]) -> bool:
-    """
-    Set bot commands for Telegram.
-
-    Args:
-        bot_token: Telegram bot token
-        commands: List of command dictionaries
-
-    Returns:
-        True if commands set successfully
-    """
-    api_url = f"https://api.telegram.org/bot{bot_token}/setMyCommands"
-
-    async with httpx.AsyncClient() as client:
-        response = await client.post(api_url, json={"commands": commands})
-        result = response.json()
-        if not result.get("ok"):
-            print(f"Error from Telegram: {result.get('description')}")
-        return result.get("ok", False)
-
-
-def get_default_commands() -> list[dict]:
-    """
-    Get default bot commands.
-
-    Returns:
-        List of command dictionaries
-    """
-    return [
-        {"command": "status", "description": "Check service status"},
-        {"command": "clear", "description": "Clear Claude conversation"},
-        {"command": "stop", "description": "Interrupt Claude current action"},
-        {"command": "resume", "description": "Resumes the last active session"},
-        {"command": "help", "description": "Show help message"},
-    ]
 
 
 @app.command()
 def sync():
     """
     Sync bot commands to Telegram.
+
+    This command sets the default bot commands for the Telegram bot.
+    Commands are automatically configured during setup, but this command
+    can be used to manually reset or update them.
     """
     config = get_config()
     bot_token = config.get("telegram.bot_token")
@@ -58,11 +31,21 @@ def sync():
         print("Error: telegram.bot_token not found in configuration.")
         raise typer.Exit(1)
 
-    commands = get_default_commands()
-    success = asyncio.run(set_bot_commands(bot_token, commands))
+    async def do_sync():
+        client = TelegramClient(bot_token)
+        try:
+            result = await client.set_bot_commands(DEFAULT_BOT_COMMANDS)
+            return result.get("ok", False)
+        finally:
+            await client.close()
+
+    success = asyncio.run(do_sync())
 
     if success:
         print("✅ Bot commands synced successfully to Telegram.")
+        print("\nConfigured commands:")
+        for cmd in DEFAULT_BOT_COMMANDS:
+            print(f"  /{cmd['command']} - {cmd['description']}")
     else:
         print("❌ Failed to sync bot commands.")
         raise typer.Exit(1)
@@ -72,54 +55,50 @@ def sync():
 def list():
     """
     List configured bot commands.
+
+    This shows the default bot commands that will be synced to Telegram.
     """
-    commands = get_default_commands()
-    print("Configured Bot Commands:")
-    for cmd in commands:
+    print("Default Bot Commands:")
+    for cmd in DEFAULT_BOT_COMMANDS:
         print(f"  /{cmd['command']} - {cmd['description']}")
 
 
-async def main(action: str = "sync") -> int:
+@app.command()
+def show():
     """
-    Main entry point for bot command operations.
+    Show current bot commands from Telegram.
 
-    Args:
-        action: The action to perform (sync, list)
-
-    Returns:
-        Exit code (0 for success, 1 for failure)
+    This fetches and displays the actual commands currently set on the bot.
     """
-    try:
-        if action == "sync":
-            config = get_config()
-            bot_token = config.get("telegram.bot_token")
+    config = get_config()
+    bot_token = config.get("telegram.bot_token")
 
-            if not bot_token:
-                print("Error: telegram.bot_token not found in configuration.")
-                return 1
+    if not bot_token:
+        print("Error: telegram.bot_token not found in configuration.")
+        raise typer.Exit(1)
 
-            commands = get_default_commands()
-            success = await set_bot_commands(bot_token, commands)
+    async def do_show():
+        client = TelegramClient(bot_token)
+        try:
+            result = await client.get_bot_commands()
+            return result
+        finally:
+            await client.close()
 
-            if success:
-                print("Commands synced successfully")
-            else:
-                print("Commands failed to sync")
-            return 0
+    result = asyncio.run(do_show())
 
-        elif action == "list":
-            commands = get_default_commands()
-            print("Bot commands:")
+    if result.get("ok"):
+        commands = result.get("result", [])
+        if commands:
+            print("Current Bot Commands (from Telegram):")
             for cmd in commands:
                 print(f"  /{cmd['command']} - {cmd['description']}")
-            return 0
-
         else:
-            print(f"Unknown action: {action}")
-            return 1
-    except Exception as e:
-        print(f"Error: {e}", file=sys.stderr)
-        return 1
+            print("No bot commands are currently set on Telegram.")
+            print("Run 'cc-bridge bot sync' to set default commands.")
+    else:
+        print(f"Error: {result.get('description', 'Failed to fetch bot commands')}")
+        raise typer.Exit(1)
 
 
 if __name__ == "__main__":

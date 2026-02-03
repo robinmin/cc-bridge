@@ -40,7 +40,9 @@ class UserFacingError(CCBridgeError):
     to prevent information leakage.
     """
 
-    def __init__(self, user_message: str, internal_message: str = "", error_id: str | None = None):
+    def __init__(
+        self, user_message: str, internal_message: str = "", error_id: str | None = None
+    ):
         """
         Initialize user-facing error.
 

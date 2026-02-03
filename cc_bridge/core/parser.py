@@ -287,7 +287,9 @@ class MessageFormatter:
             return placeholder.format(idx)
 
         # Save pre blocks
-        pre_pattern = re.compile(r'<pre><code class="language-([^"]*)">([^<]*)</code></pre>')
+        pre_pattern = re.compile(
+            r'<pre><code class="language-([^"]*)">([^<]*)</code></pre>'
+        )
         text = pre_pattern.sub(save_code_blocks, text)
 
         # Remove all other HTML tags
@@ -342,5 +344,7 @@ class MessageFormatter:
             code = self._decode_html_entities(code)
             return f"```\n{code}\n```"
 
-        pre_pattern = re.compile(r'<pre><code class="language-([^"]*)">([^<]*)</code></pre>')
+        pre_pattern = re.compile(
+            r'<pre><code class="language-([^"]*)">([^<]*)</code></pre>'
+        )
         return pre_pattern.sub(convert_pre_block, text)

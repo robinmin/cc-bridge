@@ -81,7 +81,9 @@ class TestSetupLogging:
 
         # Verify file handler is configured
         logger = logging.getLogger()
-        assert any(isinstance(h, logging.handlers.RotatingFileHandler) for h in logger.handlers)
+        assert any(
+            isinstance(h, logging.handlers.RotatingFileHandler) for h in logger.handlers
+        )
 
     def test_setup_logging_suppresses_uvicorn(self, tmp_path: Path):
         """Should suppress uvicorn logs."""
@@ -160,7 +162,9 @@ class TestLoggingIntegration:
             logger.info("test message", key="value")
 
         # Message should be JSON-formatted
-        records = [record for record in caplog.records if "test message" in record.message]
+        records = [
+            record for record in caplog.records if "test message" in record.message
+        ]
         assert len(records) > 0
 
     def test_text_log_format(self, tmp_path: Path, caplog):

@@ -146,7 +146,9 @@ class InstanceTypeDetector:
             instance = instance_manager.get_instance(name)
 
             if instance and hasattr(instance, "instance_type"):
-                logger.debug(f"Detected type from metadata: {name} -> {instance.instance_type}")
+                logger.debug(
+                    f"Detected type from metadata: {name} -> {instance.instance_type}"
+                )
                 return instance.instance_type
 
         except Exception as e:

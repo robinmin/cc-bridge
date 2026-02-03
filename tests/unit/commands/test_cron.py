@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from cc_bridge.commands.cron import CrontabManager
+from cc_bridge.packages.crontab import CrontabManager
 
 
 class TestCrontabManager:
@@ -67,7 +67,9 @@ class TestCrontabManager:
 
     def test_backup_crontab(self, crontab_manager, mock_subprocess_run, tmp_path: Path):
         """Should backup crontab to file."""
-        mock_subprocess_run.return_value = MagicMock(stdout="0 * * * * job1", returncode=0)
+        mock_subprocess_run.return_value = MagicMock(
+            stdout="0 * * * * job1", returncode=0
+        )
 
         with patch("pathlib.Path.home", return_value=tmp_path):
             lines = crontab_manager._backup_crontab()
@@ -77,7 +79,9 @@ class TestCrontabManager:
             assert backup_file.read_text() == "0 * * * * job1"
             assert lines == ["0 * * * * job1"]
 
-    def test_add_entry_success(self, crontab_manager, mock_subprocess_run, tmp_path: Path):
+    def test_add_entry_success(
+        self, crontab_manager, mock_subprocess_run, tmp_path: Path
+    ):
         """Should add entry to crontab."""
         mock_subprocess_run.return_value = MagicMock(returncode=0)
 
@@ -128,11 +132,15 @@ class TestCrontabManager:
 
     def test_has_entries_false(self, crontab_manager, mock_subprocess_run):
         """Should return False when no CC-BRIDGE entries."""
-        mock_subprocess_run.return_value = MagicMock(stdout="# Other crontab entry", returncode=0)
+        mock_subprocess_run.return_value = MagicMock(
+            stdout="# Other crontab entry", returncode=0
+        )
 
         assert crontab_manager.has_entries() is False
 
-    def test_restore_backup_success(self, crontab_manager, mock_subprocess_run, tmp_path: Path):
+    def test_restore_backup_success(
+        self, crontab_manager, mock_subprocess_run, tmp_path: Path
+    ):
         """Should restore crontab from backup."""
         backup_content = "0 * * * * restored-entry\n*/5 * * * * another-entry"
 

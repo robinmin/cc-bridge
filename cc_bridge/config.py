@@ -70,6 +70,10 @@ class Config:
             "auto_start": False,
             "url": "",
         },
+        "timeouts": {
+            "claude_response": 120.0,
+            "telegram_poll": 30.0,
+        },
     }
 
     CONFIG_PATH = Path.home() / ".claude" / "bridge" / "config.toml"
@@ -148,7 +152,9 @@ class Config:
         """
         self._config = self._deep_merge(deepcopy(self.DEFAULTS), new_config)
 
-    def _deep_merge(self, base: dict[str, Any], update: dict[str, Any]) -> dict[str, Any]:
+    def _deep_merge(
+        self, base: dict[str, Any], update: dict[str, Any]
+    ) -> dict[str, Any]:
         """
         Deep merge two dictionaries.
 
@@ -162,7 +168,11 @@ class Config:
         result = deepcopy(base)
 
         for key, value in update.items():
-            if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+            if (
+                key in result
+                and isinstance(result[key], dict)
+                and isinstance(value, dict)
+            ):
                 result[key] = self._deep_merge(result[key], value)
             else:
                 result[key] = value
@@ -190,7 +200,10 @@ class Config:
             "TMUX_SESSION": "tmux.session",
             "PORT": "server.port",
             "LOG_LEVEL": "logging.level",
-            "DOCKER_ENABLED": ("docker.enabled", lambda v: v.lower() in ("true", "1", "yes")),
+            "DOCKER_ENABLED": (
+                "docker.enabled",
+                lambda v: v.lower() in ("true", "1", "yes"),
+            ),
             "DOCKER_NETWORK": "docker.network",
             "CCBRIDGE_TUNNEL_URL": "tunnel.url",
             "PROJECT_NAME": "project_name",

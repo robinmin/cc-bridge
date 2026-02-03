@@ -8,9 +8,10 @@ configuration of cc-bridge with enhanced automation.
 import asyncio
 from pathlib import Path
 
-from cc_bridge.commands import cron, tunnel
 from cc_bridge.config import Config
 from cc_bridge.core.telegram import TelegramClient
+from cc_bridge.core.tunnel import CloudflareTunnelManager
+from cc_bridge.packages.crontab import CrontabManager
 from cc_bridge.packages.logging import get_logger
 
 logger = get_logger(__name__)
@@ -97,7 +98,7 @@ def _setup_crontab() -> bool:
     print("📅 Crontab Setup")
     print("=" * 60)
 
-    manager = cron.CrontabManager()
+    manager = CrontabManager()
 
     # Check if already configured
     if manager.has_entries():
@@ -137,7 +138,8 @@ async def _setup_webhook(bot_token: str, tunnel_url: str) -> bool:
     print("=" * 60)
     print(f"\nSetting webhook to: {tunnel_url}")
 
-    success = await tunnel.set_webhook(tunnel_url, bot_token)
+    client = TelegramClient(bot_token=bot_token)
+    success = await client.set_webhook(tunnel_url)
 
     if success:
         print("✅ Webhook configured successfully")
@@ -149,7 +151,9 @@ async def _setup_webhook(bot_token: str, tunnel_url: str) -> bool:
         print("   2. The tunnel URL has DNS issues (try running setup again)")
         print("   3. Network connectivity issues")
         print("\n📝 You can set the webhook manually later:")
-        print(f'   curl "https://api.telegram.org/bot{bot_token}/setWebhook?url={tunnel_url}"')
+        print(
+            f'   curl "https://api.telegram.org/bot{bot_token}/setWebhook?url={tunnel_url}"'
+        )
         return False
 
 
@@ -201,7 +205,8 @@ async def run_setup_enhanced() -> Config:  # noqa: PLR0915
     print("Starting Cloudflare tunnel to expose your local server...")
 
     try:
-        tunnel_url = tunnel.start_tunnel(port=8080)
+        tunnel_manager = CloudflareTunnelManager(port=8080)
+        tunnel_url = await tunnel_manager.start()
         print(f"✅ Tunnel URL: {tunnel_url}")
 
         # Wait a moment for DNS to propagate

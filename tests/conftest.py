@@ -74,7 +74,11 @@ def reset_global_config() -> None:  # type: ignore[misc]
 
     # Reset environment variables to original state
     # Remove any variables that were added by tests (excluding pytest's own vars)
-    pytest_vars = {"PYTEST_CURRENT_TEST", "PYTEST_XDIST_WORKER", "PYTEST_XDIST_WORKER_COUNT"}
+    pytest_vars = {
+        "PYTEST_CURRENT_TEST",
+        "PYTEST_XDIST_WORKER",
+        "PYTEST_XDIST_WORKER_COUNT",
+    }
     added_vars = (set(os.environ.keys()) - set(_ORIG_ENV.keys())) - pytest_vars
     for var in added_vars:
         os.environ.pop(var, None)
@@ -163,7 +167,9 @@ def mock_telegram_client() -> TelegramClient:
     client = MagicMock(spec=TelegramClient)
     client.send_message = AsyncMock(return_value={"ok": True})
     client.set_webhook = AsyncMock(return_value={"ok": True})
-    client.get_webhook_info = AsyncMock(return_value={"ok": True, "url": "https://example.com"})
+    client.get_webhook_info = AsyncMock(
+        return_value={"ok": True, "url": "https://example.com"}
+    )
     client.delete_webhook = AsyncMock(return_value={"ok": True})
     client.answer_callback_query = AsyncMock(return_value={"ok": True})
     return client

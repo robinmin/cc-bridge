@@ -120,6 +120,23 @@ def tunnel(
     sys.exit(tunnel_main(start=start, stop=stop, port=port))
 
 
+@app.command()
+def webhook(
+    set: str | None = None,
+    get: bool = False,
+    delete: bool = False,
+    test: str | None = None,
+):
+    """
+    Manage Telegram bot webhooks.
+    """
+    import sys
+
+    from cc_bridge.commands.webhook import main as webhook_main
+
+    sys.exit(webhook_main(set=set, get=get, delete=delete, test=test))
+
+
 # Register docker commands as a sub-command group
 from cc_bridge.commands.bot import app as bot_app  # noqa: E402
 from cc_bridge.commands.docker_cmd import docker_app  # noqa: E402

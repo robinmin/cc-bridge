@@ -14,8 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Real YOLO Mode**: Aggressive automation settings in `settings.json` (disabled cost warnings, feedback surveys, and enabled always-thinking).
 - **Workspace Auto-Trust**: Automated `.claude.json` generation to bypass interactive "Trust folder" prompts.
 - **Improved Makefile**: New developer-friendly targets:
-  - `make talk msg="..."`: Direct host-to-container communication.
-  - `make monitor`: Real-time log streaming.
+  - `make docker-talk msg="..."`: Direct host-to-container communication.
+  - `make logs-monitor`: Real-time log streaming.
   - `make daemon-restart`: Reliable system-level daemon management with automatic port clearing.
 - **Robust Telegram Messaging**:
   - Global HTML escaping to prevent API errors.

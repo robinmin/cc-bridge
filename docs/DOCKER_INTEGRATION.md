@@ -67,7 +67,7 @@ If the container is recreated (e.g., after `docker compose up -d`), CC-Bridge de
 Use the built-in Makefile helper to talk directly to your container for testing:
 
 ```bash
-make talk msg="What is your current directory?"
+make docker-talk msg="What is your current directory?"
 ```
 
 ## 6. Troubleshooting

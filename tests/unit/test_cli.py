@@ -9,7 +9,7 @@ Tests follow TDD principles:
 
 # ruff: noqa: PLC0415 (intentional lazy imports in tests)
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from typer.testing import CliRunner
 
@@ -35,7 +35,14 @@ class TestCLIInitialization:
         from cc_bridge.cli import app
 
         # Simply verify that commands can be invoked without errors
-        expected_commands = ["server", "hook-stop", "health", "setup", "config", "tunnel"]
+        expected_commands = [
+            "server",
+            "hook-stop",
+            "health",
+            "setup",
+            "config",
+            "tunnel",
+        ]
         for cmd_name in expected_commands:
             # Try to get help for each command
             result = runner.invoke(app, [cmd_name, "--help"])
@@ -58,7 +65,9 @@ class TestCLIServerCommand:
     @patch("cc_bridge.commands.server.uvicorn.run")
     def test_server_command_accepts_reload_flag(self, mock_run):
         """Server command should accept reload flag."""
-        result = runner.invoke(app, ["server", "--reload", "--host", "127.0.0.1", "--port", "9000"])
+        result = runner.invoke(
+            app, ["server", "--reload", "--host", "127.0.0.1", "--port", "9000"]
+        )
 
         assert result.exit_code == 0
         kwargs = mock_run.call_args[1]
@@ -92,14 +101,31 @@ class TestCLIHookStopCommand:
         assert result.exit_code == 0
         assert "Send Claude response to Telegram" in result.stdout
 
-    def test_hook_stop_command_accepts_transcript_path(self, tmp_path: Path):
+    @patch("cc_bridge.commands.hook_stop.TelegramClient")
+    def test_hook_stop_command_accepts_transcript_path(
+        self, mock_telegram_client, tmp_path: Path
+    ):
         """Hook-stop command should accept transcript path."""
+        # Create a valid transcript format
         transcript = tmp_path / "transcript.md"
-        transcript.write_text("test")
+        transcript.write_text(
+            """
+[user]
+Hello, how are you?
+
+[assistant]
+I'm doing well, thank you! I'm here to help you with your coding tasks and questions. What would you like to work on today?
+"""
+        )
+
+        # Mock the TelegramClient to return success
+        mock_client = MagicMock()
+        mock_client.send_message = AsyncMock(return_value=True)
+        mock_telegram_client.return_value = mock_client
 
         result = runner.invoke(app, ["hook-stop", str(transcript)])
 
-        # Currently stub, should not crash
+        # Should succeed with mocked Telegram client
         assert result.exit_code == 0
 
 
@@ -163,7 +189,9 @@ class TestCLIConfigCommand:
 
     def test_config_set_value(self):
         """Config command should set value."""
-        result = runner.invoke(app, ["config", "--key", "server.port", "--value", "9000"])
+        result = runner.invoke(
+            app, ["config", "--key", "server.port", "--value", "9000"]
+        )
 
         # Currently stub, should not crash
         assert result.exit_code == 0
@@ -185,11 +213,19 @@ class TestCLITunnelCommand:
         assert result.exit_code == 0
         assert "Cloudflare tunnel management" in result.stdout
 
+    @patch(
+        "cc_bridge.core.tunnel.CloudflareTunnelManager.start",
+        new=AsyncMock(return_value="https://test.trycloudflare.com"),
+    )
+    @patch(
+        "cc_bridge.core.telegram.TelegramClient.set_webhook",
+        new=AsyncMock(return_value=True),
+    )
     def test_tunnel_start_flag(self):
         """Tunnel command should accept start flag."""
         result = runner.invoke(app, ["tunnel", "--start"])
 
-        # Currently stub, should not crash
+        # Should succeed with mocked calls
         assert result.exit_code == 0
 
     def test_tunnel_stop_flag(self):

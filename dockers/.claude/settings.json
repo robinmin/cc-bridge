@@ -59,8 +59,6 @@
       "Bash(gh api*GET*)",
       "Bash(gh config get*)",
       "Bash(gh config list*)",
-      "WebSearch(* *)",
-      "WebFetch(http*)",
       "WebSearch",
       "WebFetch",
       "Bash",

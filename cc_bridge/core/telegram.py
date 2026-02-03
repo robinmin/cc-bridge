@@ -29,6 +29,15 @@ MAX_RETRIES = 3
 BASE_BACKOFF = 1.0  # Base backoff in seconds
 MAX_BACKOFF = 30.0  # Maximum backoff in seconds
 
+# Default bot commands for Telegram
+DEFAULT_BOT_COMMANDS = [
+    {"command": "status", "description": "Check service status"},
+    {"command": "clear", "description": "Clear Claude conversation"},
+    {"command": "stop", "description": "Interrupt Claude current action"},
+    {"command": "resume", "description": "Resumes the last active session"},
+    {"command": "help", "description": "Show help message"},
+]
+
 
 async def _retry_with_backoff(  # noqa: PLR0912
     func,
@@ -78,7 +87,9 @@ async def _retry_with_backoff(  # noqa: PLR0912
                 )
                 await asyncio.sleep(delay)
             else:
-                logger.error("Telegram API timeout, max retries exceeded", attempts=attempt + 1)
+                logger.error(
+                    "Telegram API timeout, max retries exceeded", attempts=attempt + 1
+                )
         except httpx.NetworkError as e:
             last_exception = e
             if attempt < max_retries:
@@ -92,7 +103,9 @@ async def _retry_with_backoff(  # noqa: PLR0912
                 )
                 await asyncio.sleep(delay)
             else:
-                logger.error("Network error, max retries exceeded", attempts=attempt + 1)
+                logger.error(
+                    "Network error, max retries exceeded", attempts=attempt + 1
+                )
         except httpx.HTTPStatusError as e:
             last_exception = e
             status_code = e.response.status_code
@@ -110,7 +123,10 @@ async def _retry_with_backoff(  # noqa: PLR0912
                     await asyncio.sleep(retry_after)
                     continue
                 else:
-                    logger.error("Rate limit exceeded, max retries exceeded", attempts=attempt + 1)
+                    logger.error(
+                        "Rate limit exceeded, max retries exceeded",
+                        attempts=attempt + 1,
+                    )
 
             # Retry on server errors (5xx)
             if status_code >= 500:
@@ -125,7 +141,9 @@ async def _retry_with_backoff(  # noqa: PLR0912
                     )
                     await asyncio.sleep(delay)
                 else:
-                    logger.error("Server error, max retries exceeded", attempts=attempt + 1)
+                    logger.error(
+                        "Server error, max retries exceeded", attempts=attempt + 1
+                    )
             else:
                 # Don't retry other status codes (4xx except 429)
                 logger.error("Non-retryable HTTP error", status_code=status_code)
@@ -329,7 +347,9 @@ class TelegramClient:
         try:
             return await _retry_with_backoff(_do_set)
         except httpx.TimeoutException as e:
-            logger.error("Telegram API timeout after retries", url=api_url, error=str(e))
+            logger.error(
+                "Telegram API timeout after retries", url=api_url, error=str(e)
+            )
             raise TelegramTimeoutError(
                 f"Telegram API request timed out after {self._timeout.read}s"
             ) from e
@@ -388,7 +408,9 @@ class TelegramClient:
                 f"Telegram API request timed out after {self._timeout.read}s"
             ) from e
 
-    async def answer_callback_query(self, callback_query_id: str, text: str | None = None) -> dict:
+    async def answer_callback_query(
+        self, callback_query_id: str, text: str | None = None
+    ) -> dict:
         """
         Answer callback query from inline keyboard with retry logic.
 
@@ -422,7 +444,9 @@ class TelegramClient:
                 f"Telegram API request timed out after {self._timeout.read}s"
             ) from e
 
-    async def get_updates(self, timeout: int = 0, offset: int = 0, limit: int = 1) -> dict:
+    async def get_updates(
+        self, timeout: int = 0, offset: int = 0, limit: int = 1
+    ) -> dict:
         """
         Get updates from Telegram with retry logic (for chat_id detection).
 
@@ -544,3 +568,109 @@ class TelegramClient:
                 await asyncio.sleep(2)
 
         return None
+
+    async def set_bot_commands(
+        self, commands: list[dict], language_code: str = ""
+    ) -> dict:
+        """
+        Set bot commands for Telegram with retry logic.
+
+        Args:
+            commands: List of command dictionaries with 'command' and 'description' keys
+            language_code: Optional language code for localized commands (e.g., 'en')
+
+        Returns:
+            API response
+
+        Raises:
+            TelegramTimeoutError: If request times out after retries
+            httpx.HTTPStatusError: For non-retryable HTTP errors
+        """
+        url = f"{self.base_url}/setMyCommands"
+        payload = {"commands": commands}
+        if language_code:
+            payload["language_code"] = language_code
+
+        async def _do_set():
+            client = await self._get_client()
+            response = await client.post(url, json=payload)
+            response.raise_for_status()
+            return response.json()
+
+        try:
+            result = await _retry_with_backoff(_do_set)
+            logger.info("Bot commands set successfully", count=len(commands))
+            return result
+        except httpx.TimeoutException as e:
+            logger.error("Telegram API timeout after retries", url=url, error=str(e))
+            raise TelegramTimeoutError(
+                f"Telegram API request timed out after {self._timeout.read}s"
+            ) from e
+
+    async def get_bot_commands(self, language_code: str = "") -> dict:
+        """
+        Get current bot commands from Telegram with retry logic.
+
+        Args:
+            language_code: Optional language code for localized commands
+
+        Returns:
+            API response with list of commands
+
+        Raises:
+            TelegramTimeoutError: If request times out after retries
+            httpx.HTTPStatusError: For non-retryable HTTP errors
+        """
+        url = f"{self.base_url}/getMyCommands"
+        params = {}
+        if language_code:
+            params["language_code"] = language_code
+
+        async def _do_get():
+            client = await self._get_client()
+            response = await client.get(url, params=params)
+            response.raise_for_status()
+            return response.json()
+
+        try:
+            return await _retry_with_backoff(_do_get)
+        except httpx.TimeoutException as e:
+            logger.error("Telegram API timeout after retries", url=url, error=str(e))
+            raise TelegramTimeoutError(
+                f"Telegram API request timed out after {self._timeout.read}s"
+            ) from e
+
+    async def delete_bot_commands(self, language_code: str = "") -> dict:
+        """
+        Delete all bot commands for Telegram with retry logic.
+
+        Args:
+            language_code: Optional language code for localized commands
+
+        Returns:
+            API response
+
+        Raises:
+            TelegramTimeoutError: If request times out after retries
+            httpx.HTTPStatusError: For non-retryable HTTP errors
+        """
+        url = f"{self.base_url}/deleteMyCommands"
+        params = {}
+        if language_code:
+            params["language_code"] = language_code
+
+        async def _do_delete():
+            client = await self._get_client()
+            response = await client.post(url, params=params)
+            response.raise_for_status()
+            return response.json()
+
+        try:
+            result = await _retry_with_backoff(_do_delete)
+            logger.info("Bot commands deleted successfully")
+            return result
+        except httpx.TimeoutException as e:
+            logger.error("Telegram API timeout after retries", url=url, error=str(e))
+            raise TelegramTimeoutError(
+                f"Telegram API request timed out after {self._timeout.read}s"
+            ) from e

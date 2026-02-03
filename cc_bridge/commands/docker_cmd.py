@@ -140,7 +140,9 @@ def container_logs(
 def exec_command(
     name: Annotated[str, typer.Argument(help="Instance name")],
     command: Annotated[list[str], typer.Argument(help="Command to execute")],
-    interactive: bool = typer.Option(False, "-i", "--interactive", help="Interactive mode"),
+    interactive: bool = typer.Option(
+        False, "-i", "--interactive", help="Interactive mode"
+    ),
 ):
     """Execute a command in a Docker container."""
 

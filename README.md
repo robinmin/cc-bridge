@@ -146,7 +146,6 @@ cc-bridge/
 │   │   ├── health.py            # Health check command
 │   │   ├── tunnel.py            # Cloudflare tunnel management
 │   │   ├── docker_cmd.py        # Docker commands
-│   │   ├── webhook.py           # Webhook management
 │   │   ├── cron.py              # Cron job management
 │   │   ├── bot.py               # Bot commands
 │   │   └── logs.py              # Log viewing
@@ -201,7 +200,7 @@ cd cc-bridge
 uv sync
 
 # Or with make (interactive setup)
-make setup
+make bridge-setup
 ```
 
 ### 2. Configuration
@@ -250,7 +249,7 @@ cc-bridge claude start my-project --type tmux
 
 ```bash
 # Development mode with auto-reload
-make dev
+make bridge-dev
 
 # Or production mode
 cc-bridge server
@@ -361,26 +360,26 @@ See [FIFO Mode Documentation](docs/fifo-mode.md) for detailed configuration opti
 | Target | Description |
 |--------|-------------|
 | `make help` | Show all available commands |
-| `make status` | Run system health check |
-| `make setup` | Interactive setup wizard |
-| `make install` | Install dependencies using uv |
-| `make dev` | Start development server with auto-reload |
-| `make test` | Run pytest with coverage |
-| `make test-quick` | Run tests without coverage |
-| `make lint` | Run ruff linter |
-| `make format` | Format code with ruff |
-| `make typecheck` | Run ty type checker |
-| `make fix` | Auto-fix lint errors + format code |
-| `make all` | Run all checks (lint, format, typecheck, test) |
-| `make fix-all` | Auto-fix everything, then validate |
-| `make build` | Build distribution packages |
-| `make clean` | Clean build artifacts |
+| `make bridge-status` | Run system health check |
+| `make bridge-setup` | Interactive setup wizard |
+| `make env-install` | Install dependencies using uv |
+| `make bridge-dev` | Start development server with auto-reload |
+| `make code-test` | Run pytest with coverage |
+| `make code-test-quick` | Run tests without coverage |
+| `make code-lint` | Run ruff linter |
+| `make code-format` | Format code with ruff |
+| `make code-typecheck` | Run ty type checker |
+| `make code-fix` | Auto-fix lint errors + format code |
+| `make code-all` | Run all checks (lint, format, typecheck, test) |
+| `make code-fix-all` | Auto-fix everything, then validate |
+| `make dist-build` | Build distribution packages |
+| `make dist-clean` | Clean build artifacts |
 
 ### Running Tests
 
 ```bash
 # Run all tests with coverage
-make test
+make code-test
 
 # Run specific test file
 uv run pytest tests/test_core/test_instances.py -v
@@ -393,11 +392,11 @@ uv run pytest --cov=cc_bridge --cov-report=html
 
 ```bash
 # Check code quality
-make lint
-make typecheck
+make code-lint
+make code-typecheck
 
 # Auto-fix issues
-make fix
+make code-fix
 ```
 
 ## 🏗️ Architecture Details
@@ -527,23 +526,23 @@ Returns server health and instance status.
 
 ```bash
 # Install service
-make setup-service
+make agent-setup
 
 # Control service
-make start      # Start service
-make stop       # Stop service
-make restart    # Restart service
-make monitor    # View logs (tail -f)
+make agent-start      # Start service
+make agent-stop       # Stop service
+make agent-restart    # Restart service
+make logs-monitor    # View logs (tail -f)
 
 # Uninstall
-make service-uninstall
+make agent-uninstall
 ```
 
 ### LaunchDaemon (starts at boot - for servers)
 
 ```bash
 # Install daemon
-make setup-daemon
+make daemon-setup
 
 # Control daemon
 make daemon-start     # Start daemon
@@ -621,7 +620,7 @@ cc-bridge claude-list
 cc-bridge health
 
 # View logs
-make monitor
+make logs-monitor
 ```
 
 ### Docker container not discovered

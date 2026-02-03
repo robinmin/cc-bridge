@@ -30,9 +30,9 @@ cd /path/to/cc-bridge
 
 ### Management
 ```bash
-make start      # Start the service
-make stop       # Stop the service
-make restart    # Restart the service
+make agent-start      # Start the service
+make agent-stop       # Stop the service
+make agent-restart    # Restart the service
 ```
 
 ### When to Use
@@ -95,7 +95,7 @@ sudo launchctl kickstart -k com.cc-bridge.daemon
 
 1. **Stop and uninstall the LaunchAgent:**
    ```bash
-   make stop
+   make agent-stop
    ./scripts/uninstall-service.sh
    ```
 

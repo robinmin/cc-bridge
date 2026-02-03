@@ -169,9 +169,18 @@ class TestDockerInstanceFIFOIntegration:
             yield f"Response to: {command}"
 
         with (
-            patch.object(adapter._pipe_channel, "send_and_receive", new=mock_send_and_receive),
+            patch.object(
+                adapter._pipe_channel, "send_and_receive", new=mock_send_and_receive
+            ),
             patch.object(adapter, "is_running", return_value=True),
+            patch.object(
+                adapter,
+                "_ensure_agent_running",
+                new=MagicMock(return_value=asyncio.Future()),
+            ),  # Mock async method
         ):
+            # Resolve future immediately
+            adapter._ensure_agent_running.return_value.set_result(None)  # type: ignore
             # Send command
             response_chunks = []
             async for chunk in adapter._send_command_fifo("hello"):
@@ -233,7 +242,9 @@ class TestSessionTrackerIntegration:
     async def test_request_lifecycle(self, session_tracker):
         """Test complete request lifecycle through session tracker."""
         # Start a request
-        request_id, session = await session_tracker.start_request("test-instance", "hello world")
+        request_id, session = await session_tracker.start_request(
+            "test-instance", "hello world"
+        )
 
         assert request_id is not None
         assert session.total_requests == 1
@@ -258,7 +269,9 @@ class TestSessionTrackerIntegration:
     async def test_failed_request_lifecycle(self, session_tracker):
         """Test failed request lifecycle."""
         # Start a request
-        request_id, _ = await session_tracker.start_request("test-instance", "bad request")
+        request_id, _ = await session_tracker.start_request(
+            "test-instance", "bad request"
+        )
 
         # Complete with error
         await session_tracker.complete_request(
@@ -279,7 +292,9 @@ class TestSessionTrackerIntegration:
         """Test conversation history is tracked correctly."""
         # Create multiple requests
         for i in range(3):
-            request_id, _ = await session_tracker.start_request("test-instance", f"message {i}")
+            request_id, _ = await session_tracker.start_request(
+                "test-instance", f"message {i}"
+            )
             await session_tracker.complete_request(
                 "test-instance", request_id, f"response {i}", error=None
             )
@@ -410,9 +425,16 @@ class TestEndToEndFIFOFlow:
         async def mock_send(command, timeout):
             yield "OK"
 
-        # Mock is_running
+        # Mock is_running and agent check
+        # Helper for mocking async method
+        async def mock_ensure_agent():
+            pass
+
         with (
             patch.object(adapter, "is_running", return_value=True),
+            patch.object(
+                adapter, "_ensure_agent_running", side_effect=mock_ensure_agent
+            ),
             patch.object(adapter._pipe_channel, "send_and_receive", new=mock_send),
         ):
             # Send command
@@ -448,8 +470,14 @@ class TestEndToEndFIFOFlow:
             raise asyncio.TimeoutError("Communication timeout")
             yield  # Makes this an async generator (never reached)
 
+        async def mock_ensure_agent():
+            pass
+
         with (
             patch.object(adapter, "is_running", return_value=True),
+            patch.object(
+                adapter, "_ensure_agent_running", side_effect=mock_ensure_agent
+            ),
             patch.object(adapter._pipe_channel, "send_and_receive", new=mock_timeout),
         ):
             with pytest.raises(Exception) as exc_info:
@@ -516,8 +544,13 @@ class TestEndToEndFIFOFlow:
         original_send = adapter._pipe_channel.send_and_receive  # type: ignore[union-attr]
         adapter._pipe_channel.send_and_receive = mock_send  # type: ignore[assignment]
 
+        async def mock_ensure_agent():
+            pass
+
         try:
-            with patch.object(adapter, "is_running", return_value=True):
+            with patch.object(adapter, "is_running", return_value=True), patch.object(
+                adapter, "_ensure_agent_running", side_effect=mock_ensure_agent
+            ):
                 # Send multiple commands
                 for i in range(3):
                     responses = []
@@ -539,7 +572,7 @@ class TestFIFOHealthIntegration:
     @pytest.mark.asyncio
     async def test_fifo_pipes_health_check(self, temp_pipe_dir):
         """Test health check for FIFO pipes."""
-        from cc_bridge.commands.health import check_fifo_pipes
+        from cc_bridge.core.health_monitor import check_fifo_directory
 
         # Create pipes
         channel = NamedPipeChannel(instance_name="test", pipe_dir=temp_pipe_dir)
@@ -552,9 +585,11 @@ class TestFIFOHealthIntegration:
                     return {"pipe_dir": temp_pipe_dir}
                 return default
 
-        with patch("cc_bridge.commands.health.get_config", return_value=MockConfig()):
-            # Run health check
-            result = check_fifo_pipes()
+        with patch(
+            "cc_bridge.core.health_monitor.get_config", return_value=MockConfig()
+        ):
+            # Run health check (note: this is a sync function, not async)
+            result = check_fifo_directory()
 
             # Verify the health check completed successfully
             # Status can be healthy or warning depending on environment

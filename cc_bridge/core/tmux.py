@@ -41,7 +41,9 @@ class TmuxSession:
         self.socket_path = socket_path or _get_tmux_socket_path()
         self._base_cmd = ["tmux", "-S", self.socket_path]
 
-    def _run_tmux(self, args: list[str], capture: bool = True) -> subprocess.CompletedProcess:
+    def _run_tmux(
+        self, args: list[str], capture: bool = True
+    ) -> subprocess.CompletedProcess:
         """
         Run a tmux command.
 
@@ -90,8 +92,12 @@ class TmuxSession:
         try:
             self._run_tmux(["send-keys", "-t", self.session_name, text], capture=False)
             if enter:
-                self._run_tmux(["send-keys", "-t", self.session_name, "Enter"], capture=False)
-            logger.debug("Keys sent to session", session=self.session_name, text=text[:50])
+                self._run_tmux(
+                    ["send-keys", "-t", self.session_name, "Enter"], capture=False
+                )
+            logger.debug(
+                "Keys sent to session", session=self.session_name, text=text[:50]
+            )
             return True
         except Exception as e:
             logger.error("Failed to send keys", error=str(e))
@@ -150,32 +156,26 @@ class TmuxSession:
         prompt_marker: str = "❯",  # noqa: RUF001
     ) -> tuple[bool, str]:
         """
-        Send a command and wait for a response.
+        Send a command and wait for a response using delta-based extraction.
 
-        This sends a command to Claude Code and waits for it to complete
-        by watching for content changes and then the prompt marker to reappear.
-
-        Args:
-            command: Command to send
-            timeout: Maximum time to wait in seconds
-            prompt_marker: String that indicates the prompt is back (e.g., ">")
-
-        Returns:
-            Tuple of (success, output)
+        This captures the pane before the command, sends the command,
+        waits for completion, and then extracts ONLY the new content.
         """
         if not self.session_exists():
             return False, "Session does not exist"
 
-        # Helper to compute content hash for change detection
-        def get_content_hash():
-            content = self.get_session_output()
-            return hashlib.sha256(content.encode("utf-8", errors="ignore")).hexdigest()
+        # Capture state BEFORE command
+        initial_content = self.get_session_output()
+        initial_lines = initial_content.split("\n")
+        initial_hash = hashlib.sha256(
+            initial_content.encode("utf-8", errors="ignore")
+        ).hexdigest()
 
-        # Get initial state
-        self.get_session_output()
-        initial_hash = get_content_hash()
-
-        logger.debug("Command start", command=command[:50], initial_hash=initial_hash[:8])
+        logger.debug(
+            "Command start (delta mode)",
+            command=command[:50],
+            initial_hash=initial_hash[:8],
+        )
 
         # Send the command
         if not self.send_command(command):
@@ -185,86 +185,89 @@ class TmuxSession:
         start_time = asyncio.get_running_loop().time()
         content_changed = False
         consecutive_prompt_checks = 0
-        min_wait_time = 3.0  # Wait at least 3 seconds before checking for completion
+        min_wait_time = 2.0  # Reduced wait time with delta mode
         last_stable_hash = initial_hash
 
         while asyncio.get_running_loop().time() - start_time < timeout:
             await asyncio.sleep(1.0)
 
             current_snapshot = self.get_session_output()
-            current_hash = get_content_hash()
+            current_hash = hashlib.sha256(
+                current_snapshot.encode("utf-8", errors="ignore")
+            ).hexdigest()
             elapsed = asyncio.get_running_loop().time() - start_time
 
-            # Check if content has changed (ANY change means Claude is responding)
+            # Check if content has changed
             if current_hash != last_stable_hash:
-                if not content_changed:
-                    logger.debug(
-                        "Content changed",
-                        new_hash=current_hash[:8],
-                        prev_hash=last_stable_hash[:8],
-                        elapsed=elapsed,
-                    )
                 content_changed = True
                 last_stable_hash = current_hash
-                consecutive_prompt_checks = 0  # Reset when content changes
+                consecutive_prompt_checks = 0
 
             # Only look for completion if content has changed AND min wait time passed
             if content_changed and elapsed >= min_wait_time:
-                # Look for stable prompt at the end
                 lines = current_snapshot.split("\n")
 
-                # Check last 5 lines for a stable prompt pattern
+                # Look for stable prompt at the end
                 prompt_found = False
                 lines_to_check = min(5, len(lines))
                 for i in range(len(lines) - 1, max(0, len(lines) - lines_to_check), -1):
                     line = lines[i].strip()
-                    if line:
-                        # Check for various prompt patterns
-                        if line in (prompt_marker, "❯", ">", "»"):  # noqa: RUF001
-                            prompt_found = True
-                            consecutive_prompt_checks += 1
+                    if line in (prompt_marker, "❯", ">", "»"):  # noqa: RUF001
+                        prompt_found = True
+                        consecutive_prompt_checks += 1
+                        break
+                    elif line:
+                        consecutive_prompt_checks = 0
+                        break
+
+                # Need prompt to be stable for 3 consecutive checks (3 seconds)
+                if prompt_found and consecutive_prompt_checks >= 3:
+                    logger.debug("Prompt stable, extracting delta")
+
+                    # Find where the LAST command echo is in the captured pane
+                    # and take everything after it
+                    cmd_line_idx = -1
+                    for i in range(len(lines) - 1, -1, -1):
+                        line = lines[i]
+                        # Heuristic: Find the line that looks like a prompt followed by our command
+                        stripped = line.strip()
+                        if command in line and (
+                            stripped.startswith(prompt_marker)
+                            or any(stripped.startswith(p) for p in ("❯", ">", "»"))
+                        ):
+                            cmd_line_idx = i
                             break
-                        else:
-                            # Found non-prompt content
-                            consecutive_prompt_checks = 0
-                            break
 
-                # Need prompt to be stable for 4 consecutive checks (4 seconds)
-                if prompt_found and consecutive_prompt_checks >= 4:
-                    logger.debug("Prompt stable", checks=consecutive_prompt_checks, elapsed=elapsed)
+                    if cmd_line_idx != -1:
+                        potential_response = lines[cmd_line_idx + 1 :]
+                    else:
+                        # Fallback: Just take lines that are different from start
+                        potential_response = [
+                            line for line in lines if line not in initial_lines
+                        ]
 
-                    # Extract just the NEW content by comparing with initial state
-                    # Skip static header (first ~15 lines) and find actual response
+                    delta_lines = []
+                    for line in potential_response:
+                        stripped = line.strip()
+                        if not stripped:
+                            delta_lines.append("")
+                            continue
 
-                    if len(lines) > 20:
-                        # Skip the likely static header
-                        response_start = 15
-                        potential_response = lines[response_start:]
+                        # Skip trailing prompt
+                        if stripped in (prompt_marker, "❯", ">", "»"):
+                            continue
 
-                        # Filter out trailing prompts, separators, and empty lines
-                        cleaned = []
-                        for line in potential_response:
-                            stripped = line.strip()
-                            if not stripped:
-                                continue
-                            # Skip prompts and separators
-                            if stripped in (prompt_marker, "❯", ">", "»"):  # noqa: RUF001
-                                continue
-                            if all(c in "─═━─│┌┐└┘ ▔▚▛▜▝▘▐▙▌" for c in stripped):
-                                continue
-                            # Skip command echo (heuristic: line contains command text)
-                            if len(command) > 3 and command[:20] in line:
-                                continue
-                            if len(command) <= 3 and command in line:
-                                continue
-                            cleaned.append(line)
+                        # Skip terminal UI separators (more than 3 of these chars)
+                        ui_chars = "─═━─│┌┐└┘ ▔▚▛▜▝▘▐▙▌"
+                        ui_char_count = sum(1 for c in stripped if c in ui_chars)
+                        if ui_char_count > 3 and ui_char_count / len(stripped) > 0.5:
+                            continue
 
-                        result = "\n".join(cleaned).strip()
-                        if result and len(result) > 3:  # Avoid returning empty/minimal responses
-                            logger.debug(
-                                "Returning response", length=len(result), preview=result[:100]
-                            )
-                            return True, result
+                        delta_lines.append(line)
+
+                    result = "\n".join(delta_lines).strip()
+                    if result:
+                        return True, result
 
         return False, current_snapshot or "Timeout waiting for response"
 
@@ -285,10 +288,13 @@ class TmuxSession:
         try:
             if command:
                 self._run_tmux(
-                    ["new-session", "-d", "-s", self.session_name, command], capture=False
+                    ["new-session", "-d", "-s", self.session_name, command],
+                    capture=False,
                 )
             else:
-                self._run_tmux(["new-session", "-d", "-s", self.session_name], capture=False)
+                self._run_tmux(
+                    ["new-session", "-d", "-s", self.session_name], capture=False
+                )
             logger.info("Session created", session=self.session_name)
             return True
         except Exception as e:

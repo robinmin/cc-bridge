@@ -53,7 +53,9 @@ def validate_instance_name(name: str) -> str:
 
     # Check length
     if len(name) > 64:
-        raise ValueError(f"Instance name too long (max 64 characters): {len(name)} characters")
+        raise ValueError(
+            f"Instance name too long (max 64 characters): {len(name)} characters"
+        )
 
     # Check for reserved names (case-insensitive)
     if name.lower() in RESERVED_NAMES:
@@ -148,7 +150,9 @@ def sanitize_docker_label(value: str) -> str:
         raise ValueError("Docker label value must be a string")
 
     if len(value) > 4096:
-        raise ValueError(f"Docker label value too long (max 4096 characters): {len(value)}")
+        raise ValueError(
+            f"Docker label value too long (max 4096 characters): {len(value)}"
+        )
 
     # Remove null bytes and other dangerous characters
     value = value.replace("\x00", "")

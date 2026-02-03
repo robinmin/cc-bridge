@@ -13,18 +13,21 @@ import argparse
 import asyncio
 import json
 import logging
+import os
 import signal
 import sys
 import time
 
 # Private logger for this module
 logger = logging.getLogger("container_agent")
-logger.setLevel(logging.INFO)
+# Read log level from environment variable (default: INFO)
+_log_level = os.environ.get("AGENT_LOG_LEVEL", "INFO").upper()
+logger.setLevel(getattr(logging, _log_level, logging.INFO))
 # Remove any existing handlers to be sure
 for h in logger.handlers[:]:
     logger.removeHandler(h)
 _handler = logging.StreamHandler(sys.stderr)
-_handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)-8s] %(message)s"))
+_handler.setFormatter(logging.Formatter("%(message)s"))
 logger.addHandler(_handler)
 # Prevent propagation to root logger just in case
 logger.propagate = False
@@ -70,6 +73,10 @@ class ClaudeProcessManager:
         self._restart_backoff = 1.0
         self._max_backoff = 30.0
 
+        # Named pipes
+        self.input_pipe = None
+        self.output_pipe = None
+
         # Shutdown coordination
         self._shutdown_event = asyncio.Event()
 
@@ -82,9 +89,21 @@ class ClaudeProcessManager:
         # Start the Claude process
         await self._spawn_claude()
 
-        # Start stdin/stdout forwarding tasks
-        stdin_task = asyncio.create_task(self._forward_stdin_to_claude())
-        stdout_task = asyncio.create_task(self._forward_claude_to_stdout())
+        # Determine if we are using pipes or stdin/stdout
+        if self.input_pipe:
+            stdin_task = asyncio.create_task(self._forward_pipe_to_claude())
+            self.logger.info(f"Using input pipe: {self.input_pipe}")
+        else:
+            stdin_task = asyncio.create_task(self._forward_stdin_to_claude())
+            self.logger.info("Using stdin for commands")
+
+        if self.output_pipe:
+            stdout_task = asyncio.create_task(self._forward_claude_to_pipe())
+            self.logger.info(f"Using output pipe: {self.output_pipe}")
+        else:
+            stdout_task = asyncio.create_task(self._forward_claude_to_stdout())
+            self.logger.info("Using stdout for responses")
+
         health_task = asyncio.create_task(self._health_monitor())
 
         # Wait for shutdown signal
@@ -181,6 +200,56 @@ class ClaudeProcessManager:
             self.logger.error(f"Error in stdin forwarding: {e}")
             self._shutdown_event.set()
 
+    async def _forward_pipe_to_claude(self) -> None:
+        """Read from input pipe and forward to Claude stdin."""
+        self.logger.info("[PIPE] Starting input pipe listener...")
+
+        loop = asyncio.get_running_loop()
+
+        while self._running:
+            try:
+                # Open pipe for reading (blocks until host opens for writing)
+                # We use O_RDONLY. If we use O_NONBLOCK, it will return immediately.
+                # But we want to wait for the host.
+                self.logger.info(
+                    f"[PIPE] Waiting to open input pipe: {self.input_pipe}"
+                )
+
+                def _open_rdonly() -> int:
+                    # Ensure input_pipe is treated as string
+                    path = str(self.input_pipe)
+                    return os.open(path, os.O_RDONLY)
+
+                fd = await loop.run_in_executor(None, _open_rdonly)
+                self.logger.info(f"[PIPE] Input pipe opened (fd={fd})")
+
+                try:
+                    # Once opened, read until EOF (host closes)
+                    with os.fdopen(fd, "r") as f:
+                        for line in f:
+                            command = line.strip()
+                            if command:
+                                self.logger.info(
+                                    f"Received command from pipe: {command[:50]}..."
+                                )
+                                self._last_activity = time.time()
+
+                                if self.process and self.process.stdin:
+                                    data = (command + "\n").encode("utf-8")
+                                    self.process.stdin.write(data)
+                                    await self.process.stdin.drain()
+                                    self.logger.info(
+                                        f"Forwarded {len(data)} bytes to Claude"
+                                    )
+                except Exception as e:
+                    self.logger.error(f"Error reading from input pipe: {e}")
+                    await asyncio.sleep(1)
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                self.logger.error(f"Failed to open input pipe: {e}")
+                await asyncio.sleep(1)
+
     async def _forward_claude_to_stdout(self) -> None:
         """Read from Claude stdout and forward to stdout."""
         self.logger.debug("Starting Claude to stdout forwarding")
@@ -208,6 +277,108 @@ class ClaudeProcessManager:
             self.logger.debug("Stdout forwarding task cancelled")
         except Exception as e:
             self.logger.error(f"Error in stdout forwarding: {e}")
+
+    async def _forward_claude_to_pipe(self) -> None:
+        """Read from Claude stdout and forward to output pipe."""
+        self.logger.info("[PIPE] Starting output pipe writer...")
+
+        if not self.output_pipe:
+            return
+
+        loop = asyncio.get_running_loop()
+
+        try:
+            while self._running:
+                if not self.process or not self.process.stdout:
+                    await asyncio.sleep(0.1)
+                    continue
+
+                chunk = await self.process.stdout.read(4096)
+                if not chunk:
+                    self.logger.warning("[PIPE] Claude stdout closed (EOF)")
+                    break
+
+                self.logger.info(f"[PIPE] Read {len(chunk)} bytes from Claude stdout")
+
+                # We have data, now open the output pipe to send it
+                # Host should be waiting to read
+                try:
+                    # Open pipe for writing (blocks until host opens for reading)
+                    # We open and write the chunk, then we might keep it open if there is more data
+                    # or close it to signal end of stream to host if we detect prompt?
+                    # Actually, for simpler implementation, we open, write, and close.
+                    # But if we close too early, the host might misinterpret.
+
+                    # Better: The bridge server expects one EOF per command.
+                    # So we should probably keep the pipe open as long as Claude is talking,
+                    # and close it when we think the response is complete?
+                    # BUT we don't know when it's complete!
+
+                    # Wait, the bridge's read_response reads until it sees EOF.
+                    # This means we MUST close the pipe to complete a command.
+
+                    # How do we know when to close?
+                    # Original bridge logic might have used a marker?
+
+                    # Actually, if we are in 'print' mode, Claude exits after each command.
+                    # But here we are in 'persistent' mode.
+
+                    # If we are in persistent mode, we need a way to signal end of command.
+                    # Named pipes are tricky here.
+
+                    # Let's look at NamedPipeChannel.write_command again.
+                    # It closes the pipe after one write.
+
+                    # If the host expects to read until EOF, we MUST close the output pipe.
+
+                    # Maybe we should use a simpler protocol:
+                    # 1. Read command.
+                    # 2. Open output pipe.
+                    # 3. Read from Claude until we see the prompt marker "❯".
+                    # 4. Write data to output pipe.
+                    # 5. Close output pipe.
+
+                    # Let's try this.
+
+                    # Let's try this.
+
+                    self.logger.info(f"Opening output pipe to send {len(chunk)} bytes")
+
+                    def _open_wronly() -> int:
+                        # Ensure output_pipe is treated as string
+                        path = str(self.output_pipe)
+                        return os.open(path, os.O_WRONLY)
+
+                    fd = await loop.run_in_executor(None, _open_wronly)
+
+                    try:
+                        await loop.run_in_executor(
+                            None, lambda d=chunk, f=fd: os.write(f, d)
+                        )
+
+                        # Check if this chunk contains the prompt marker
+                        # Note: This is an approximation.
+                        if (
+                            b"\xe2\x9d\xaf" in chunk or b"\xaf" in chunk
+                        ):  # "❯" is U+276F
+                            self.logger.info(
+                                "Detected prompt marker, closing output pipe"
+                            )
+                            # Closing happens in finally
+
+                    finally:
+                        await loop.run_in_executor(None, lambda f=fd: os.close(f))
+
+                except Exception as e:
+                    self.logger.error(f"Error writing to output pipe: {e}")
+                    await asyncio.sleep(0.5)
+
+                self._last_activity = time.time()
+
+        except asyncio.CancelledError:
+            self.logger.debug("Pipe forwarding task cancelled")
+        except Exception as e:
+            self.logger.error(f"Error in pipe forwarding: {e}")
 
     async def _health_monitor(self) -> None:
         """Monitor Claude process health and auto-restart if needed."""
@@ -295,7 +466,9 @@ class ClaudeProcessManager:
 
                 # Force kill if still running
                 if self.process.returncode is None:
-                    self.logger.warning("Claude did not terminate gracefully, killing...")
+                    self.logger.warning(
+                        "Claude did not terminate gracefully, killing..."
+                    )
                     self.process.kill()
 
                 await self.process.wait()
@@ -337,6 +510,7 @@ class ContainerAgent:
         claude_args: list[str] | None = None,
         mode: str = "daemon",
         log_level: str = "INFO",
+        **kwargs,
     ):
         """
         Initialize container agent.
@@ -361,6 +535,8 @@ class ContainerAgent:
                 claude_args=self.claude_args,
                 log_level=self.log_level,
             )
+            self.claude_manager.input_pipe = kwargs.get("input_pipe")
+            self.claude_manager.output_pipe = kwargs.get("output_pipe")
 
     async def start(self) -> None:
         """Start the agent."""
@@ -521,7 +697,9 @@ def print_status(agent: ContainerAgent) -> None:
 def main() -> int:
     """Main entry point for container agent."""
 
-    parser = argparse.ArgumentParser(description="Container agent for Claude Code Docker bridge")
+    parser = argparse.ArgumentParser(
+        description="Container agent for Claude Code Docker bridge"
+    )
     parser.add_argument(
         "--claude-args",
         nargs="*",
@@ -546,9 +724,9 @@ def main() -> int:
         help="Print agent status and exit",
     )
 
-    # Keep compatibility with old pipe arguments (ignore them)
-    parser.add_argument("--input-pipe", help=argparse.SUPPRESS)
-    parser.add_argument("--output-pipe", help=argparse.SUPPRESS)
+    # Keep compatibility with old pipe arguments
+    parser.add_argument("--input-pipe", help="Path to input named pipe (FIFO)")
+    parser.add_argument("--output-pipe", help="Path to output named pipe (FIFO)")
 
     args = parser.parse_args()
 
@@ -561,6 +739,8 @@ def main() -> int:
             claude_args=args.claude_args,
             mode=args.mode,
             log_level=args.log_level,
+            input_pipe=args.input_pipe,
+            output_pipe=args.output_pipe,
         )
         print_status(agent)
         return 0
@@ -570,6 +750,8 @@ def main() -> int:
         claude_args=args.claude_args,
         mode=args.mode,
         log_level=args.log_level,
+        input_pipe=args.input_pipe,
+        output_pipe=args.output_pipe,
     )
 
     setup_signal_handlers(agent)

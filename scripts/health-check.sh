@@ -393,13 +393,14 @@ check_consistency() {
     # Process status
     echo -n "Watchdog processes: "
     if [ -f "$INSTANCES_FILE" ]; then
-        DEAD_COUNT=$(python3 -c "import json; instances = json.load(open('$INSTANCES_FILE'))['instances']; [print(f'{n}:{i.get(\"instance_type\", \"\")}:{i.get(\"pid\", \"\")}') for n, i in instances.items()]" 2>/dev/null | while read -r entry; do
+        DEAD_COUNT=$(python3 -c "import json; instances = json.load(open('$INSTANCES_FILE'))['instances']; [print(f'{n}:{i.get(\"instance_type\", \"\")}:{i.get(\"pid\", \"\")}:{i.get(\"status\", \"\")}') for n, i in instances.items()]" 2>/dev/null | while read -r entry; do
             name=$(echo "$entry" | cut -d: -f1)
             type=$(echo "$entry" | cut -d: -f2)
             pid=$(echo "$entry" | cut -d: -f3)
+            status=$(echo "$entry" | cut -d: -f4)
             
-            # For tmux instances, check if PID is alive
-            if [ "$type" = "tmux" ] && [ -n "$pid" ] && ! ps -p "$pid" >/dev/null 2>&1; then
+            # For tmux instances, check if PID is alive IF it's supposed to be running
+            if [ "$type" = "tmux" ] && [ "$status" = "running" ] && [ -n "$pid" ] && ! ps -p "$pid" >/dev/null 2>&1; then
                 echo "DEAD"
             fi
             # Docker instances don't have a host PID, their health is checked in the Docker section

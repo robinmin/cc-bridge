@@ -100,7 +100,9 @@ class DockerErrorHandler:
         self._error_counts: dict[str, int] = {}
         self._last_error_time: dict[str, float] = {}
 
-    def handle_exception(self, exc: Exception, container_name: str | None = None) -> DockerError:  # noqa: PLR0911
+    def handle_exception(
+        self, exc: Exception, container_name: str | None = None
+    ) -> DockerError:  # noqa: PLR0911
         """
         Convert a raw exception to an appropriate DockerError.
 

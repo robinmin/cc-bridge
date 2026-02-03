@@ -15,11 +15,15 @@ class ClaudeInstance(BaseModel):
     instance_type: Literal["tmux", "docker"] = Field(
         default="tmux", description="Instance type: tmux or docker"
     )
-    status: str = Field(default="stopped", description="Instance status: running, stopped, crashed")
+    status: str = Field(
+        default="stopped", description="Instance status: running, stopped, crashed"
+    )
     created_at: datetime = Field(
         default_factory=datetime.now, description="Instance creation timestamp"
     )
-    last_activity: datetime | None = Field(default=None, description="Last activity timestamp")
+    last_activity: datetime | None = Field(
+        default=None, description="Last activity timestamp"
+    )
 
     # Communication mode for Docker instances
     communication_mode: Literal["exec", "fifo"] = Field(
@@ -30,11 +34,15 @@ class ClaudeInstance(BaseModel):
     # Tmux-specific fields
     pid: int | None = Field(default=None, description="Process ID (tmux instances)")
     tmux_session: str | None = Field(default=None, description="tmux session name")
-    cwd: str | None = Field(default=None, description="Working directory (tmux instances)")
+    cwd: str | None = Field(
+        default=None, description="Working directory (tmux instances)"
+    )
 
     # Docker-specific fields
     container_id: str | None = Field(default=None, description="Docker container ID")
-    container_name: str | None = Field(default=None, description="Docker container name")
+    container_name: str | None = Field(
+        default=None, description="Docker container name"
+    )
     image_name: str | None = Field(default=None, description="Docker image name")
     docker_network: str | None = Field(default=None, description="Docker network name")
 
@@ -56,7 +64,9 @@ class ClaudeInstance(BaseModel):
                 )
             # tmux_session is required for tmux instances
             if not self.tmux_session:
-                raise ValueError(f"Tmux instance '{self.name}' requires tmux_session field.")
+                raise ValueError(
+                    f"Tmux instance '{self.name}' requires tmux_session field."
+                )
         elif self.instance_type == "docker":
             # For docker instances, tmux fields should be None
             tmux_fields = [self.pid, self.tmux_session, self.cwd]
@@ -67,7 +77,9 @@ class ClaudeInstance(BaseModel):
                 )
             # container_id is required for docker instances
             if not self.container_id:
-                raise ValueError(f"Docker instance '{self.name}' requires container_id field.")
+                raise ValueError(
+                    f"Docker instance '{self.name}' requires container_id field."
+                )
         return self
 
     @field_serializer("created_at", "last_activity")

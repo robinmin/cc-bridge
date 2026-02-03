@@ -5,6 +5,7 @@ This module provides common utilities and shared functionality
 used across the cc-bridge application.
 """
 
+from cc_bridge.packages import crontab  # Import for side effects
 from cc_bridge.packages.exceptions import (
     CCBridgeError,
     InstanceNotFoundError,
@@ -18,6 +19,8 @@ from cc_bridge.packages.exceptions import (
 from cc_bridge.packages.logging import get_logger, reset_logging, setup_logging
 
 __all__ = [
+    # Crontab
+    "crontab",
     # Exceptions
     "CCBridgeError",
     "TelegramError",

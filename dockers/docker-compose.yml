@@ -33,6 +33,9 @@ services:
       # This allows the container to access and modify project files
       - ..:/workspaces/${PROJECT_NAME:-cc-bridge}
 
+      # Named pipes for communication
+      - /tmp/cc-bridge/${PROJECT_NAME:-cc-bridge}/pipes:/tmp/cc-bridge-pipes:rw
+
     # Environment variables
     environment:
       # Anthropic authentication (one of these is required for Claude Code)

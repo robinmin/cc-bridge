@@ -28,7 +28,9 @@ async def test_communication():
 
         async def run_test():
             # Send command (wrapped in a task so it can wait for reader)
-            write_task = asyncio.create_task(channel.write_command("/status", timeout=30.0))
+            write_task = asyncio.create_task(
+                channel.write_command("/status", timeout=30.0)
+            )
 
             print("Reading response (waiting for output pipe)...")
             async for line in channel.read_response(timeout=30.0):
