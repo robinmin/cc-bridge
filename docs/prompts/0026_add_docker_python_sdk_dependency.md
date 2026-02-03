@@ -1,9 +1,9 @@
 ---
 name: add_docker_python_sdk_dependency
 description: Add Docker Python SDK dependency to enable programmatic Docker container management
-status: Backlog
+status: Done
 created_at: 2025-01-28
-updated_at: 2025-01-28
+updated_at: 2026-02-03 15:02:51
 impl_progress:
   planning: completed
   design: pending

@@ -1,9 +1,9 @@
 ---
 name: extend_claudeinstance_model_for_docker_support
 description: Extend ClaudeInstance model to support Docker containers alongside tmux sessions
-status: Backlog
+status: Done
 created_at: 2025-01-28
-updated_at: 2025-01-28
+updated_at: 2026-02-03 15:01:05
 impl_progress:
   planning: completed
   design: pending

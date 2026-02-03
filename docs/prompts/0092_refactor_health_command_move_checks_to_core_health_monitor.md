@@ -1,9 +1,9 @@
 ---
 name: refactor-health-command-move-checks-to-core-health-monitor
 description: Move all health check logic from commands/health.py to core/health_monitor.py, keeping only CLI formatting
-status: Testing
+status: Done
 created_at: 2025-02-02
-updated_at: 2025-02-02
+updated_at: 2026-02-03 14:59:59
 impl_progress:
   planning: completed
   design: completed

@@ -1,9 +1,9 @@
 ---
 name: create-core-tunnel-module-move-tunnel-logic-from-commands
 description: Create core/tunnel.py with CloudflareTunnelManager, move tunnel logic from commands/tunnel.py, consolidate webhook setting with core/telegram.py
-status: Testing
+status: Done
 created_at: 2025-02-02
-updated_at: 2025-02-02
+updated_at: 2026-02-03 15:00:11
 impl_progress:
   planning: completed
   design: completed

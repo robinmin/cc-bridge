@@ -1,9 +1,9 @@
 ---
 name: add_instance_type_detection
 description: Add instance type detection to automatically identify tmux vs Docker instances
-status: Backlog
+status: Done
 created_at: 2025-01-28
-updated_at: 2025-01-28
+updated_at: 2026-02-03 15:02:13
 impl_progress:
   planning: completed
   design: pending

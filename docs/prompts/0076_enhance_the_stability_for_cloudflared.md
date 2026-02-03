@@ -1,9 +1,9 @@
 ---
 name: enhance the stability for cloudflared
 description: Task: enhance the stability for cloudflared
-status: Backlog
+status: Done
 created_at: 2026-01-29 23:53:05
-updated_at: 2026-01-29 23:53:05
+updated_at: 2026-02-03 15:01:36
 impl_progress:
   planning: pending
   design: pending

@@ -1,9 +1,9 @@
 ---
 name: Advanced: message queuing
 description: Task: Advanced: message queuing
-status: Backlog
+status: Done
 created_at: 2026-01-26 21:11:33
-updated_at: 2026-01-26 21:11:33
+updated_at: 2026-02-03 15:03:35
 impl_progress:
   planning: pending
   design: pending

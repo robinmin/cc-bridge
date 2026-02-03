@@ -1,9 +1,9 @@
 ---
 name: refactor-claude-command-move-helpers-to-core-instance-lifecycle
 description: Move helper functions from commands/claude.py to core/instance_lifecycle.py, keep only CLI argument parsing in commands
-status: Testing
+status: Done
 created_at: 2025-02-02
-updated_at: 2025-02-02
+updated_at: 2026-02-03 14:59:45
 impl_progress:
   planning: completed
   design: completed

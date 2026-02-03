@@ -1,9 +1,9 @@
 ---
 name: MVP commands: tunnel command
 description: Task: MVP commands: tunnel command
-status: Backlog
+status: Done
 created_at: 2026-01-26 21:11:02
-updated_at: 2026-01-26 21:11:02
+updated_at: 2026-02-03 15:02:33
 impl_progress:
   planning: pending
   design: pending

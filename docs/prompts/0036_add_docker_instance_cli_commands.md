@@ -1,9 +1,9 @@
 ---
 name: add_docker_instance_cli_commands
 description: Add Docker-specific CLI commands for managing Docker-based Claude instances
-status: Backlog
+status: Done
 created_at: 2025-01-28
-updated_at: 2025-01-28
+updated_at: 2026-02-03 15:00:46
 impl_progress:
   planning: completed
   design: pending

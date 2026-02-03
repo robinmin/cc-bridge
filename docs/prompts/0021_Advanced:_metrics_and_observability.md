@@ -1,9 +1,9 @@
 ---
 name: Advanced: metrics and observability
 description: Task: Advanced: metrics and observability
-status: Backlog
+status: Done
 created_at: 2026-01-26 21:11:38
-updated_at: 2026-01-26 21:11:38
+updated_at: 2026-02-03 15:02:48
 impl_progress:
   planning: pending
   design: pending

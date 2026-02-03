@@ -1,9 +1,9 @@
 ---
 name: implement_docker_container_discovery
 description: Implement Docker container discovery to find Claude Code instances running in containers
-status: Backlog
+status: Done
 created_at: 2025-01-28
-updated_at: 2025-01-28
+updated_at: 2026-02-03 15:02:19
 impl_progress:
   planning: completed
   design: pending

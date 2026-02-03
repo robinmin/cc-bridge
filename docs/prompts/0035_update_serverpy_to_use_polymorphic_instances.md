@@ -1,9 +1,9 @@
 ---
 name: update_serverpy_to_use_polymorphic_instances
 description: Update server.py to use polymorphic InstanceInterface for both tmux and Docker instances
-status: Backlog
+status: Done
 created_at: 2025-01-28
-updated_at: 2025-01-28
+updated_at: 2026-02-03 15:03:22
 impl_progress:
   planning: completed
   design: pending

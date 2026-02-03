@@ -1,9 +1,9 @@
 ---
 name: Advanced: Docker deployment
 description: Task: Advanced: Docker deployment
-status: Backlog
+status: Done
 created_at: 2026-01-26 21:11:34
-updated_at: 2026-01-26 21:11:34
+updated_at: 2026-02-03 14:59:27
 impl_progress:
   planning: pending
   design: pending

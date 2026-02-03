@@ -1,9 +1,9 @@
 ---
 name: implement_dockercontainer_class
 description: Implement DockerContainer class to manage Docker instances via InstanceInterface
-status: Backlog
+status: Done
 created_at: 2025-01-28
-updated_at: 2025-01-28
+updated_at: 2026-02-03 15:02:16
 impl_progress:
   planning: completed
   design: pending

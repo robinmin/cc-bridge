@@ -1,9 +1,9 @@
 ---
 name: refactor-server-command-extract-webhook-server-logic-to-core
 description: Extract business logic from commands/server.py to core/webhook_server.py, keeping only CLI entry point
-status: Testing
+status: Done
 created_at: 2025-02-02
-updated_at: 2025-02-02
+updated_at: 2026-02-03 15:00:08
 impl_progress:
   planning: completed
   design: completed

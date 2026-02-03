@@ -1,9 +1,9 @@
 ---
 name: integrate_with_existing_claude_command
 description: Integrate Docker instances into existing claude command for unified instance management
-status: Backlog
+status: Done
 created_at: 2025-01-28
-updated_at: 2025-01-28
+updated_at: 2026-02-03 15:03:03
 impl_progress:
   planning: completed
   design: pending

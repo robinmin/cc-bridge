@@ -1,9 +1,9 @@
 ---
 name: Advanced__multi-user_support
 description: Implement multi-user support for the Telegram bridge
-status: Testing
+status: Done
 created_at: 2025-01-27
-updated_at: 2025-01-27
+updated_at: 2026-02-03 14:59:20
 impl_progress:
   planning: completed
   design: completed

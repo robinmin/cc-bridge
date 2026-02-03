@@ -1,9 +1,9 @@
 ---
 name: update_instancemanager_for_docker_instances
 description: Update InstanceManager to support Docker instances alongside tmux instances
-status: Backlog
+status: Done
 created_at: 2025-01-28
-updated_at: 2025-01-28
+updated_at: 2026-02-03 15:01:01
 impl_progress:
   planning: completed
   design: pending
