@@ -1,0 +1,27 @@
+# Base image
+FROM oven/bun:1-slim as builder
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    git \
+    curl \
+    tmux \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Install Claude tools globally
+RUN bun install -g @anthropic-ai/claude-code @anthropic-ai/claude-agent-sdk
+
+# Copy dependency definitions
+COPY package.json bun.lock ./
+
+# Install dependencies
+RUN bun install
+
+# Copy source code
+COPY src/agent ./src/agent
+
+# Default command
+# This runs the agent which listens on stdin/stdout by default
+CMD ["bun", "run", "src/agent/index.ts"]

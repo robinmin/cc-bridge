@@ -65,21 +65,19 @@ check_homebrew() {
     log_success "Homebrew found: $(brew --version | head -n 1)"
 }
 
-# Check if cc-bridge is installed
-check_cc_bridge() {
-    log_info "Checking for cc-bridge installation..."
+# Check if Bun is installed
+check_bun() {
+    log_info "Checking for Bun installation..."
 
-    local venv_cc_bridge="${PROJECT_ROOT}/.venv/bin/cc-bridge"
-    if [ ! -f "${venv_cc_bridge}" ]; then
-        log_error "cc-bridge is not installed in virtual environment!"
+    if ! command -v bun &> /dev/null; then
+        log_error "Bun is not installed!"
         echo ""
-        echo "Please install cc-bridge first:"
-        echo "  cd ${PROJECT_ROOT}"
-        echo "  pip install -e ."
+        echo "Please install Bun first:"
+        echo "  curl -fsSL https://bun.sh/install | bash"
         exit 1
     fi
 
-    log_success "cc-bridge found in venv: ${venv_cc_bridge}"
+    log_success "Bun found: $(bun --version)"
 }
 
 # Create log directory
@@ -154,6 +152,10 @@ load_daemon() {
     # Unload first if already loaded
     if launchctl list | grep -q "com.cc-bridge.daemon"; then
         log_warning "Daemon already loaded, unloading first..."
+        # Force kill any existing gateway processes to avoid EADDRINUSE
+        pkill -9 -f "bun run src/gateway/index.ts" 2>/dev/null || true
+        lsof -ti :8080 | xargs kill -9 2>/dev/null || true
+        
         launchctl unload "${PLIST_DEST}" 2>/dev/null || true
     fi
 
@@ -211,8 +213,10 @@ show_status() {
     fi
 
     # Check if daemon is running
-    if pgrep -f "cc-bridge server" > /dev/null; then
-        echo "  Process: Running (PID: $(pgrep -f "cc-bridge server"))"
+    # In Bun, the process name might be 'bun' or the script path
+    if pgrep -f "bun run src/gateway/index.ts" > /dev/null || pgrep -f "src/gateway/index.ts" > /dev/null; then
+        local pid=$(pgrep -f "src/gateway/index.ts" | head -n 1)
+        echo "  Process: Running (PID: ${pid})"
     else
         echo "  Process: Not running"
     fi
@@ -232,9 +236,9 @@ show_status() {
     echo "    Logs:   tail -f ${LOG_DIR}/server.log"
     echo ""
     echo "  Or use make targets (from project directory):"
-    echo "    make daemon-start"
-    echo "    make daemon-stop"
-    echo "    make daemon-restart"
+    echo "    make gateway-start"
+    echo "    make gateway-stop"
+    echo "    make gateway-restart"
 }
 
 # Main installation flow
@@ -249,7 +253,7 @@ main() {
     # Check prerequisites
     check_root
     check_homebrew
-    check_cc_bridge
+    check_bun
 
     # Create directories
     create_log_dir

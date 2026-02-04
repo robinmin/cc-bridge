@@ -2,121 +2,141 @@
 
 ## 1. Executive Summary
 
-This document defines the architectural specification for the next-generation `cc-bridge` Container Agent. The design transitions from a monolithic Python script to a modular, high-performance TypeScript application running on Bun + Hono.
+This document defines the architectural specification for the `cc-bridge` system. The architecture has evolved into a decoupled, service-oriented design featuring a **Gateway Service** and a **Container Agent**.
 
-The goal is to create a lightweight, secure, and extensible agent runtime that supports current needs (Phase 1) while establishing the foundation for advanced capabilities like Multi-Agent Chains and Layered Responses (Future Phases).
+The system prioritizes high-performance command execution alongside proactive agent capabilities, utilizing a **Hybrid IPC Model** and a **Persistence Layer** for long-running state management.
 
 ---
 
-## 2. Phase 1: Foundation (The Optimization)
-
-### 2.1 Core Technology Stack
-
-| Component | Choice | Rationale |
-|-----------|--------|-----------|
-| **Runtime** | **Bun** | Ultra-fast startup, native TypeScript, replaces Node.js + Python. |
-| **Framework** | **Hono** | Lightweight, web-standard (Request/Response) framework for API & internal logic. |
-| **SDK** | **@anthropic-ai/claude-agent-sdk** | Official programmatic control of Claude, replacing brittle CLI parsing. |
-| **Docker** | **oven/bun:1-slim** | Reduces image size from >1GB to ~300MB. |
-
-### 2.2 Functional Architecture
+## 2. System Architecture
 
 ```mermaid
 graph TD
-    Host[Host Bridge Server] <-->|Persistent Stream (IPC)| IpcAdapter[IPC Adapter]
-    subgraph Container [Docker Container]
-        IpcAdapter --> Router[Hono Router]
-        Router --> Controller[Agent Controller]
-        Controller -->|Claude Agent SDK| Claude[Claude Code Agent]
-        
-        subgraph Adapters [Interface Adapters]
-            StdinAdapter[Stdin/Stdout]
-            HttpAdapter[HTTP Server]
-            SocketAdapter[WebSocket (Future)]
-        end
-        
-        IpcAdapter -.-> StdinAdapter
+    User((User)) <--> Telegram["Telegram Bot API"]
+    Telegram <--> CF["Cloudflare Tunnel (cloudflared)"]
+    CF <--> Gateway["Gateway Service (Bun/Hono)"]
+    
+    Gateway ---|Persistence| DB[("SQLite")]
+    
+    subgraph Host["Host Machine"]
+        Gateway
+        DB
+        Watcher["IPC Watcher"]
+    end
+
+    subgraph Container["Docker Container"]
+        Agent["Agent Runtime (Bun/Hono)"]
+        Mailbox["FS Mailbox"]
+    end
+
+    Gateway ---|"Request/Response (EXEC)"| Agent
+    Agent ---|"Proactive Actions (FS)"| Mailbox
+    Mailbox ---|"Pulse/Watch"| Watcher
+    Watcher --> Gateway
+```
+
+### 2.1 Hybrid IPC Model
+
+To balance low-latency user interaction with asynchronous proactive capabilities, we use a hybrid transport:
+
+1.  **Request-Response Mode (Exec)**:
+    - **Mechanism**: `docker exec -i` with JSON-RPC over `stdin`/`stdout`.
+    - **Usage**: Real-time user commands, immediate agent feedback.
+    - **Advantage**: Bypasses macOS filesystem synchronization latency for critical paths.
+
+2.  **Bi-directional Mailbox Mode (File-based)**:
+    - **Mechanism**: JSON files written to a shared bind-mounted directory (`/workspace/ipc`).
+    - **Usage**: Proactive messages, task scheduling, cross-chat coordination.
+    - **Advantage**: Overcomes macOS Named Pipe (FIFO) limitations while allowing the agent to "push" events to the host.
+
+### 2.2 Interaction Flows
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant T as Telegram
+    participant G as Gateway
+    participant P as Persistence
+    participant A as Agent
+    participant M["FS Mailbox"]
+
+    rect rgb(240, 240, 240)
+    Note over U, A: Synchronous Command Flow (EXEC)
+    U->>T: Send Command (e.g., /status)
+    T->>G: Webhook Delivery (via cloudflared)
+    G->>P: Store Incoming Message
+    G->>P: Fetch History/Session
+    G->>A: docker exec -i (JSON-RPC)
+    A-->>G: Command Output
+    G->>P: Store Outgoing Message
+    G->>T: sendMessage
+    T-->>U: Final Reply
+    end
+
+    rect rgb(230, 245, 255)
+    Note over A, U: Asynchronous Proactive Flow (Mailbox)
+    A->>M: Write JSON to /ipc/messages/
+    G->>M: MailboxWatcher Pulse (FS Watch/Poll)
+    M-->>G: Read JSON File
+    G->>P: Store Outgoing Message
+    G->>T: sendMessage
+    T-->>U: Proactive Notification
+    G->>M: Unlink (Delete) JSON File
     end
 ```
 
-### 2.3 IPC Mechanism: Transport Agnostic Design
+---
 
-To prevent "locking in" to a specific IPC method (like `docker exec`), we define a **Transport Adapter Pattern**. The core logic uses standard Request/Response objects (Hono style), and Adapters convert transport-specific protocols into these objects.
+## 3. Core Components
 
-**Supported Adapters:**
-1.  **Stdio Adapter (Default for Phase 1)**:
-    - Reads JSON-RPC or line-delimited JSON from `stdin`.
-    - Writes responses to `stdout`.
-    - **Pros**: Works reliably via `docker exec -i` (bypasses macOS network/FS issues).
-    - **Cons**: Text-based, serial.
+### 3.0 Ingress (External)
+- **Telegram Bot API**: Primary user interface for messaging and command input.
+- **Cloudflare Tunnel (cloudflared)**: Securely tunnels Telegram webhooks to the local Gateway Service.
 
-2.  **HTTP/WebSocket Adapter (Future Option)**:
-    - Exposes an internal port (e.g., 3000).
-    - **Pros**: Standard network debugging.
-    - **Cons**: Requires port mapping management.
+### 3.1 Gateway Service
+- **Runtime**: Bun + Hono.
+- **Message Pipeline**: "Chain of Bots" (MenuBot, HostBot, AgentBot) for request routing.
+- **Deduplication & Rate Limiting**: In-memory trackers to ensure system stability.
 
-### 2.4 Modular Claude Execution
+### 3.2 Persistence Layer (Phase 2)
+- **Engine**: SQLite.
+- **Schema**:
+    - `messages`: Full conversation history for context-aware prompting.
+    - `sessions`: Mapping of Chat IDs to Agent Sessions.
+    - `tasks`: Scheduled proactive prompts (Cron/Interval).
+    - `agents`: Metadata for discovered Docker instances.
 
-We abstract the Claude runner into an `AgentRuntime` interface. This allows us to swap the underlying engine without changing the IPC layer.
-
-```typescript
-interface AgentRuntime {
-  start(options: AgentOptions): Promise<void>;
-  sendUserMessage(message: string): Promise<AgentResponse>;
-  interrupt(): Promise<void>;
-}
-```
-
-**Implementation Strategy:**
-- **Current**: Wrap `Bun.spawn("claude")` or use `claude-agent-sdk` directly.
-- **Future**: Validated "Sandboxed Runtime" or remote execution.
+### 3.3 Container Agent
+- **Runtime**: Bun-based agent wrapper.
+- **Capabilities**: Full access to Claude Code SDK, file system operations, and IPC messaging.
 
 ---
 
-## 3. Future Phases: Advanced Capabilities
+## Concepts
 
-### 3.1 Chain of Agent Response (Layered Agents)
-
-The architecture supports a "Middleware Chain" pattern where multiple agents can process a request before the final response reaches the user.
-
-**Flow:**
-`User Request` -> `[Safety Layer]` -> `[Orchestrator Agent]` -> `[Expert Agent (Claude Code)]` -> `[User Response]`
-
-**Use Case:**
-- **Orchestrator**: Decides *which* specific tool or sub-agent should handle the request (e.g., "Code Agent" vs. "Search Agent").
-- **Intervention**: A "Safety Agent" can intercept and modify responses before they leave the container.
-
-### 3.2 Dynamic Capability Loading (Plugins/MCP)
-
-The agent will expose a dynamic plugin system compatible with **Model Context Protocol (MCP)**.
-- **Dynamic Loading**: Load MCP servers at runtime without rebuilding the container.
-- **Hot-Swapping**: Enable/disable capabilities (e.g., "Research Mode" vs "Coding Mode") on the fly via the bridge.
+### Workspace
+A **Workspace** is the primary unit of management. It encapsulates:
+- A host-side project directory (e.g., `/Users/robin/xprojects/cc-bridge`)
+- A dedicated Docker container (managed as a Workspace)
+- Isolated IPC Mailbox paths (`data/ipc/<workspace_name>/`)
+- Persistence sticky-sessions mapping users to specific workspaces.
 
 ---
 
-## 4. Implementation Logic (Phase 1)
+## 4. Advanced Features
 
-### 4.1 Directory Structure
-```
-cc_bridge/agents/container/
-├── src/
-│   ├── adapters/         # IPC Adapters (Stdin, HTTP)
-│   ├── core/
-│   │   ├── runtime.ts    # AgentRuntime interface & Claude wrapper
-│   │   └── router.ts     # Hono app & routing logic
-│   └── index.ts          # Entrypoint (detects Adapter to use)
-├── package.json
-└── tsconfig.json
-```
+### 4.1 Context-Aware Prompting
+Instead of sending single messages, the Gateway reconstructs conversation history from the Persistence Layer, wrapping it in a structured XML format (`<messages>`) for the agent.
 
-### 4.2 Security Model
-- **Container Isolation**: Primary security boundary.
-- **Non-Root User**: Run as `bun` (uid 1000).
-- **Explicit Permissions**: Even if `--dangerously-skip-permissions` is used, the *Bridge* can enforce a secondary permission layer if needed by intercepting the IPC stream.
+### 4.2 Proactive Task Scheduling
+Agents can schedule their own future executions by writing task definitions to the Mailbox. The Gateway's scheduler then triggers the agent at the designated time.
 
-## 5. Migration Plan
+### 4.3 Multi-Channel Extensibility
+The `Channel` interface allows the Gateway to support Telegram, Slack, Discord, or custom webhooks with minimal modification to the core pipeline.
 
-1.  **Refactor**: Build `cc_bridge/agents/container/` as a standalone Bun+TypeScript project.
-2.  **Dockerize**: Update Dockerfile to build this project into the `oven/bun` image.
-3.  **Bridge Update**: Update Python host to launch via `docker exec ... bun run start`.
-4.  **Verify**: Ensure feature parity (chat, interruptions, context).
+---
+
+## 5. Security Model
+- **Isolation**: Each agent runs in a dedicated Docker container.
+- **Mailbox Scoping**: IPC directories are namespaced by group/chat to prevent cross-chat privilege escalation.
+- **Mount Security**: Global memory is mounted as read-only for non-main agent instances.

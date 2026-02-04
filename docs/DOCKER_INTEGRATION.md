@@ -23,11 +23,11 @@ graph TD
 
 ## 2. Recommended Setup (Docker Compose)
 
-The easiest way to get started is using the provided [docker-compose.yml](file:///Users/robin/xprojects/cc-bridge/dockers/docker-compose.yml).
+The easiest way to get started is using the provided [docker-compose.yml](file:///Users/robin/xprojects/cc-bridge/src/dockers/docker-compose.yml).
 
 ### 2.1 File Structure
 ```text
-dockers/
+src/dockers/
 ├── Dockerfile           # Multi-stage build
 ├── docker-compose.yml   # Orchestration
 ├── .env                 # API Keys & Config

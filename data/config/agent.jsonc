@@ -1,0 +1,7 @@
+{
+    /* Agent Service Configuration */
+    "healthStatus": "ok",
+    "healthRuntime": "bun",
+    // Log level (debug, info, warn, error)
+    "logLevel": "debug"
+}

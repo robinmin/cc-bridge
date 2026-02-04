@@ -1,0 +1,79 @@
+# version: '3.8'
+
+services:
+  claude-agent:
+    build:
+      context: ../..
+      dockerfile: src/dockers/Dockerfile.agent
+    image: cc-bridge:latest
+    container_name: claude-${WORKSPACE_NAME:-cc-bridge}
+
+    labels:
+      - "cc-bridge.workspace=${WORKSPACE_NAME:-cc-bridge}"
+
+    env_file:
+      - ./.env
+
+    # Volume mounts
+    volumes:
+      # Individual file mounts for Claude configuration
+      - ./.claude/settings.json:/home/vscode/.claude/settings.json:rw
+      - ./.claude/CLAUDE.md:/home/vscode/.claude/CLAUDE.md:rw
+      
+      # Persistent state and authentication from host
+      - ~/.claude.json:/home/vscode/.claude.json:rw
+      - ~/.claude/plugins:/home/vscode/.claude/plugins:rw
+      - ~/.claude/statsig:/home/vscode/.claude/statsig:rw
+      - ~/.claude/session-env:/home/vscode/.claude/session-env:rw
+      - ~/.claude/bridge:/home/vscode/.claude/bridge:rw
+      - ~/.claude/hooks:/home/vscode/.claude/hooks:rw
+
+      # Workspace volume mapping
+      - ../../:/workspaces/${WORKSPACE_NAME:-cc-bridge}:rw
+      
+      # IPC Mailbox and Logs
+      - ../../data/ipc/${WORKSPACE_NAME:-cc-bridge}:/workspaces/${WORKSPACE_NAME:-cc-bridge}/data/ipc:rw
+      - ../../data/logs:/workspaces/${WORKSPACE_NAME:-cc-bridge}/data/logs:rw
+
+    # Environment variables
+    environment:
+      # Service name for logging
+      - SERVICE_NAME=agent
+
+      # Workspace settings
+      - WORKSPACE_NAME=${WORKSPACE_NAME:-cc-bridge}
+      - INSTANCE_NAME=${WORKSPACE_NAME:-cc-bridge}
+
+      # Python settings
+      - PYTHONUNBUFFERED=1
+
+    # Working directory inside container
+    working_dir: /workspaces/${WORKSPACE_NAME:-cc-bridge}
+
+    # Keep stdin open and allocate tty for interactive sessions
+    stdin_open: true
+    tty: true
+
+    # Restart policy (none for development, unless-stopped for production)
+    restart: unless-stopped
+
+    # The bridge server communicates via 'docker exec' streams.
+    # The container just needs to stay alive.
+    command: tail -f /dev/null
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "bun", "--version"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+
+    # Network configuration
+    networks:
+      - claude-network
+
+# Define network for container communication
+networks:
+  claude-network:
+    driver: bridge

@@ -6,15 +6,12 @@
     <key>Label</key>
     <string>com.cc-bridge.daemon</string>
 
-    <!-- Command to run: cc-bridge server -->
+    <!-- Command to run: bun run src/gateway/index.ts -->
     <key>ProgramArguments</key>
     <array>
-        <string>/Users/robin/xprojects/cc-bridge/.venv/bin/cc-bridge</string>
-        <string>server</string>
-        <string>--host</string>
-        <string>0.0.0.0</string>
-        <string>--port</string>
-        <string>8080</string>
+        <string>/Users/robin/.bun/bin/bun</string>
+        <string>run</string>
+        <string>src/gateway/index.ts</string>
     </array>
 
     <!-- Run as specified user (not root) -->
@@ -39,17 +36,15 @@
     <!-- Environment variables -->
     <key>EnvironmentVariables</key>
     <dict>
-        <!-- Ensure PATH includes virtual environment -->
+        <!-- Ensure PATH includes Bun and other binaries -->
         <key>PATH</key>
-        <string>/Users/robin/xprojects/cc-bridge/.venv/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin</string>
-
-        <!-- Set virtual environment -->
-        <key>VIRTUAL_ENV</key>
-        <string>/Users/robin/xprojects/cc-bridge/.venv</string>
+        <string>/Users/robin/.bun/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin</string>
 
         <!-- Set HOME to current user's home directory -->
         <key>HOME</key>
         <string>/Users/robin</string>
+        <key>SERVICE_NAME</key>
+        <string>gateway</string>
     </dict>
 
     <!-- Working directory -->

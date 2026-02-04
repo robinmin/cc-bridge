@@ -1,5 +1,0 @@
-# Ruff configuration for cc-bridge
-# Allow appropriate complexity for complex functions that handle real-world complexity
-
-[lint]
-ignore = ["PLR0911", "PLR0912", "PLR0915"]

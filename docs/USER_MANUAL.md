@@ -393,7 +393,7 @@ The fastest and most stable way to run CC-Bridge is using Docker Compose.
 
 ```bash
 # Step 1: Start the container environment
-docker compose -f dockers/docker-compose.yml up -d
+docker compose -f src/dockers/docker-compose.yml up -d
 
 # Step 2: Perform one-time interactive setup (Trust workspace)
 docker exec -it claude-cc-bridge claude --allow-dangerously-skip-permissions
@@ -1209,7 +1209,7 @@ For maximum automation, CC-Bridge supports **Real YOLO Mode**. This disables all
 - **Auto-Discovery**: Automatic MCP server detection.
 
 **How to Enable:**
-Update your `dockers/.claude/settings.json` with the YOLO flags (see [Docker Integration Guide](DOCKER_INTEGRATION.md) for details).
+Update your `src/dockers/.claude/settings.json` with the YOLO flags (see [Docker Integration Guide](DOCKER_INTEGRATION.md) for details).
 
 ### 11.2 The 'make docker-talk' Helper
 Instead of opening a Telegram client to test small things, use the `make docker-talk` helper from your terminal:

@@ -538,19 +538,19 @@ make logs-monitor    # View logs (tail -f)
 make agent-uninstall
 ```
 
-### LaunchDaemon (starts at boot - for servers)
+### System Gateway (starts at boot - for servers)
 
 ```bash
-# Install daemon
-make daemon-setup
+# Install gateway
+make gateway-setup
 
-# Control daemon
-make daemon-start     # Start daemon
-make daemon-stop      # Stop daemon
-make daemon-restart   # Restart daemon
+# Control gateway
+make gateway-start     # Start gateway
+make gateway-stop      # Stop gateway
+make gateway-restart   # Restart gateway
 
 # Uninstall
-make daemon-uninstall
+make gateway-uninstall
 ```
 
 ## 📊 Configuration Reference
