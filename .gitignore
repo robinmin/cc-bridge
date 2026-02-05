@@ -153,7 +153,7 @@ vite.config.ts.timestamp-*
 
 /.claude/last-session.json
 
-/dockers/.claude/.claude.json
+/src/dockers/.claude/.claude.json
 
 /data/ipc
 /data/logs

@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-02-04
+
+### Added
+- **TSX Component Rendering**: Replaced legacy string formatting with a modern TSX-based component architecture (`src/gateway/output`) for unified and beautiful reports.
+- **Content Negotiation**: Intelligent server-side rendering in the `/health` endpoint, serving raw JSON for APIs or formatted reports for Terminal/Telegram based on `Accept` headers.
+- **Enhanced System Diagnostics**:
+  - Live Docker container status (image, uptime, and health) for agent instances.
+  - Detailed filesystem path verification and access status reporting.
+  - Transparent (non-sensitive) environment variable listing in health checks.
+- **Infrastructure Stability**:
+  - Daily log rotation using `pino-roll` to prevent unbounded log growth and improve maintainability.
+  - Workspace-aware logging: agent logs now include their workspace name (e.g., `[Agent:cc-bridge]`) for easier multi-project debugging.
+- **Telegram API Flexibility**: Enhanced `sendMessage` with support for custom `parse_mode` (defaulting to Markdown).
+
+### Changed
+- **Streamlined Bot Commands**:
+  - Consolidated diagnostic commands: renamed `/bridge_status` to `/status`.
+  - Refactored `MenuBot` and its help system to remove redundant shortcuts and simplify the interface.
+- **Improved Terminal Output**: Added trailing newlines to all TSX-rendered reports for a clean, professional CLI experience.
+- **Modernized Internal Logic**: Fully decoupled data collection in `health.ts` from presentation logic in TSX components.
+
+### Fixed
+- Improved alignment and visual consistency of headers and sections across Terminal and Telegram.
+- Resolved shell prompt overlap issues by ensuring all CLI outputs end with a newline.
+
 ## [0.1.0] - 2026-02-02
 
 ### Added
