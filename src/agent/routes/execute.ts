@@ -10,6 +10,7 @@ app.post("/", zValidator("json", ExecuteCommandSchema), async (c) => {
 
     try {
         const cmdList = [command, ...(args || [])];
+        console.info(`Executing command: ${cmdList.join(" ")}`);
         const proc = Bun.spawn(cmdList, {
             cwd: cwd || undefined,
             stdout: "pipe",

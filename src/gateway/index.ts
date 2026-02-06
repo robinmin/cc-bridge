@@ -10,6 +10,7 @@ import { AgentBot } from "@/gateway/pipeline/agent-bot";
 import { instanceManager } from "@/gateway/instance-manager";
 import { MailboxWatcher } from "@/gateway/mailbox-watcher";
 import { taskScheduler } from "@/gateway/task-scheduler";
+import { persistence } from "@/gateway/persistence";
 
 import { handleHealth } from "@/gateway/routes/health";
 import { handleWebhook } from "@/gateway/routes/webhook";
@@ -62,10 +63,24 @@ logger.info("Starting initial instance discovery");
 instanceManager.refresh();
 
 // Periodic Discovery Refresh
-setInterval(async () => {
+const discoveryInterval = setInterval(async () => {
     logger.debug("Running periodic instance discovery refresh");
     await instanceManager.refresh();
 }, GATEWAY_CONSTANTS.INSTANCES.REFRESH_INTERVAL_MS);
+
+// Graceful Shutdown
+const shutdown = async (signal: string) => {
+    logger.info({ signal }, "Shutdown signal received. Closing resources...");
+    clearInterval(discoveryInterval);
+    await mailboxWatcher.stop();
+    await taskScheduler.stop();
+    persistence.close();
+    logger.info("Gateway shutdown complete.");
+    process.exit(0);
+};
+
+process.on("SIGINT", () => shutdown("SIGINT"));
+process.on("SIGTERM", () => shutdown("SIGTERM"));
 
 export default {
     port: PORT,

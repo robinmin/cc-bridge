@@ -56,7 +56,7 @@ export class AgentBot implements Bot {
         while (retries >= 0) {
             try {
                 logger.debug({ chatId: message.chatId, containerId: instance.containerId }, "Sending request to agent");
-                const client = new IpcClient(instance.containerId);
+                const client = new IpcClient(instance.containerId, instance.name);
 
                 const response = await client.sendRequest({
                     id: Math.random().toString(36).substring(7),
@@ -64,7 +64,10 @@ export class AgentBot implements Bot {
                     path: "/execute",
                     body: {
                         command: "claude",
-                        args: ["-p", prompt]
+                        args: [
+                            "-p", prompt,
+                            "--allow-dangerously-skip-permissions",
+                        ]
                     }
                 });
 

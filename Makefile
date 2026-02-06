@@ -9,6 +9,17 @@ BIOME := npx @biomejs/biome
 PACKAGE_NAME := cc-bridge
 VERSION := 0.1.0
 
+# User adaptation variables
+USER_NAME := $(shell whoami)
+USER_ID := $(shell id -u)
+GROUP_ID := $(shell id -g)
+WORKSPACE_NAME := cc-bridge
+
+export USER_NAME
+export USER_ID
+export GROUP_ID
+export WORKSPACE_NAME
+
 # =============================================================================
 # Help
 # =============================================================================
@@ -28,10 +39,13 @@ all: code-all
 bridge-status:
 	@curl -s -f --connect-timeout 3 "http://localhost:8080/health" || (echo "\x1b[31m✗ Gateway Server is NOT RESPONDING\x1b[0m" && echo "  Check if service is running: \x1b[33mmake gateway-start\x1b[0m" && exit 1)
 
-## docker-build: Build docker image
+## docker-build: Build docker image (with host user adaptation)
 docker-build:
-	@echo "Building docker image..."
-	@docker build -t cc-bridge -f src/dockers/Dockerfile.agent .
+	@echo "Building docker image for user $(USER_NAME)..."
+	@docker build -t cc-bridge -f src/dockers/Dockerfile.agent \
+		--build-arg USER_NAME=$(USER_NAME) \
+		--build-arg USER_ID=$(USER_ID) \
+		--build-arg GROUP_ID=$(GROUP_ID) .
 
 ## docker-run: Run docker container with host authentication (using docker-compose)
 docker-run:
@@ -43,13 +57,18 @@ docker-restart:
 	@echo "Rebuilding and restarting with docker-compose..."
 	@docker compose -f src/dockers/docker-compose.yml up -d --build --force-recreate
 
-## docker-talk: Talk to Claude inside Docker (e.g., make docker-talk msg="Hello")
+## docker-talk: Talk to Claude inside Docker via gateway-like IPC (e.g., make docker-talk msg="Hello")
 docker-talk:
 	@if [ -z "$(msg)" ]; then \
 		echo "Usage: make docker-talk msg=\"Your message here\""; \
 		exit 1; \
 	fi
-	@docker exec -it claude-cc-bridge claude -p --allow-dangerously-skip-permissions -c "$(msg)"
+	@$(BUN) run scripts/talk-to-agent.ts "$(msg)"
+
+## docker-sync-plugins: Sync Claude plugins inside the container
+docker-sync-plugins:
+	@echo "Syncing plugins inside the container..."
+	@docker exec -it claude-$(WORKSPACE_NAME) bash ./scripts/sync-plugins.sh
 
 # =============================================================================
 # Setup

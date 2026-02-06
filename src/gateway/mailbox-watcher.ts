@@ -77,8 +77,13 @@ export class MailboxWatcher {
                 // Delete processed message
                 await fs.unlink(filePath);
             } catch (error) {
-                logger.error({ file, error }, "Error processing mailbox message");
-                // Optionally move to errors folder as Nanoclaw does
+                logger.error({ file, error }, "Error processing mailbox message - deleting malformed file");
+                // Delete the malformed file anyway to prevent infinite loops
+                try {
+                    await fs.unlink(filePath);
+                } catch (unlinkError) {
+                    logger.error({ file, error: unlinkError }, "Failed to delete malformed mailbox message");
+                }
             }
         }
     }

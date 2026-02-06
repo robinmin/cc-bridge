@@ -1,13 +1,31 @@
 import { type IpcRequest, type IpcResponse } from "@/packages/types";
+import path from "node:path";
+import fs from "node:fs";
 
 export class IpcClient {
-    constructor(private containerId: string) { }
+    private socketPath: string | null = null;
+
+    constructor(private containerId: string, private instanceName?: string) {
+        if (this.instanceName) {
+            // Check for Unix socket on host (shared volume)
+            const hostSocket = path.resolve("data/ipc", this.instanceName, "agent.sock");
+            if (fs.existsSync(hostSocket)) {
+                this.socketPath = hostSocket;
+            }
+        }
+    }
 
     async sendRequest(request: IpcRequest): Promise<IpcResponse> {
+        // NOTE: Unix socket fetch from host to container is incompatible with macOS Docker volumes.
+        // We revert to docker exec but force AGENT_MODE=stdio to ensure it works alongside the server.
+        return this.sendViaDockerExec(request);
+    }
+
+    private async sendViaDockerExec(request: IpcRequest): Promise<IpcResponse> {
         const payload = JSON.stringify(request);
 
-        // We use docker exec -i to send the request to the agent's stdin
-        const proc = Bun.spawn(["docker", "exec", "-i", this.containerId, "bun", "run", "src/agent/index.ts"], {
+        // Force stido mode to ensure we don't try to start a second server inside the container
+        const proc = Bun.spawn(["docker", "exec", "-i", "-e", "AGENT_MODE=stdio", this.containerId, "bun", "run", "src/agent/index.ts"], {
             stdin: "pipe",
             stdout: "pipe",
             stderr: "pipe",
@@ -27,14 +45,11 @@ export class IpcClient {
             return {
                 id: request.id,
                 status: 500,
-                error: {
-                    message: errorMsg,
-                },
+                error: { message: errorMsg },
             };
         }
 
         try {
-            // Find the line that is valid JSON and matches our request ID
             const lines = stdout.trim().split("\n");
             for (let i = lines.length - 1; i >= 0; i--) {
                 const line = lines[i].trim();
@@ -45,18 +60,14 @@ export class IpcClient {
                     if (parsed && typeof parsed === "object" && parsed.id === request.id) {
                         return parsed as IpcResponse;
                     }
-                } catch {
-                    continue;
-                }
+                } catch { continue; }
             }
-            throw new Error(`Could not find valid JSON response with ID ${request.id} in output: ${stdout}`);
+            throw new Error(`Could not find valid JSON response with ID ${request.id} in output`);
         } catch (error: any) {
             return {
                 id: request.id,
                 status: 500,
-                error: {
-                    message: `IPC Error: ${error.message}`,
-                },
+                error: { message: `IPC Error: ${error.message}` },
             };
         }
     }

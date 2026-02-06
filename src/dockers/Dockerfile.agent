@@ -1,27 +1,66 @@
 # Base image
-FROM oven/bun:1-slim as builder
+FROM oven/bun:1-slim
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     git \
     curl \
     tmux \
+    sudo \
     && rm -rf /var/lib/apt/lists/*
+
+# ARG for dynamic user creation
+ARG USER_NAME=bun
+ARG USER_ID=1000
+ARG GROUP_ID=1000
+
+# Create a group and user matching the host
+# We use /Users/${USER_NAME} to match macOS structure
+RUN groupadd -g ${GROUP_ID} ${USER_NAME} || true && \
+    useradd -u ${USER_ID} -g ${GROUP_ID} -m -s /bin/bash -d /Users/${USER_NAME} ${USER_NAME} || true
+
+# Ensure the home directory exists and is owned by the user (as root)
+RUN mkdir -p /Users/${USER_NAME}/.claude && \
+    chown -R ${USER_ID}:${GROUP_ID} /Users
+
+# Ensure sudo privileges for the new user
+RUN echo "${USER_NAME} ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
 
 WORKDIR /app
 
-# Install Claude tools globally
-RUN bun install -g @anthropic-ai/claude-code @anthropic-ai/claude-agent-sdk
+# Ensure /app is writable by the user
+RUN chown -R ${USER_ID}:${GROUP_ID} /app
+
+# Switch to non-root user
+USER ${USER_NAME}
+
+# Install Claude tools locally in /app/node_modules
+RUN bun add @anthropic-ai/claude-code @anthropic-ai/claude-agent-sdk
+
+# Add local bin to PATH
+ENV PATH="/app/node_modules/.bin:${PATH}"
 
 # Copy dependency definitions
-COPY package.json bun.lock ./
+COPY --chown=${USER_NAME}:${USER_NAME} package.json bun.lock ./
+
+# Copy internal packages and source
+COPY --chown=${USER_NAME}:${USER_NAME} tsconfig.json ./
+COPY --chown=${USER_NAME}:${USER_NAME} src/packages ./src/packages
+COPY --chown=${USER_NAME}:${USER_NAME} src/agent ./src/agent
+
+# Copy automation scripts
+COPY --chown=${USER_NAME}:${USER_NAME} src/dockers/entrypoint.sh ./src/dockers/entrypoint.sh
+COPY --chown=${USER_NAME}:${USER_NAME} scripts/sync-plugins.sh ./scripts/sync-plugins.sh
+RUN chmod +x ./src/dockers/entrypoint.sh ./scripts/sync-plugins.sh
 
 # Install dependencies
 RUN bun install
 
-# Copy source code
-COPY src/agent ./src/agent
+# Switch to non-root user for final execution
+USER ${USER_NAME}
+
+# Entrypoint handles initialization (like plugin sync)
+ENTRYPOINT ["/app/src/dockers/entrypoint.sh"]
 
 # Default command
-# This runs the agent which listens on stdin/stdout by default
 CMD ["bun", "run", "src/agent/index.ts"]

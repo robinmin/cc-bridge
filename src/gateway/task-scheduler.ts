@@ -55,7 +55,7 @@ export class TaskScheduler {
                 return;
             }
 
-            const client = new IpcClient(instance.containerId);
+            const client = new IpcClient(instance.containerId, task.instance_name);
             const response = await client.sendRequest({
                 id: `task-${task.id}-${Date.now()}`,
                 method: "POST",
@@ -86,8 +86,22 @@ export class TaskScheduler {
     private calculateNextRun(task: any): string | null {
         if (task.schedule_type === "once") return null;
 
-        // Simple interval fallback for now: +1 hour
-        const next = new Date(Date.now() + 3600 * 1000);
+        let intervalMs = 3600 * 1000; // Default 1h
+        const value = task.schedule_value || "";
+
+        const match = value.match(/^(\d+)([smhd])$/);
+        if (match) {
+            const num = parseInt(match[1]);
+            const unit = match[2];
+            switch (unit) {
+                case "s": intervalMs = num * 1000; break;
+                case "m": intervalMs = num * 60 * 1000; break;
+                case "h": intervalMs = num * 60 * 60 * 1000; break;
+                case "d": intervalMs = num * 24 * 60 * 60 * 1000; break;
+            }
+        }
+
+        const next = new Date(Date.now() + intervalMs);
         return next.toISOString().replace("T", " ").substring(0, 19);
     }
 }

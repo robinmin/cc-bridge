@@ -5,11 +5,12 @@
 export const AGENT_CONSTANTS = {
     // --- Execution Settings ---
     EXECUTION: {
-        DEFAULT_TIMEOUT_MS: 30000,
+        DEFAULT_TIMEOUT_MS: 120000,
         MAX_OUTPUT_SIZE_BYTES: 10 * 1024 * 1024, // 10MB
         TIMEOUT_EXIT_CODE: 124,
         ERROR_EXIT_CODE: -1,
         IPC_DIR: "data/ipc",
+        AGENT_SOCKET: "data/ipc/agent.sock",
         CONFIG_FILE: "data/config/agent.jsonc",
     },
 

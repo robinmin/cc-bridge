@@ -5,6 +5,10 @@ services:
     build:
       context: ../..
       dockerfile: src/dockers/Dockerfile.agent
+      args:
+        - USER_NAME=${USER_NAME:-bun}
+        - USER_ID=${USER_ID:-1000}
+        - GROUP_ID=${GROUP_ID:-1000}
     image: cc-bridge:latest
     container_name: claude-${WORKSPACE_NAME:-cc-bridge}
 
@@ -17,17 +21,21 @@ services:
     # Volume mounts
     volumes:
       # Individual file mounts for Claude configuration
-      - ./.claude/settings.json:/home/vscode/.claude/settings.json:rw
-      - ./.claude/CLAUDE.md:/home/vscode/.claude/CLAUDE.md:rw
+      - ./.claude/settings.json:/Users/${USER_NAME:-bun}/.claude/settings.json:rw
+      - ./.claude/CLAUDE.md:/Users/${USER_NAME:-bun}/.claude/CLAUDE.md:rw
       
       # Persistent state and authentication from host
-      - ~/.claude.json:/home/vscode/.claude.json:rw
-      - ~/.claude/plugins:/home/vscode/.claude/plugins:rw
-      - ~/.claude/statsig:/home/vscode/.claude/statsig:rw
-      - ~/.claude/session-env:/home/vscode/.claude/session-env:rw
-      - ~/.claude/bridge:/home/vscode/.claude/bridge:rw
-      - ~/.claude/hooks:/home/vscode/.claude/hooks:rw
+      - ~/.claude.json:/Users/${USER_NAME:-bun}/.claude.json:rw
+      - ~/.claude/plugins:/Users/${USER_NAME:-bun}/.claude/plugins:rw
+      - ~/.claude/cache:/Users/${USER_NAME:-bun}/.claude/cache:rw
+      - ~/.claude/statsig:/Users/${USER_NAME:-bun}/.claude/statsig:rw
+      - ~/.claude/session-env:/Users/${USER_NAME:-bun}/.claude/session-env:rw
+      - ~/.claude/bridge:/Users/${USER_NAME:-bun}/.claude/bridge:rw
+      - ~/.claude/hooks:/Users/${USER_NAME:-bun}/.claude/hooks:rw
 
+      # Fixed mount point for automation scripts (robustness)
+      - ../../scripts:/app/scripts:rw
+      
       # Workspace volume mapping
       - ../../:/workspaces/${WORKSPACE_NAME:-cc-bridge}:rw
       
@@ -43,6 +51,8 @@ services:
       # Workspace settings
       - WORKSPACE_NAME=${WORKSPACE_NAME:-cc-bridge}
       - INSTANCE_NAME=${WORKSPACE_NAME:-cc-bridge}
+      - AGENT_MODE=server
+      - CLAUDE_AGENT_SKILLS=1
 
       # Python settings
       - PYTHONUNBUFFERED=1
@@ -57,9 +67,9 @@ services:
     # Restart policy (none for development, unless-stopped for production)
     restart: unless-stopped
 
-    # The bridge server communicates via 'docker exec' streams.
-    # The container just needs to stay alive.
-    command: tail -f /dev/null
+    # The bridge server communicates via a persistent Unix Domain Socket (low-latency)
+    # with a fall back to 'docker exec' streams.
+    command: ["bun", "run", "src/agent/index.ts"]
 
     # Health check
     healthcheck:

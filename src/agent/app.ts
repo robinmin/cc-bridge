@@ -1,6 +1,14 @@
 import { Hono } from "hono";
 import { pinoLogger } from "hono-pino";
 import { logger, setLogLevel } from "@/packages/logger";
+
+// Redirect console to pino AS EARLY AS POSSIBLE to keep stdout pure for IPC.
+// This must happen before any other local modules (which might have top-level logs) are imported.
+console.log = (...args) => logger.info(args.length === 1 ? args[0] : args);
+console.error = (...args) => logger.error(args.length === 1 ? args[0] : args);
+console.warn = (...args) => logger.warn(args.length === 1 ? args[0] : args);
+console.debug = (...args) => logger.debug(args.length === 1 ? args[0] : args);
+
 import { ConfigLoader } from "@/packages/config";
 import { AGENT_CONSTANTS } from "@/agent/consts";
 import executeRoute from "@/agent/routes/execute";
@@ -11,12 +19,6 @@ import notifyRoute from "@/agent/routes/notify";
 import healthHandler from "@/agent/routes/health";
 
 const app = new Hono();
-
-// Redirect console to pino to keep stdout pure for IPC
-console.log = (...args) => logger.info(args.length === 1 ? args[0] : args);
-console.error = (...args) => logger.error(args.length === 1 ? args[0] : args);
-console.warn = (...args) => logger.warn(args.length === 1 ? args[0] : args);
-console.debug = (...args) => logger.debug(args.length === 1 ? args[0] : args);
 
 // Middleware
 app.use("*", pinoLogger({ pino: logger }));

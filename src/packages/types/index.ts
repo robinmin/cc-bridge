@@ -5,7 +5,7 @@ export const ExecuteCommandSchema = z.object({
     command: z.string(),
     args: z.array(z.string()).optional(),
     cwd: z.string().optional(),
-    timeout: z.number().optional().default(30000), // Default 30s
+    timeout: z.number().optional().default(120000), // Default 120s
 });
 
 export type ExecuteCommandRequest = z.infer<typeof ExecuteCommandSchema>;
