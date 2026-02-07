@@ -1,38 +1,89 @@
-import { expect, test, describe, beforeEach, afterEach } from "bun:test";
-import { ConfigLoader } from "@/packages/config";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import fs from "node:fs";
+import { ConfigLoader } from "@/packages/config/index";
 
 describe("ConfigLoader", () => {
-    const testConfigPath = "test_config.jsonc";
+	const testConfigPath = "/tmp/test-config.jsonc";
+	const defaults = { key1: "default1", key2: "default2", nested: { value: 0 } };
 
-    afterEach(() => {
-        if (fs.existsSync(testConfigPath)) {
-            fs.unlinkSync(testConfigPath);
-        }
-    });
+	beforeEach(() => {
+		// Clean up any existing test file
+		if (fs.existsSync(testConfigPath)) {
+			fs.unlinkSync(testConfigPath);
+		}
+	});
 
-    test("should load configuration from JSONC file with comments", () => {
-        const content = `{
-            /* Multi-line 
-               comment */
-            "port": 9090, // inline comment
-            "debug": true
-        }`;
-        fs.writeFileSync(testConfigPath, content);
+	afterEach(() => {
+		// Clean up test file
+		if (fs.existsSync(testConfigPath)) {
+			fs.unlinkSync(testConfigPath);
+		}
+	});
 
-        const config = ConfigLoader.load(testConfigPath, { port: 8080, debug: false });
-        expect(config.port).toBe(9090);
-        expect(config.debug).toBe(true);
-    });
+	test("should return defaults when config file does not exist", () => {
+		const result = ConfigLoader.load(testConfigPath, defaults);
+		expect(result).toEqual(defaults);
+	});
 
-    test("should use defaults if file does not exist", () => {
-        const config = ConfigLoader.load("non_existent.jsonc", { port: 8080 });
-        expect(config.port).toBe(8080);
-    });
+	test("should load and parse JSONC file", () => {
+		const configContent = `
+		{
+			// This is a comment
+			"key1": "value1",
+			"key2": "value2"
+		}
+		`;
+		fs.writeFileSync(testConfigPath, configContent, "utf-8");
 
-    test("should handle invalid JSONC by returning defaults", () => {
-        fs.writeFileSync(testConfigPath, "{ invalid json }");
-        const config = ConfigLoader.load(testConfigPath, { port: 8080 });
-        expect(config.port).toBe(8080);
-    });
+		const result = ConfigLoader.load(testConfigPath, defaults);
+
+		expect(result.key1).toBe("value1");
+		expect(result.key2).toBe("value2");
+		expect(result.nested).toEqual(defaults.nested); // Should keep default for unspecified nested
+	});
+
+	test("should merge config with defaults", () => {
+		const configContent = `{"key1": "overridden"}`;
+		fs.writeFileSync(testConfigPath, configContent, "utf-8");
+
+		const result = ConfigLoader.load(testConfigPath, defaults);
+
+		expect(result.key1).toBe("overridden");
+		expect(result.key2).toBe("default2"); // Should keep default
+	});
+
+	test("should handle empty config file", () => {
+		fs.writeFileSync(testConfigPath, "{}", "utf-8");
+
+		const result = ConfigLoader.load(testConfigPath, defaults);
+
+		expect(result).toEqual(defaults);
+	});
+
+	test("should handle invalid JSONC gracefully", () => {
+		fs.writeFileSync(testConfigPath, "{ invalid json }", "utf-8");
+
+		const result = ConfigLoader.load(testConfigPath, defaults);
+
+		// Should return defaults on parse error
+		expect(result).toEqual(defaults);
+	});
+
+	test("should handle non-object config gracefully", () => {
+		fs.writeFileSync(testConfigPath, '"just a string"', "utf-8");
+
+		const result = ConfigLoader.load(testConfigPath, defaults);
+
+		// Should return defaults when parsed value is not an object
+		expect(result).toEqual(defaults);
+	});
+
+	test("should handle nested object merging", () => {
+		const configContent = `{"nested": {"value": 42}}`;
+		fs.writeFileSync(testConfigPath, configContent, "utf-8");
+
+		const result = ConfigLoader.load(testConfigPath, defaults);
+
+		expect(result.nested.value).toBe(42);
+	});
 });

@@ -10,7 +10,7 @@ describe("StdioIpcAdapter", () => {
 		// Mock input stream
 		const inputData = [
 			JSON.stringify({ id: "1", method: "POST", path: "/test", body: {} }) +
-			"\n",
+				"\n",
 			`${JSON.stringify({ id: "2", method: "POST", path: "/test" })}\n`,
 		];
 
