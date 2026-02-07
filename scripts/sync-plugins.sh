@@ -55,9 +55,9 @@ add_mcp() {
 add_mcp "shadcn" -- bunx shadcn@latest mcp
 add_mcp "ref" -- bunx ref-tools-mcp@latest
 add_mcp "auggie-mcp" -- bunx @aj47/auggie-mcp --mcp
-add_mcp "grep" --transport http grep https://mcp.grep.app
+add_mcp "grep" --transport http https://mcp.grep.app
 add_mcp "brave-search" -- bunx @modelcontextprotocol/server-brave-search
-add_mcp "huggingface" --transport http huggingface https://huggingface.co/mcp
+add_mcp "huggingface" --transport http https://huggingface.co/mcp
 
 echo "✅ MCP sync complete!"
 claude mcp list
