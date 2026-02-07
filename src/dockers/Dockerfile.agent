@@ -13,6 +13,7 @@ RUN apt-get update && apt-get install -y \
 ARG USER_NAME=bun
 ARG USER_ID=1000
 ARG GROUP_ID=1000
+ARG WORKSPACE_NAME=cc-bridge
 
 # Create a group and user matching the host
 # We use /Users/${USER_NAME} to match macOS structure
@@ -26,19 +27,26 @@ RUN mkdir -p /Users/${USER_NAME}/.claude && \
 # Ensure sudo privileges for the new user
 RUN echo "${USER_NAME} ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
 
-WORKDIR /app
+# Ensure workspace directory structure exists and is writable
+RUN mkdir -p /workspaces && \
+    chown -R ${USER_ID}:${GROUP_ID} /workspaces
 
-# Ensure /app is writable by the user
-RUN chown -R ${USER_ID}:${GROUP_ID} /app
+# Also keep /app for agent code execution
+RUN mkdir -p /app && \
+    chown -R ${USER_ID}:${GROUP_ID} /app
 
 # Switch to non-root user
 USER ${USER_NAME}
 
-# Install Claude tools locally in /app/node_modules
+# Install Claude tools in /app (NOT affected by volume mounts)
+WORKDIR /app
 RUN bun add @anthropic-ai/claude-code @anthropic-ai/claude-agent-sdk
 
 # Add local bin to PATH
 ENV PATH="/app/node_modules/.bin:${PATH}"
+
+# Set working directory to workspace (dynamic based on build arg)
+WORKDIR /workspaces/${WORKSPACE_NAME}
 
 # Copy dependency definitions
 COPY --chown=${USER_NAME}:${USER_NAME} package.json bun.lock ./
@@ -48,10 +56,11 @@ COPY --chown=${USER_NAME}:${USER_NAME} tsconfig.json ./
 COPY --chown=${USER_NAME}:${USER_NAME} src/packages ./src/packages
 COPY --chown=${USER_NAME}:${USER_NAME} src/agent ./src/agent
 
-# Copy automation scripts
-COPY --chown=${USER_NAME}:${USER_NAME} src/dockers/entrypoint.sh ./src/dockers/entrypoint.sh
-COPY --chown=${USER_NAME}:${USER_NAME} scripts/sync-plugins.sh ./scripts/sync-plugins.sh
-RUN chmod +x ./src/dockers/entrypoint.sh ./scripts/sync-plugins.sh
+# Copy automation scripts to /app to avoid being overwritten by volume mounts
+COPY --chown=${USER_NAME}:${USER_NAME} src/dockers/entrypoint.sh /app/entrypoint.sh
+COPY --chown=${USER_NAME}:${USER_NAME} scripts/sync-plugins.sh /app/sync-plugins.sh
+COPY --chown=${USER_NAME}:${USER_NAME} scripts/refresh-discovery-cache.sh /app/refresh-discovery-cache.sh
+RUN chmod +x /app/entrypoint.sh /app/sync-plugins.sh /app/refresh-discovery-cache.sh
 
 # Install dependencies
 RUN bun install
@@ -60,7 +69,7 @@ RUN bun install
 USER ${USER_NAME}
 
 # Entrypoint handles initialization (like plugin sync)
-ENTRYPOINT ["/app/src/dockers/entrypoint.sh"]
+ENTRYPOINT ["/app/entrypoint.sh"]
 
 # Default command
 CMD ["bun", "run", "src/agent/index.ts"]
