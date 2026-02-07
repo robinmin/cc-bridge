@@ -9,6 +9,7 @@ services:
         - USER_NAME=${USER_NAME:-bun}
         - USER_ID=${USER_ID:-1000}
         - GROUP_ID=${GROUP_ID:-1000}
+        - WORKSPACE_NAME=${WORKSPACE_NAME:-cc-bridge}
     image: cc-bridge:latest
     container_name: claude-${WORKSPACE_NAME:-cc-bridge}
 
@@ -52,7 +53,9 @@ services:
       - WORKSPACE_NAME=${WORKSPACE_NAME:-cc-bridge}
       - INSTANCE_NAME=${WORKSPACE_NAME:-cc-bridge}
       - AGENT_MODE=server
+      - AGENT_SOCKET=data/ipc/${WORKSPACE_NAME:-cc-bridge}/agent.sock
       - CLAUDE_AGENT_SKILLS=1
+      - BRAVE_API_KEY=${BRAVE_API_KEY}
 
       # Python settings
       - PYTHONUNBUFFERED=1
