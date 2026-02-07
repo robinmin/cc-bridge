@@ -9,14 +9,14 @@ console.error = (...args) => logger.error(args.length === 1 ? args[0] : args);
 console.warn = (...args) => logger.warn(args.length === 1 ? args[0] : args);
 console.debug = (...args) => logger.debug(args.length === 1 ? args[0] : args);
 
-import { ConfigLoader } from "@/packages/config";
 import { AGENT_CONSTANTS } from "@/agent/consts";
 import executeRoute from "@/agent/routes/execute";
 import fsRoute from "@/agent/routes/fs";
+import healthHandler from "@/agent/routes/health";
+import notifyRoute from "@/agent/routes/notify";
 import readRoute from "@/agent/routes/read";
 import writeRoute from "@/agent/routes/write";
-import notifyRoute from "@/agent/routes/notify";
-import healthHandler from "@/agent/routes/health";
+import { ConfigLoader } from "@/packages/config";
 
 const app = new Hono();
 
@@ -24,7 +24,10 @@ const app = new Hono();
 app.use("*", pinoLogger({ pino: logger }));
 
 // Load External Configuration
-const config = ConfigLoader.load(AGENT_CONSTANTS.EXECUTION.CONFIG_FILE, AGENT_CONSTANTS.DEFAULT_CONFIG);
+const config = ConfigLoader.load(
+	AGENT_CONSTANTS.EXECUTION.CONFIG_FILE,
+	AGENT_CONSTANTS.DEFAULT_CONFIG,
+);
 
 // Apply log level from config
 setLogLevel(config.logLevel);
