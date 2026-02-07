@@ -1,4 +1,4 @@
-import { IpcClient } from "../src/packages/ipc/client";
+import { executeClaudeRaw } from "../src/gateway/services/claude-executor";
 
 async function main() {
     const msg = process.argv.slice(2).join(" ");
@@ -7,7 +7,6 @@ async function main() {
         process.exit(1);
     }
 
-    // Mimic src/gateway/pipeline/agent-bot.ts exactly
     // Wrap the message in the <messages> format
     const prompt = `<messages>\n<message sender="user">${msg}</message>\n</messages>`;
 
@@ -15,32 +14,21 @@ async function main() {
     const containerId = process.env.CONTAINER_ID || "claude-cc-bridge";
     const instanceName = process.env.INSTANCE_NAME || "cc-bridge";
 
-    const client = new IpcClient(containerId, instanceName);
-
     try {
-        const response = await client.sendRequest({
-            id: Math.random().toString(36).substring(7),
-            method: "POST",
-            path: "/execute",
-            body: {
-                command: "claude",
-                args: [
-                    "-p", prompt,
-                    "--allow-dangerously-skip-permissions",
-                ]
-            }
+        const result = await executeClaudeRaw(containerId, instanceName, prompt, {
+            allowDangerouslySkipPermissions: true,
+            allowedTools: "*",
         });
 
-        if (response.error) {
-            console.error(`❌ Agent Error: ${response.error.message}`);
-            process.exit(1);
-        } else if (response.result) {
-            const result = response.result as any;
-            const output = result.stdout || result.content || JSON.stringify(result);
-            process.stdout.write(output + "\n");
+        if (result.success) {
+            process.stdout.write((result.output ?? "") + "\n");
+        } else {
+            console.error(`❌ Agent Error: ${result.error}`);
+            process.exit(result.retryable ? 2 : 1);
         }
-    } catch (error: any) {
-        console.error(`❌ Gateway Error: ${error.message}`);
+    } catch (error: unknown) {
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        console.error(`❌ Gateway Error: ${errorMsg}`);
         process.exit(1);
     }
 }
