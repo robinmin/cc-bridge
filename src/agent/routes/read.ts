@@ -1,7 +1,9 @@
 import { zValidator } from "@hono/zod-validator";
 import { Hono } from "hono";
-import { ReadFileSchema } from "@/agent/types";
+import type { StatusCode } from "hono/utils/http-statusCodes";
 import { AGENT_CONSTANTS } from "@/agent/consts";
+import { ReadFileSchema } from "@/agent/types";
+import { validatePath } from "@/agent/utils/path-utils";
 
 const app = new Hono();
 
@@ -9,7 +11,10 @@ app.post("/", zValidator("json", ReadFileSchema), async (c) => {
 	const { path, encoding } = c.req.valid("json");
 
 	try {
-		const file = Bun.file(path);
+		// Validate path is within workspace to prevent directory traversal
+		const safePath = validatePath(path);
+
+		const file = Bun.file(safePath);
 		const exists = await file.exists();
 
 		if (!exists) {
@@ -37,7 +42,7 @@ app.post("/", zValidator("json", ReadFileSchema), async (c) => {
 				error: error instanceof Error ? error.message : String(error),
 				exists: false,
 			},
-			AGENT_CONSTANTS.HTTP.INTERNAL_SERVER_ERROR as any,
+			AGENT_CONSTANTS.HTTP.INTERNAL_SERVER_ERROR as StatusCode,
 		);
 	}
 });
