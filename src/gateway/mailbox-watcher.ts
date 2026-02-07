@@ -1,94 +1,116 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import type { Channel } from "@/gateway/channels";
 import { GATEWAY_CONSTANTS } from "@/gateway/consts";
-import { type Channel } from "@/gateway/channels";
 import { persistence } from "@/gateway/persistence";
 import { logger } from "@/packages/logger";
 
 export interface MailboxMessage {
-    type: "message" | "status" | "task";
-    chatId: string | number;
-    text: string;
-    [key: string]: any;
+	type: "message" | "status" | "task";
+	chatId: string | number;
+	text: string;
+	[key: string]: unknown;
 }
 
 export class MailboxWatcher {
-    private timer: Timer | null = null;
-    private isRunning = false;
+	private timer: Timer | null = null;
+	private isRunning = false;
 
-    constructor(
-        private channel: Channel,
-        private ipcDir: string = GATEWAY_CONSTANTS.CONFIG.IPC_DIR,
-        private pollInterval: number = GATEWAY_CONSTANTS.CONFIG.IPC_POLL_INTERVAL_MS,
-        private persistenceManager = persistence
-    ) { }
+	constructor(
+		private channel: Channel,
+		private ipcDir: string = GATEWAY_CONSTANTS.CONFIG.IPC_DIR,
+		private pollInterval: number = GATEWAY_CONSTANTS.CONFIG
+			.IPC_POLL_INTERVAL_MS,
+		private persistenceManager = persistence,
+	) {}
 
-    async start() {
-        if (this.isRunning) return;
-        this.isRunning = true;
-        logger.info({ ipcDir: this.ipcDir }, "MailboxWatcher started");
+	async start() {
+		if (this.isRunning) return;
+		this.isRunning = true;
+		logger.info({ ipcDir: this.ipcDir }, "MailboxWatcher started");
 
-        this.timer = setInterval(async () => {
-            await this.poll();
-        }, this.pollInterval);
-    }
+		this.timer = setInterval(async () => {
+			await this.poll();
+		}, this.pollInterval);
+	}
 
-    async stop() {
-        if (this.timer) {
-            clearInterval(this.timer);
-            this.timer = null;
-        }
-        this.isRunning = false;
-        logger.info("MailboxWatcher stopped");
-    }
+	async stop() {
+		if (this.timer) {
+			clearInterval(this.timer);
+			this.timer = null;
+		}
+		this.isRunning = false;
+		logger.info("MailboxWatcher stopped");
+	}
 
-    async poll() {
-        try {
-            if (!(await this.exists(this.ipcDir))) return;
+	async poll() {
+		try {
+			if (!(await this.exists(this.ipcDir))) return;
 
-            const instanceDirs = await fs.readdir(this.ipcDir);
-            for (const instanceName of instanceDirs) {
-                const messagesDir = path.join(this.ipcDir, instanceName, "messages");
-                if (await this.exists(messagesDir)) {
-                    await this.processMessages(messagesDir);
-                }
-            }
-        } catch (error) {
-            logger.error({ error }, "MailboxWatcher poll error");
-        }
-    }
+			const instanceDirs = await fs.readdir(this.ipcDir);
+			for (const instanceName of instanceDirs) {
+				const messagesDir = path.join(this.ipcDir, instanceName, "messages");
+				if (await this.exists(messagesDir)) {
+					await this.processMessages(messagesDir);
+				}
+			}
+		} catch (error) {
+			logger.error({ error }, "MailboxWatcher poll error");
+		}
+	}
 
-    private async processMessages(messagesDir: string) {
-        const files = await fs.readdir(messagesDir);
-        for (const file of files) {
-            if (!file.endsWith(".json")) continue;
+	private async processMessages(messagesDir: string) {
+		const files = await fs.readdir(messagesDir);
+		for (const file of files) {
+			if (!file.endsWith(".json")) continue;
 
-            const filePath = path.join(messagesDir, file);
-            try {
-                const content = await fs.readFile(filePath, "utf-8");
-                const data: MailboxMessage = JSON.parse(content);
+			const filePath = path.join(messagesDir, file);
+			try {
+				const content = await fs.readFile(filePath, "utf-8");
+				const data: MailboxMessage = JSON.parse(content);
 
-                if (data.type === "message" && data.chatId && data.text) {
-                    await this.channel.sendMessage(data.chatId, data.text);
-                    await this.persistenceManager.storeMessage(data.chatId, "agent", data.text);
-                    logger.info({ chatId: data.chatId, text: data.text }, "Delivered proactive message from agent");
-                }
+				if (data.type === "message" && data.chatId && data.text) {
+					await this.channel.sendMessage(data.chatId, data.text);
+					// Get user's workspace for storing message
+					const workspace = await this.persistenceManager.getWorkspace(
+						data.chatId,
+					);
+					await this.persistenceManager.storeMessage(
+						data.chatId,
+						"agent",
+						data.text,
+						workspace,
+					);
+					logger.info(
+						{ chatId: data.chatId, text: data.text },
+						"Delivered proactive message from agent",
+					);
+				}
 
-                // Delete processed message
-                await fs.unlink(filePath);
-            } catch (error) {
-                logger.error({ file, error }, "Error processing mailbox message - deleting malformed file");
-                // Delete the malformed file anyway to prevent infinite loops
-                try {
-                    await fs.unlink(filePath);
-                } catch (unlinkError) {
-                    logger.error({ file, error: unlinkError }, "Failed to delete malformed mailbox message");
-                }
-            }
-        }
-    }
+				// Delete processed message
+				await fs.unlink(filePath);
+			} catch (error) {
+				logger.error(
+					{ file, error },
+					"Error processing mailbox message - deleting malformed file",
+				);
+				// Delete the malformed file anyway to prevent infinite loops
+				try {
+					await fs.unlink(filePath);
+				} catch (unlinkError) {
+					logger.error(
+						{ file, error: unlinkError },
+						"Failed to delete malformed mailbox message",
+					);
+				}
+			}
+		}
+	}
 
-    private async exists(path: string): Promise<boolean> {
-        return fs.access(path).then(() => true).catch(() => false);
-    }
+	private async exists(path: string): Promise<boolean> {
+		return fs
+			.access(path)
+			.then(() => true)
+			.catch(() => false);
+	}
 }
