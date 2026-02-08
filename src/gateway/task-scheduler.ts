@@ -1,6 +1,6 @@
 import { instanceManager } from "@/gateway/instance-manager";
 import { persistence } from "@/gateway/persistence";
-import { IpcClient } from "@/packages/ipc/client";
+import { IpcFactory } from "@/packages/ipc";
 import { logger } from "@/packages/logger";
 
 // Task types for better type safety
@@ -72,7 +72,10 @@ export class TaskScheduler {
 				return;
 			}
 
-			const client = new IpcClient(instance.containerId, task.instance_name);
+			const client = IpcFactory.create("auto", {
+				containerId: instance.containerId,
+				instanceName: task.instance_name,
+			});
 			const response = await client.sendRequest({
 				id: `task-${task.id}-${Date.now()}`,
 				method: "POST",
