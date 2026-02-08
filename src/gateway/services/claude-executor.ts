@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import type { AgentInstance } from "@/gateway/instance-manager";
 import { TmuxManager } from "@/gateway/services/tmux-manager";
-import { IpcClient } from "@/packages/ipc/client";
+import { IpcFactory } from "@/packages/ipc";
 import { logger } from "@/packages/logger";
 
 // Security constants
@@ -92,20 +92,20 @@ export class IpcCommunicationError extends ClaudeExecutionError {
 /**
  * Error for validation failures
  */
-export class ValidationError extends ClaudeExecutionError {
+export class ClaudeValidationError extends ClaudeExecutionError {
 	constructor(message: string, context: ErrorContext) {
 		super(message, { ...context, operation: "validation" });
-		this.name = "ValidationError";
+		this.name = "ClaudeValidationError";
 	}
 }
 
 /**
  * Error for timeout failures
  */
-export class TimeoutError extends ClaudeExecutionError {
+export class ClaudeTimeoutError extends ClaudeExecutionError {
 	constructor(message: string, context: ErrorContext & { timeoutMs?: number }, cause?: Error) {
 		super(message, { ...context, operation: "timeout" }, cause);
-		this.name = "TimeoutError";
+		this.name = "ClaudeTimeoutError";
 	}
 }
 
@@ -194,7 +194,7 @@ export function buildClaudePrompt(
 	// Sanitize user message first
 	const validationResult = validateAndSanitizePrompt(userMessage);
 	if (!validationResult.valid) {
-		throw new ValidationError(validationResult.reason || "Validation failed", {
+		throw new ClaudeValidationError(validationResult.reason || "Validation failed", {
 			operation: "build_prompt",
 			promptLength: userMessage.length,
 		});
@@ -258,7 +258,7 @@ export async function executeClaudeRaw(
 				"Sending request to Claude agent",
 			);
 
-			const client = new IpcClient(containerId, instanceName);
+			const client = IpcFactory.create("auto", { containerId, instanceName });
 			const requestId = crypto.randomUUID();
 			errorContext.requestId = requestId;
 
