@@ -8,9 +8,22 @@
 	"files": {
 		"ignoreUnknown": false
 	},
+	"overrides": [
+		{
+			"includes": ["**/*.test.ts"],
+			"linter": {
+				"rules": {
+					"complexity": {
+						"useLiteralKeys": "off"
+					}
+				}
+			}
+		}
+	],
 	"formatter": {
 		"enabled": true,
-		"indentStyle": "tab"
+		"indentStyle": "tab",
+		"lineWidth": 120
 	},
 	"linter": {
 		"enabled": true,
