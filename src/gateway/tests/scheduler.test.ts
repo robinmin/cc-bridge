@@ -63,10 +63,7 @@ describe("TaskScheduler", () => {
 		);
 
 		// Mock IpcClient
-		const mockSendRequest = spyOn(
-			IpcClient.prototype,
-			"sendRequest",
-		).mockResolvedValue({
+		const mockSendRequest = spyOn(IpcClient.prototype, "sendRequest").mockResolvedValue({
 			id: "task-1",
 			status: 200,
 			result: { stdout: "ok" },

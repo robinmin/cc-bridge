@@ -53,10 +53,7 @@ export class DiscoveryCacheService {
 	private cachePath: string;
 	private pluginsCachePath: string;
 
-	constructor(
-		cachePath: string = CACHE_PATH,
-		pluginsCachePath: string = PLUGINS_CACHE_PATH,
-	) {
+	constructor(cachePath: string = CACHE_PATH, pluginsCachePath: string = PLUGINS_CACHE_PATH) {
 		this.cachePath = cachePath;
 		this.pluginsCachePath = pluginsCachePath;
 	}
@@ -134,11 +131,7 @@ export class DiscoveryCacheService {
 			const trimmed = line.trim();
 			if (trimmed && !trimmed.startsWith("#") && !trimmed.startsWith("```")) {
 				// Remove markdown formatting
-				return trimmed
-					.replace(/\*\*/g, "")
-					.replace(/\*/g, "")
-					.replace(/`/g, "")
-					.trim();
+				return trimmed.replace(/\*\*/g, "").replace(/\*/g, "").replace(/`/g, "").trim();
 			}
 		}
 
@@ -159,23 +152,14 @@ export class DiscoveryCacheService {
 
 		// Read installed plugins
 		if (!fs.existsSync(this.pluginsCachePath)) {
-			logger.warn(
-				{ path: this.pluginsCachePath },
-				"Installed plugins cache not found",
-			);
+			logger.warn({ path: this.pluginsCachePath }, "Installed plugins cache not found");
 			return { agents, commands, skills };
 		}
 
-		const pluginsData = JSON.parse(
-			fs.readFileSync(this.pluginsCachePath, "utf-8"),
-		);
+		const pluginsData = JSON.parse(fs.readFileSync(this.pluginsCachePath, "utf-8"));
 
-		for (const [pluginName, pluginEntries] of Object.entries(
-			pluginsData.plugins || {},
-		)) {
-			const entries = Array.isArray(pluginEntries)
-				? pluginEntries
-				: [pluginEntries];
+		for (const [pluginName, pluginEntries] of Object.entries(pluginsData.plugins || {})) {
+			const entries = Array.isArray(pluginEntries) ? pluginEntries : [pluginEntries];
 
 			for (const entry of entries as Array<{
 				installPath: string;
@@ -186,9 +170,7 @@ export class DiscoveryCacheService {
 				// Scan agents
 				const agentsDir = path.join(installPath, "agents");
 				if (fs.existsSync(agentsDir)) {
-					const agentFiles = fs
-						.readdirSync(agentsDir)
-						.filter((f) => f.endsWith(".md"));
+					const agentFiles = fs.readdirSync(agentsDir).filter((f) => f.endsWith(".md"));
 
 					for (const file of agentFiles) {
 						const filePath = path.join(agentsDir, file);
@@ -201,9 +183,7 @@ export class DiscoveryCacheService {
 									name,
 									plugin: pluginName,
 									version,
-									description:
-										(frontmatter.description as string) ||
-										this.extractDescription(content),
+									description: (frontmatter.description as string) || this.extractDescription(content),
 									model: frontmatter.model as string | undefined,
 									color: frontmatter.color as string | undefined,
 									tools: frontmatter.tools as string[] | undefined,
@@ -211,10 +191,7 @@ export class DiscoveryCacheService {
 								});
 							}
 						} catch (err) {
-							logger.debug(
-								{ file: filePath, error: err },
-								"Failed to parse agent file",
-							);
+							logger.debug({ file: filePath, error: err }, "Failed to parse agent file");
 						}
 					}
 				}
@@ -222,9 +199,7 @@ export class DiscoveryCacheService {
 				// Scan commands
 				const commandsDir = path.join(installPath, "commands");
 				if (fs.existsSync(commandsDir)) {
-					const commandFiles = fs
-						.readdirSync(commandsDir)
-						.filter((f) => f.endsWith(".md"));
+					const commandFiles = fs.readdirSync(commandsDir).filter((f) => f.endsWith(".md"));
 
 					for (const file of commandFiles) {
 						const filePath = path.join(commandsDir, file);
@@ -236,22 +211,13 @@ export class DiscoveryCacheService {
 								name,
 								plugin: pluginName,
 								version,
-								description:
-									(frontmatter.description as string) ||
-									this.extractDescription(content),
-								argumentHint: frontmatter["argument-hint"] as
-									| string
-									| undefined,
-								allowedTools: frontmatter["allowed-tools"] as
-									| string[]
-									| undefined,
+								description: (frontmatter.description as string) || this.extractDescription(content),
+								argumentHint: frontmatter["argument-hint"] as string | undefined,
+								allowedTools: frontmatter["allowed-tools"] as string[] | undefined,
 								path: filePath,
 							});
 						} catch (err) {
-							logger.debug(
-								{ file: filePath, error: err },
-								"Failed to parse command file",
-							);
+							logger.debug({ file: filePath, error: err }, "Failed to parse command file");
 						}
 					}
 				}
@@ -266,11 +232,7 @@ export class DiscoveryCacheService {
 					for (const skillDir of skillDirs) {
 						if (!skillDir.isDirectory()) continue;
 
-						const skillFile = path.join(
-							skillsBaseDir,
-							skillDir.name,
-							"SKILL.md",
-						);
+						const skillFile = path.join(skillsBaseDir, skillDir.name, "SKILL.md");
 						if (fs.existsSync(skillFile)) {
 							try {
 								const content = fs.readFileSync(skillFile, "utf-8");
@@ -281,17 +243,12 @@ export class DiscoveryCacheService {
 										name,
 										plugin: pluginName,
 										version,
-										description:
-											(frontmatter.description as string) ||
-											this.extractDescription(content),
+										description: (frontmatter.description as string) || this.extractDescription(content),
 										path: skillFile,
 									});
 								}
 							} catch (err) {
-								logger.debug(
-									{ file: skillFile, error: err },
-									"Failed to parse skill file",
-								);
+								logger.debug({ file: skillFile, error: err }, "Failed to parse skill file");
 							}
 						}
 					}
@@ -336,16 +293,9 @@ export class DiscoveryCacheService {
 		};
 
 		// Write to file
-		fs.writeFileSync(
-			this.cachePath,
-			JSON.stringify(this.cache, null, 2),
-			"utf-8",
-		);
+		fs.writeFileSync(this.cachePath, JSON.stringify(this.cache, null, 2), "utf-8");
 
-		logger.info(
-			{ path: this.cachePath, size: JSON.stringify(this.cache).length },
-			"Discovery cache updated",
-		);
+		logger.info({ path: this.cachePath, size: JSON.stringify(this.cache).length }, "Discovery cache updated");
 
 		return this.cache;
 	}
@@ -363,10 +313,7 @@ export class DiscoveryCacheService {
 			this.cache = JSON.parse(content) as DiscoveryCache;
 			return this.cache;
 		} catch (err) {
-			logger.warn(
-				{ path: this.cachePath, error: err },
-				"Failed to load discovery cache from disk",
-			);
+			logger.warn({ path: this.cachePath, error: err }, "Failed to load discovery cache from disk");
 			return null;
 		}
 	}

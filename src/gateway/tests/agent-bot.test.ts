@@ -43,10 +43,7 @@ describe("AgentBot", () => {
 	});
 
 	test("should delegate message to agent", async () => {
-		const bot = new AgentBot(
-			mockChannel,
-			mockPersistence as unknown as MockPersistence,
-		);
+		const bot = new AgentBot(mockChannel, mockPersistence as unknown as MockPersistence);
 		const msg: Message = {
 			channelId: "test",
 			chatId: "123",
@@ -69,18 +66,12 @@ describe("AgentBot", () => {
 
 	test("should handle no running instances", async () => {
 		instanceManager.getInstances = () => [];
-		const bot = new AgentBot(
-			mockChannel,
-			mockPersistence as unknown as MockPersistence,
-		);
+		const bot = new AgentBot(mockChannel, mockPersistence as unknown as MockPersistence);
 		const msg: Message = { channelId: "test", chatId: "123", text: "hello" };
 
 		const handled = await bot.handle(msg);
 
 		expect(handled).toBe(true);
-		expect(spy).toHaveBeenCalledWith(
-			"123",
-			expect.stringContaining("No running Claude instance found"),
-		);
+		expect(spy).toHaveBeenCalledWith("123", expect.stringContaining("No running Claude instance found"));
 	});
 });

@@ -12,16 +12,8 @@ describe("TelegramChannel", () => {
 	beforeEach(() => {
 		mockCalls = [];
 		// @ts-expect-error - mock fetch
-		globalThis.fetch = async (
-			input: RequestInfo | URL,
-			init?: RequestInit,
-		): Promise<Response> => {
-			const url =
-				typeof input === "string"
-					? input
-					: input instanceof URL
-						? input.href
-						: input.url;
+		globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+			const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
 			const body = init?.body ? JSON.parse(init.body as string) : undefined;
 
 			mockCalls.push({ url, body });

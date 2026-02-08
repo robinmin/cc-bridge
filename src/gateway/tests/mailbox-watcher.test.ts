@@ -56,10 +56,7 @@ describe("MailboxWatcher", () => {
 			text: "Hello from agent!",
 		};
 
-		await fs.writeFile(
-			path.join(messagesDir, "msg_1.json"),
-			JSON.stringify(message),
-		);
+		await fs.writeFile(path.join(messagesDir, "msg_1.json"), JSON.stringify(message));
 
 		await watcher.poll();
 
@@ -84,10 +81,7 @@ describe("MailboxWatcher", () => {
 		await fs.mkdir(messagesDir, { recursive: true });
 
 		// Missing text
-		await fs.writeFile(
-			path.join(messagesDir, "invalid_1.json"),
-			JSON.stringify({ type: "message", chatId: 123 }),
-		);
+		await fs.writeFile(path.join(messagesDir, "invalid_1.json"), JSON.stringify({ type: "message", chatId: 123 }));
 
 		// Wrong type
 		await fs.writeFile(

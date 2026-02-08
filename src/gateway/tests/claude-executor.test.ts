@@ -68,9 +68,7 @@ describe("validateAndSanitizePrompt", () => {
 		const result = validateAndSanitizePrompt("Hello <world> & 'friends'");
 
 		expect(result.valid).toBe(true);
-		expect(result.sanitized).toBe(
-			"Hello &lt;world&gt; &amp; &apos;friends&apos;",
-		);
+		expect(result.sanitized).toBe("Hello &lt;world&gt; &amp; &apos;friends&apos;");
 	});
 });
 
@@ -88,16 +86,12 @@ describe("buildClaudePrompt", () => {
 
 		expect(prompt).toContain("<messages>");
 		expect(prompt).toContain("</messages>");
-		expect(prompt).toContain(
-			'<message sender="user" timestamp="2024-01-01 12:00:00">Previous message</message>',
-		);
+		expect(prompt).toContain('<message sender="user" timestamp="2024-01-01 12:00:00">Previous message</message>');
 		expect(prompt).toContain('<message sender="user">New message</message>');
 	});
 
 	test("should exclude current message from history", () => {
-		const history = [
-			{ sender: "user", text: "New message", timestamp: "2024-01-01 12:00:00" },
-		];
+		const history = [{ sender: "user", text: "New message", timestamp: "2024-01-01 12:00:00" }];
 
 		const prompt = buildClaudePrompt("New message", history);
 
@@ -107,9 +101,7 @@ describe("buildClaudePrompt", () => {
 	});
 
 	test("should escape XML in history", () => {
-		const history = [
-			{ sender: "user", text: "<test>", timestamp: "2024-01-01 12:00:00" },
-		];
+		const history = [{ sender: "user", text: "<test>", timestamp: "2024-01-01 12:00:00" }];
 
 		const prompt = buildClaudePrompt("Test", history);
 
@@ -189,9 +181,7 @@ describe("executeClaudeViaIpc", () => {
 		let capturedBody: Record<string, unknown> | null = null;
 
 		// @ts-expect-error - mock to capture body
-		IpcClient.prototype.sendRequest = async (request: {
-			body?: Record<string, unknown>;
-		}) => {
+		IpcClient.prototype.sendRequest = async (request: { body?: Record<string, unknown> }) => {
 			capturedBody = request.body;
 			return {
 				id: "test",

@@ -21,11 +21,13 @@ const testWritePath = join(tempDir, "agent-write.txt");
 describe("Agent API Routes", () => {
 	// Set test mode to disable path validation
 	beforeAll(() => {
-		process.env.TEST_MODE = "true";
+		process.env.NODE_ENV = "test";
+		process.env.TEST_MODE__INTERNAL_ONLY = "true";
 	});
 
 	afterAll(() => {
-		delete process.env.TEST_MODE;
+		delete process.env.TEST_MODE__INTERNAL_ONLY;
+		delete process.env.NODE_ENV;
 	});
 
 	// Clean up before/after
@@ -265,9 +267,7 @@ describe("Agent API Routes", () => {
 			expect(Array.isArray(data.entries)).toBe(true);
 
 			// Should find our test file
-			const entry = data.entries.find(
-				(e: FileEntry) => e.name === "agent-test.txt",
-			);
+			const entry = data.entries.find((e: FileEntry) => e.name === "agent-test.txt");
 			expect(entry).toBeDefined();
 			expect(entry?.isDirectory).toBe(false);
 		});

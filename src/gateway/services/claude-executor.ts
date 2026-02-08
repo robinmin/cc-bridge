@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import type { AgentInstance } from "@/gateway/instance-manager";
+import { TmuxManager } from "@/gateway/services/tmux-manager";
 import { IpcClient } from "@/packages/ipc/client";
 import { logger } from "@/packages/logger";
 
@@ -102,11 +103,7 @@ export class ValidationError extends ClaudeExecutionError {
  * Error for timeout failures
  */
 export class TimeoutError extends ClaudeExecutionError {
-	constructor(
-		message: string,
-		context: ErrorContext & { timeoutMs?: number },
-		cause?: Error,
-	) {
+	constructor(message: string, context: ErrorContext & { timeoutMs?: number }, cause?: Error) {
 		super(message, { ...context, operation: "timeout" }, cause);
 		this.name = "TimeoutError";
 	}
@@ -170,9 +167,7 @@ export function validateAndSanitizePrompt(text: string): {
 
 	// Truncate to max length
 	const truncated =
-		sanitized.length > MAX_PROMPT_LENGTH
-			? `${sanitized.substring(0, MAX_PROMPT_LENGTH)}... [truncated]`
-			: sanitized;
+		sanitized.length > MAX_PROMPT_LENGTH ? `${sanitized.substring(0, MAX_PROMPT_LENGTH)}... [truncated]` : sanitized;
 
 	if (truncated !== sanitized) {
 		logger.debug(
@@ -208,10 +203,7 @@ export function buildClaudePrompt(
 	const historyLines = history
 		.filter((m) => m.text !== userMessage) // exclude current message (we'll add it)
 		.reverse()
-		.map(
-			(m) =>
-				`<message sender="${escapeXml(m.sender)}" timestamp="${m.timestamp}">${escapeXml(m.text)}</message>`,
-		);
+		.map((m) => `<message sender="${escapeXml(m.sender)}" timestamp="${m.timestamp}">${escapeXml(m.text)}</message>`);
 
 	return `<messages>\n${historyLines.join("\n")}\n<message sender="user">${validationResult.sanitized}</message>\n</messages>`;
 }
@@ -219,6 +211,20 @@ export function buildClaudePrompt(
 /**
  * Executes a Claude command via IPC with retry logic (raw version using container/instance IDs)
  * This is the core execution method that can be called from any context
+ *
+ * @param containerId - Docker container ID
+ * @param instanceName - Instance name for logging
+ * @param prompt - Claude prompt to execute
+ * @param config - Execution configuration
+ * @param config.workspace - Workspace name (used for working directory)
+ * @param config.chatId - Chat ID for tracking and logging
+ * @param config.timeout - Request timeout in milliseconds
+ * @param config.command - Command to execute (default: "claude")
+ * @param config.args - Additional command arguments
+ * @param config.allowDangerouslySkipPermissions - Skip permission checks
+ * @param config.allowedTools - Restrict Claude to specific tools
+ *
+ * @returns Execution result with success status, output, or error
  */
 export async function executeClaudeRaw(
 	containerId: string,
@@ -229,11 +235,17 @@ export async function executeClaudeRaw(
 	const maxRetries = 1;
 	let retries = maxRetries;
 
+	// Extract tracking metadata from config
+	const workspace = config.workspace || "cc-bridge";
+	const chatId = config.chatId || "unknown";
+
 	const errorContext: ErrorContext = {
 		containerId,
 		instanceName,
 		operation: "execute_claude_raw",
 		promptLength: prompt.length,
+		workspace,
+		chatId,
 	};
 
 	while (retries >= 0) {
@@ -241,7 +253,6 @@ export async function executeClaudeRaw(
 			logger.debug(
 				{
 					...errorContext,
-					chatId: "unknown",
 					timeout: config.timeout,
 				},
 				"Sending request to Claude agent",
@@ -262,14 +273,10 @@ export async function executeClaudeRaw(
 						[
 							"-p",
 							prompt,
-							config.allowDangerouslySkipPermissions
-								? "--dangerously-skip-permissions"
-								: "",
-							config.allowedTools !== undefined
-								? `--allowedTools=${config.allowedTools}`
-								: "",
+							config.allowDangerouslySkipPermissions ? "--dangerously-skip-permissions" : "",
+							config.allowedTools !== undefined ? `--allowedTools=${config.allowedTools}` : "",
 						].filter(Boolean),
-					cwd: `/workspaces/${config.workspace || "cc-bridge"}`,
+					cwd: `/workspaces/${workspace}`,
 				},
 				timeout: config.timeout,
 			});
@@ -338,8 +345,7 @@ export async function executeClaudeRaw(
 
 			if (response.result) {
 				const result = response.result as IpcExecuteResult;
-				const output =
-					result.stdout || result.content || JSON.stringify(result);
+				const output = result.stdout || result.content || JSON.stringify(result);
 
 				logger.debug(
 					{
@@ -378,8 +384,7 @@ export async function executeClaudeRaw(
 			if (retries > 0) {
 				const isTimeoutError = errorMsg.toLowerCase().includes("timeout");
 				const isConnectionError =
-					errorMsg.toLowerCase().includes("econnrefused") ||
-					errorMsg.toLowerCase().includes("econnreset");
+					errorMsg.toLowerCase().includes("econnrefused") || errorMsg.toLowerCase().includes("econnreset");
 
 				if (isTimeoutError || isConnectionError) {
 					logger.warn(
@@ -474,5 +479,156 @@ export async function executeClaudeWithHistory(
 			error: errorMsg,
 			retryable: false,
 		};
+	}
+}
+
+// =============================================================================
+// Tmux Execution Mode (Async)
+// =============================================================================
+
+/**
+ * Singleton TmuxManager instance
+ */
+let tmuxManagerInstance: TmuxManager | null = null;
+
+/**
+ * Get or create the TmuxManager singleton
+ */
+function getTmuxManager(): TmuxManager {
+	if (!tmuxManagerInstance) {
+		tmuxManagerInstance = new TmuxManager();
+	}
+	return tmuxManagerInstance;
+}
+
+/**
+ * Result type for tmux async execution
+ */
+export interface ClaudeAsyncExecutionResult {
+	requestId: string;
+	mode: "tmux";
+}
+
+/**
+ * Union type for sync or async execution results
+ */
+export type ClaudeExecutionResultOrAsync = ClaudeExecutionResult | ClaudeAsyncExecutionResult;
+
+/**
+ * Type guard to check if result is async (tmux mode)
+ */
+export function isAsyncResult(result: ClaudeExecutionResultOrAsync): result is ClaudeAsyncExecutionResult {
+	return "mode" in result && result.mode === "tmux";
+}
+
+/**
+ * Update ClaudeExecutionConfig to support tmux mode and history
+ */
+export interface ClaudeExecutionConfigExtended extends ClaudeExecutionConfig {
+	useTmux?: boolean; // Explicitly enable/disable tmux mode
+	history?: Array<{ sender: string; text: string; timestamp: string }>; // Conversation history
+}
+
+/**
+ * Execute Claude via persistent tmux session (async mode)
+ * Returns immediately with request ID, response arrives via callback endpoint
+ *
+ * @param containerId - Docker container ID
+ * @param instanceName - Instance name (for logging)
+ * @param prompt - Claude prompt
+ * @param config - Execution configuration
+ * @returns Async result with request ID
+ */
+export async function executeClaudeViaTmux(
+	containerId: string,
+	instanceName: string,
+	prompt: string,
+	config: ClaudeExecutionConfigExtended = {},
+): Promise<ClaudeAsyncExecutionResult> {
+	const requestId = crypto.randomUUID();
+	const manager = getTmuxManager();
+
+	const workspace = config.workspace || "cc-bridge";
+	const chatId = String(config.chatId || "default");
+
+	logger.info({ requestId, containerId, instanceName, workspace, chatId }, "Executing Claude via tmux");
+
+	try {
+		// 1. Get or create session
+		const sessionName = await manager.getOrCreateSession(containerId, workspace, chatId);
+
+		logger.debug({ requestId, sessionName, workspace, chatId }, "Tmux session acquired");
+
+		// 2. Build prompt with history if provided
+		const promptToSend = config.history ? buildClaudePrompt(prompt, config.history) : prompt;
+
+		if (config.history) {
+			logger.debug({ requestId, historyLength: config.history.length }, "Built prompt with conversation history");
+		}
+
+		// 3. Send prompt to session
+		await manager.sendToSession(containerId, sessionName, promptToSend, {
+			requestId,
+			chatId,
+			workspace,
+		});
+
+		logger.info({ requestId, sessionName, promptLength: promptToSend.length }, "Prompt sent to tmux session");
+
+		// 4. Return request ID (response arrives via callback)
+		return { requestId, mode: "tmux" };
+	} catch (error) {
+		logger.error(
+			{
+				error: error instanceof Error ? error.message : String(error),
+				requestId,
+				containerId,
+				instanceName,
+			},
+			"Failed to execute via tmux",
+		);
+		throw error;
+	}
+}
+
+/**
+ * Unified execution method with automatic mode selection
+ *
+ * Mode selection priority:
+ * 1. Explicit config.useTmux flag
+ * 2. Global ENABLE_TMUX environment variable
+ * 3. Default: false (sync mode for backward compatibility)
+ *
+ * @param containerId - Docker container ID
+ * @param instanceName - Instance name
+ * @param prompt - Claude prompt
+ * @param config - Execution configuration
+ * @returns Sync result with output OR async result with request ID
+ */
+export async function executeClaude(
+	containerId: string,
+	instanceName: string,
+	prompt: string,
+	config: ClaudeExecutionConfigExtended = {},
+): Promise<ClaudeExecutionResultOrAsync> {
+	// Determine execution mode
+	const useTmux = (config.useTmux ?? config.useTmux === undefined) ? process.env.ENABLE_TMUX === "true" : false;
+
+	// Build prompt with history if provided
+	const promptToSend = config.history ? buildClaudePrompt(prompt, config.history) : prompt;
+
+	if (config.history && !useTmux) {
+		logger.debug(
+			{ containerId, instanceName, historyLength: config.history.length },
+			"Built prompt with conversation history for sync mode",
+		);
+	}
+
+	if (useTmux) {
+		// Async mode: return request ID immediately
+		return await executeClaudeViaTmux(containerId, instanceName, prompt, config);
+	} else {
+		// Sync mode: return result immediately
+		return await executeClaudeRaw(containerId, instanceName, promptToSend, config);
 	}
 }

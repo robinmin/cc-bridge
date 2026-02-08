@@ -19,9 +19,7 @@ describe("HostBot", () => {
 		const spawnSpy = spyOn(Bun, "spawn").mockReturnValue({
 			stdout: new ReadableStream({
 				start(controller) {
-					controller.enqueue(
-						new TextEncoder().encode("🏠 **Host Uptime**\n\nup 1 day"),
-					);
+					controller.enqueue(new TextEncoder().encode("🏠 **Host Uptime**\n\nup 1 day"));
 					controller.close();
 				},
 			}),
@@ -47,10 +45,7 @@ describe("HostBot", () => {
 		const handled = await bot.handle(msg);
 
 		expect(handled).toBe(true);
-		expect(spy).toHaveBeenCalledWith(
-			"123",
-			expect.stringContaining("Host Uptime"),
-		);
+		expect(spy).toHaveBeenCalledWith("123", expect.stringContaining("Host Uptime"));
 		spawnSpy.mockRestore();
 	});
 
@@ -58,9 +53,7 @@ describe("HostBot", () => {
 		const spawnSpy = spyOn(Bun, "spawn").mockReturnValue({
 			stdout: new ReadableStream({
 				start(controller) {
-					controller.enqueue(
-						new TextEncoder().encode("📊 **Host CPU/MEM**\n\nprocess info"),
-					);
+					controller.enqueue(new TextEncoder().encode("📊 **Host CPU/MEM**\n\nprocess info"));
 					controller.close();
 				},
 			}),
@@ -82,10 +75,7 @@ describe("HostBot", () => {
 		const handled = await bot.handle(msg);
 
 		expect(handled).toBe(true);
-		expect(spy).toHaveBeenCalledWith(
-			"123",
-			expect.stringContaining("Host CPU/MEM"),
-		);
+		expect(spy).toHaveBeenCalledWith("123", expect.stringContaining("Host CPU/MEM"));
 		spawnSpy.mockRestore();
 	});
 

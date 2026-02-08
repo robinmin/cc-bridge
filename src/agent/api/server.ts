@@ -1,0 +1,671 @@
+import fastifyCors from "@fastify/cors";
+import { fastifyRateLimit } from "@fastify/rate-limit";
+import { randomUUIDv7 } from "bun";
+import type { FastifyInstance, FastifyServerOptions } from "fastify";
+import fastify from "fastify";
+import type { RequestTracker } from "@/gateway/services/RequestTracker";
+import type { SessionPoolService } from "@/gateway/services/SessionPoolService";
+import type { TmuxManager } from "@/gateway/services/tmux-manager";
+import { createErrorResponse, getStatusCode } from "@/packages/errors";
+import { logger } from "@/packages/logger";
+
+/**
+ * HTTP Server configuration
+ */
+export interface HttpServerConfig {
+	port: number;
+	host: string;
+	apiKey: string;
+	enableAuth: boolean;
+	rateLimitMax: number;
+	rateLimitWindow: string;
+}
+
+/**
+ * HTTP Server for Agent container
+ * Provides REST API for executing commands, managing sessions, and health checks
+ */
+export class AgentHttpServer {
+	private app: FastifyInstance;
+	private config: HttpServerConfig;
+	private sessionPool: SessionPoolService;
+	private requestTracker: RequestTracker;
+	private tmuxManager: TmuxManager;
+	private started = false;
+
+	constructor(
+		config: HttpServerConfig,
+		sessionPool: SessionPoolService,
+		requestTracker: RequestTracker,
+		tmuxManager: TmuxManager,
+	) {
+		this.config = config;
+		this.sessionPool = sessionPool;
+		this.requestTracker = requestTracker;
+		this.tmuxManager = tmuxManager;
+
+		const fastifyOptions: FastifyServerOptions = {
+			logger: false,
+			requestIdHeader: "x-request-id",
+			genReqId: () => randomUUIDv7(),
+		};
+
+		this.app = fastify(fastifyOptions);
+
+		// Register middleware in order: CORS -> Rate Limiting -> Auth -> Routes
+		this.registerMiddleware();
+		this.registerRateLimiting();
+
+		// Use after() to ensure rate limiting is loaded before registering routes
+		this.app.after((err) => {
+			if (err) {
+				logger.error({ err }, "Failed to load rate limiting plugin");
+			}
+			this.registerRoutes();
+		});
+
+		logger.info({ port: config.port, host: config.host }, "AgentHttpServer created");
+	}
+
+	/**
+	 * Start HTTP server
+	 */
+	async start(): Promise<void> {
+		if (this.started) {
+			logger.warn("AgentHttpServer already started");
+			return;
+		}
+
+		try {
+			await this.app.listen({
+				port: this.config.port,
+				host: this.config.host,
+			});
+
+			this.started = true;
+			logger.info(
+				{
+					port: this.config.port,
+					host: this.config.host,
+					auth: this.config.enableAuth,
+				},
+				"Agent HTTP server started",
+			);
+		} catch (err) {
+			logger.error({ err }, "Failed to start HTTP server");
+			throw err;
+		}
+	}
+
+	/**
+	 * Stop HTTP server
+	 */
+	async stop(): Promise<void> {
+		if (!this.started) {
+			return;
+		}
+
+		try {
+			await this.app.close();
+			this.started = false;
+			logger.info("Agent HTTP server stopped");
+		} catch (err) {
+			logger.error({ err }, "Failed to stop HTTP server");
+			throw err;
+		}
+	}
+
+	/**
+	 * Check if server is running
+	 */
+	isRunning(): boolean {
+		return this.started;
+	}
+
+	/**
+	 * Get server port (for testing)
+	 * When server is running with port 0, returns the actual bound port
+	 */
+	getPort(): number {
+		if (this.started && this.app.server) {
+			const address = this.app.server.address();
+			return typeof address === "string" ? 0 : (address?.port ?? this.config.port);
+		}
+		return this.config.port;
+	}
+
+	/**
+	 * Register middleware
+	 */
+	private registerMiddleware(): void {
+		// CORS
+		this.app.register(fastifyCors, {
+			origin: true,
+		});
+
+		// Authentication middleware
+		if (this.config.enableAuth) {
+			this.app.addHook("preHandler", async (request, reply) => {
+				const apiKey = request.headers["x-api-key"];
+
+				if (!apiKey || apiKey !== this.config.apiKey) {
+					return reply.code(401).send({ error: "Unauthorized" });
+				}
+			});
+		}
+
+		// Error handler
+		this.app.setErrorHandler((error, request, reply) => {
+			logger.error({ err: error, requestId: request.id }, "HTTP request error");
+
+			const statusCode = getStatusCode(error);
+			const response = createErrorResponse(error, request.id);
+
+			return reply.code(statusCode).send(response);
+		});
+	}
+
+	/**
+	 * Register rate limiting plugin
+	 * This must be registered before routes are defined
+	 */
+	private registerRateLimiting(): void {
+		this.app.register(fastifyRateLimit, {
+			global: true,
+			max: this.config.rateLimitMax,
+			timeWindow: this.config.rateLimitWindow,
+			redis: undefined, // Use in-memory store
+			cache: 10000,
+			allowList: [],
+			continueExceeding: false,
+			skipOnError: false,
+			addHeaders: {
+				"x-ratelimit-limit": true,
+				"x-ratelimit-remaining": true,
+				"x-ratelimit-reset": true,
+			},
+			// Use a simple key generator that always returns a valid string
+			keyGenerator: (request) => {
+				const apiKey = request.headers["x-api-key"] as string | undefined;
+				const ip = request.ip || "unknown";
+				// Always return a valid string for consistent rate limiting
+				return apiKey || ip;
+			},
+			onExceeding: (req) => {
+				logger.warn({ ip: req.ip, path: req.url }, "Rate limit exceeded");
+			},
+			onExceeded: (req) => {
+				logger.error({ ip: req.ip, path: req.url }, "Rate limit exceeded - request blocked");
+			},
+		});
+	}
+
+	/**
+	 * Register API routes
+	 */
+	private registerRoutes(): void {
+		// POST /execute - Execute command
+		this.app.post("/execute", async (request, reply) => {
+			const body = request.body as {
+				workspace: string;
+				command: string;
+				chatId?: string;
+				timeoutMs?: number;
+			};
+
+			const { workspace, command, chatId, timeoutMs } = body;
+
+			// Validation
+			if (!workspace || !command) {
+				return reply.code(400).send({
+					error: "Missing required fields: workspace, command",
+				});
+			}
+
+			try {
+				// Generate requestId
+				const requestId = randomUUIDv7();
+
+				// Create request state
+				await this.requestTracker.createRequest({
+					requestId,
+					chatId: chatId || "http-api",
+					workspace,
+					prompt: command,
+				});
+
+				// Update to queued state
+				await this.requestTracker.updateState(requestId, {
+					state: "queued",
+					queuedAt: Date.now(),
+				});
+
+				// Get or create session
+				const session = await this.sessionPool.getOrCreateSession(workspace);
+
+				// Track request start
+				this.sessionPool.trackRequestStart(workspace);
+
+				// Execute command asynchronously
+				this.executeCommand(requestId, workspace, command, session.sessionName, timeoutMs)
+					.then(async (result) => {
+						await this.requestTracker.updateState(requestId, {
+							state: result.success ? "completed" : "failed",
+							completedAt: Date.now(),
+							exitCode: result.exitCode,
+							output: result.output,
+							error: result.error,
+						});
+						this.sessionPool.trackRequestComplete(workspace);
+					})
+					.catch(async (err) => {
+						logger.error({ err, requestId }, "Command execution failed");
+						await this.requestTracker.updateState(requestId, {
+							state: "failed",
+							completedAt: Date.now(),
+							error: String(err),
+						});
+						this.sessionPool.trackRequestComplete(workspace);
+					});
+
+				return reply.code(202).send({
+					requestId,
+					workspace,
+					status: "queued",
+					message: "Command queued for execution",
+				});
+			} catch (err) {
+				logger.error({ err }, "Execute endpoint failed");
+				return reply.code(500).send({
+					error: "Internal server error",
+					message: err instanceof Error ? err.message : String(err),
+				});
+			}
+		});
+
+		// GET /health - Health check
+		this.app.get("/health", async (_request, reply) => {
+			try {
+				const health = await this.getHealthStatus();
+				const statusCode = health.status === "healthy" ? 200 : 503;
+
+				return reply.code(statusCode).send(health);
+			} catch (err) {
+				logger.error({ err }, "Health check failed");
+				return reply.code(500).send({
+					status: "unhealthy",
+					error: err instanceof Error ? err.message : String(err),
+				});
+			}
+		});
+
+		// GET /sessions - List sessions
+		this.app.get("/sessions", async (_request, reply) => {
+			try {
+				const sessions = this.sessionPool.listSessions();
+
+				const sessionsData = sessions.map((s) => ({
+					workspace: s.workspace,
+					sessionName: s.sessionName,
+					status: s.status,
+					createdAt: s.createdAt,
+					lastActivityAt: s.lastActivityAt,
+					activeRequests: s.activeRequests,
+					totalRequests: s.totalRequests,
+					age: Date.now() - s.createdAt,
+				}));
+
+				return reply.send({
+					sessions: sessionsData,
+					total: sessionsData.length,
+				});
+			} catch (err) {
+				logger.error({ err }, "List sessions failed");
+				return reply.code(500).send({ error: err instanceof Error ? err.message : String(err) });
+			}
+		});
+
+		// POST /session/create - Create session
+		this.app.post("/session/create", async (request, reply) => {
+			const body = request.body as { workspace: string };
+			const { workspace } = body;
+
+			if (!workspace) {
+				return reply.code(400).send({ error: "Missing workspace" });
+			}
+
+			try {
+				const session = await this.sessionPool.getOrCreateSession(workspace);
+
+				return reply.code(201).send({
+					workspace: session.workspace,
+					sessionName: session.sessionName,
+					status: session.status,
+					createdAt: session.createdAt,
+				});
+			} catch (err) {
+				logger.error({ err, workspace }, "Create session failed");
+				return reply.code(500).send({ error: err instanceof Error ? err.message : String(err) });
+			}
+		});
+
+		// DELETE /session/:workspace - Delete session
+		this.app.delete<{
+			Params: { workspace: string };
+			Querystring: { force?: string };
+		}>("/session/:workspace", async (request, reply) => {
+			const { workspace } = request.params;
+			const { force } = request.query;
+
+			try {
+				const session = this.sessionPool.getSession(workspace);
+
+				if (!session) {
+					return reply.code(404).send({
+						error: `Session not found: ${workspace}`,
+					});
+				}
+
+				// Check for active requests
+				if (session.activeRequests > 0 && force !== "true") {
+					return reply.code(409).send({
+						error: `Session has ${session.activeRequests} active requests`,
+						message: "Use ?force=true to terminate anyway",
+					});
+				}
+
+				await this.sessionPool.deleteSession(workspace);
+
+				return reply.send({
+					workspace,
+					status: "deleted",
+				});
+			} catch (err) {
+				logger.error({ err, workspace }, "Delete session failed");
+				return reply.code(500).send({ error: err instanceof Error ? err.message : String(err) });
+			}
+		});
+
+		// GET /status/:requestId - Query request status
+		this.app.get<{ Params: { requestId: string } }>("/status/:requestId", async (request, reply) => {
+			const { requestId } = request.params;
+
+			try {
+				const requestData = await this.requestTracker.getRequest(requestId);
+
+				if (!requestData) {
+					return reply.code(404).send({
+						error: `Request not found: ${requestId}`,
+					});
+				}
+
+				const elapsed = Date.now() - requestData.createdAt;
+				const duration = requestData.completedAt ? requestData.completedAt - requestData.createdAt : elapsed;
+
+				return reply.send({
+					requestId: requestData.requestId,
+					workspace: requestData.workspace,
+					state: requestData.state,
+					createdAt: requestData.createdAt,
+					completedAt: requestData.completedAt,
+					elapsed,
+					duration,
+					error: requestData.error,
+				});
+			} catch (err) {
+				logger.error({ err, requestId }, "Status query failed");
+				return reply.code(500).send({ error: err instanceof Error ? err.message : String(err) });
+			}
+		});
+
+		// GET /api-docs - OpenAPI documentation
+		this.app.get("/api-docs", async (_request, reply) => {
+			return reply.send(this.getOpenApiSpec());
+		});
+	}
+
+	/**
+	 * Execute command in tmux session
+	 */
+	private async executeCommand(
+		requestId: string,
+		_workspace: string,
+		command: string,
+		sessionName: string,
+		timeoutMs?: number,
+	): Promise<{
+		success: boolean;
+		exitCode?: number;
+		output?: string;
+		error?: string;
+	}> {
+		try {
+			// Update to processing state
+			await this.requestTracker.updateState(requestId, {
+				state: "processing",
+				processingStartedAt: Date.now(),
+			});
+
+			// Send command to tmux session
+			const result = await this.tmuxManager.sendToSession(sessionName, command, {
+				requestId,
+				timeoutMs,
+			});
+
+			return result;
+		} catch (err) {
+			return {
+				success: false,
+				error: err instanceof Error ? err.message : String(err),
+			};
+		}
+	}
+
+	/**
+	 * Get health status
+	 */
+	private async getHealthStatus(): Promise<{
+		status: "healthy" | "degraded" | "unhealthy";
+		timestamp: string;
+		checks: Record<string, unknown>;
+	}> {
+		const checks: Record<string, unknown> = {
+			tmuxServer: await this.checkTmuxServer(),
+			sessions: await this.checkSessions(),
+			filesystem: await this.checkFilesystem(),
+			gateway: await this.checkGateway(),
+		};
+
+		const allHealthy = Object.values(checks).every((c) => (c as { healthy: boolean }).healthy);
+
+		return {
+			status: allHealthy ? "healthy" : "degraded",
+			timestamp: new Date().toISOString(),
+			checks,
+		};
+	}
+
+	/**
+	 * Check tmux server health
+	 */
+	private async checkTmuxServer(): Promise<{
+		healthy: boolean;
+		sessionsCount?: number;
+		error?: string;
+	}> {
+		try {
+			const sessions = await this.tmuxManager.listAllSessions("claude-agent");
+			return {
+				healthy: true,
+				sessionsCount: sessions.length,
+			};
+		} catch (err) {
+			return {
+				healthy: false,
+				error: err instanceof Error ? err.message : String(err),
+			};
+		}
+	}
+
+	/**
+	 * Check sessions health
+	 */
+	private async checkSessions(): Promise<{
+		healthy: boolean;
+		stats?: unknown;
+		error?: string;
+	}> {
+		try {
+			const stats = this.sessionPool.getStats();
+			return {
+				healthy: true,
+				stats,
+			};
+		} catch (err) {
+			return {
+				healthy: false,
+				error: err instanceof Error ? err.message : String(err),
+			};
+		}
+	}
+
+	/**
+	 * Check filesystem health
+	 */
+	private async checkFilesystem(): Promise<{
+		healthy: boolean;
+		error?: string;
+	}> {
+		try {
+			// Simple filesystem check - try to write a test file
+			const fs = await import("node:fs/promises");
+			const testFile = "/tmp/.health-check";
+			await fs.writeFile(testFile, "ok");
+			await fs.unlink(testFile);
+
+			return { healthy: true };
+		} catch (err) {
+			return {
+				healthy: false,
+				error: err instanceof Error ? err.message : String(err),
+			};
+		}
+	}
+
+	/**
+	 * Check gateway connectivity
+	 */
+	private async checkGateway(): Promise<{ healthy: boolean; error?: string }> {
+		try {
+			// Try to reach the gateway health endpoint
+			const response = await fetch("http://gateway:8080/health", {
+				method: "GET",
+				signal: AbortSignal.timeout(5000),
+			}).catch(() => null);
+
+			if (response?.ok) {
+				return { healthy: true };
+			}
+
+			return {
+				healthy: false,
+				error: "Gateway health check failed",
+			};
+		} catch (err) {
+			return {
+				healthy: false,
+				error: err instanceof Error ? err.message : String(err),
+			};
+		}
+	}
+
+	/**
+	 * Get OpenAPI specification
+	 */
+	private getOpenApiSpec(): Record<string, unknown> {
+		return {
+			openapi: "3.0.0",
+			info: {
+				title: "Claude Agent HTTP API",
+				version: "1.0.0",
+				description: "HTTP API for Claude Agent container",
+			},
+			paths: {
+				"/execute": {
+					post: {
+						summary: "Execute command in Claude session",
+						requestBody: {
+							required: true,
+							content: {
+								"application/json": {
+									schema: {
+										type: "object",
+										required: ["workspace", "command"],
+										properties: {
+											workspace: { type: "string" },
+											command: { type: "string" },
+											chatId: { type: "string" },
+											timeoutMs: { type: "number" },
+											priority: { type: "string", enum: ["normal", "high"] },
+										},
+									},
+								},
+							},
+						},
+						responses: {
+							"202": { description: "Command queued" },
+							"400": { description: "Invalid request" },
+							"401": { description: "Unauthorized" },
+							"500": { description: "Server error" },
+						},
+					},
+				},
+				"/health": {
+					get: {
+						summary: "Health check",
+						responses: {
+							"200": { description: "Healthy" },
+							"503": { description: "Unhealthy or degraded" },
+						},
+					},
+				},
+				"/sessions": {
+					get: {
+						summary: "List all sessions",
+						responses: {
+							"200": { description: "List of sessions" },
+						},
+					},
+				},
+				"/session/create": {
+					post: {
+						summary: "Create a new session",
+						responses: {
+							"201": { description: "Session created" },
+							"400": { description: "Invalid request" },
+						},
+					},
+				},
+				"/session/{workspace}": {
+					delete: {
+						summary: "Delete a session",
+						responses: {
+							"200": { description: "Session deleted" },
+							"404": { description: "Session not found" },
+							"409": { description: "Session has active requests" },
+						},
+					},
+				},
+				"/status/{requestId}": {
+					get: {
+						summary: "Get request status",
+						responses: {
+							"200": { description: "Request status" },
+							"404": { description: "Request not found" },
+						},
+					},
+				},
+			},
+		};
+	}
+}

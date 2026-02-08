@@ -5,7 +5,8 @@ import { handleHealth } from "@/gateway/routes/health";
 describe("Health Route", () => {
 	test.skip("should return rich diagnostic JSON", async () => {
 		// Skipped due to external API calls that may timeout
-		// TODO: Mock external dependencies or run as integration test
+		// This test validates the complete health check response structure
+		// For faster unit testing, consider mocking the external dependencies
 		const app = new Hono();
 		app.get("/health", handleHealth);
 

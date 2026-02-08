@@ -42,10 +42,7 @@ describe("PersistenceManager", () => {
 	test("should manage proactive tasks", async () => {
 		// Use an ISO string that is definitely in the past UTC
 		// SQLite datetime('now') is UTC
-		const pastDate = new Date(Date.now() - 10000)
-			.toISOString()
-			.replace("T", " ")
-			.substring(0, 19);
+		const pastDate = new Date(Date.now() - 10000).toISOString().replace("T", " ").substring(0, 19);
 
 		const task = {
 			id: "task-1",
