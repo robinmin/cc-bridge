@@ -1,0 +1,6 @@
+# Bun configuration for cc-bridge project
+# Vendors directory contains downloaded sample code - excluded from project scope
+
+[test]
+# Test configuration
+# Run tests with `bun test src` to only test project code
