@@ -17,7 +17,7 @@ export type { ClaudeResponseFile };
 export class ResponseWriter {
 	private readonly baseDir: string;
 
-	constructor(baseDir: string = "/ipc") {
+	constructor(baseDir: string = "data/ipc") {
 		this.baseDir = baseDir;
 	}
 
