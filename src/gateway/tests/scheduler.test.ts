@@ -1,6 +1,6 @@
 import { describe, expect, mock, spyOn, test } from "bun:test";
 import { TaskScheduler } from "@/gateway/task-scheduler";
-import { IpcClient } from "@/packages/ipc/client";
+import { IpcClient } from "@/packages/ipc";
 
 type MockPersistenceForScheduler = {
 	getActiveTasks: () => Promise<
