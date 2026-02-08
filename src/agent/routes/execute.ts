@@ -18,13 +18,19 @@ app.post("/", zValidator("json", ExecuteCommandSchema), async (c) => {
 			// If specified workspace doesn't exist, fall back to current directory
 			workingDir = undefined;
 		}
-		console.info(
-			`Executing command: ${cmdList.join(" ")} in ${workingDir || "current directory"}`,
-		);
+		console.info(`Executing command: ${cmdList.join(" ")} in ${workingDir || "current directory"}`);
+
+		// For minimaxi API, Claude CLI needs ANTHROPIC_API_KEY to use ANTHROPIC_AUTH_TOKEN value
+		const childEnv: Record<string, string> = {
+			...process.env,
+			ANTHROPIC_API_KEY: process.env.ANTHROPIC_AUTH_TOKEN || process.env.ANTHROPIC_API_KEY || "",
+		};
+
 		const proc = Bun.spawn(cmdList, {
 			cwd: workingDir,
 			stdout: "pipe",
 			stderr: "pipe",
+			env: childEnv,
 		});
 
 		// 1. Timeout Handling
@@ -67,10 +73,7 @@ app.post("/", zValidator("json", ExecuteCommandSchema), async (c) => {
 			return result;
 		};
 
-		const [stdout, stderr] = await Promise.all([
-			readStream(proc.stdout),
-			readStream(proc.stderr),
-		]);
+		const [stdout, stderr] = await Promise.all([readStream(proc.stdout), readStream(proc.stderr)]);
 
 		clearTimeout(timeoutId);
 
@@ -81,9 +84,7 @@ app.post("/", zValidator("json", ExecuteCommandSchema), async (c) => {
 		return c.json({
 			stdout,
 			stderr,
-			exitCode: timedOut
-				? AGENT_CONSTANTS.EXECUTION.TIMEOUT_EXIT_CODE
-				: exitCode,
+			exitCode: timedOut ? AGENT_CONSTANTS.EXECUTION.TIMEOUT_EXIT_CODE : exitCode,
 		});
 	} catch (error) {
 		return c.json(
