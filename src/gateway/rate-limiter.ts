@@ -64,9 +64,7 @@ export class RateLimiter {
 
 		for (const [id, timestamps] of this.requests.entries()) {
 			// Remove timestamps outside the window
-			const validTimestamps = timestamps.filter(
-				(ts) => now - ts < this.windowMs,
-			);
+			const validTimestamps = timestamps.filter((ts) => now - ts < this.windowMs);
 
 			// If no recent timestamps or all are very old, remove the entire entry
 			if (validTimestamps.length === 0) {
@@ -106,10 +104,7 @@ export class RateLimiter {
 	getStats() {
 		return {
 			totalEntries: this.requests.size,
-			totalRequests: Array.from(this.requests.values()).reduce(
-				(sum, timestamps) => sum + timestamps.length,
-				0,
-			),
+			totalRequests: Array.from(this.requests.values()).reduce((sum, timestamps) => sum + timestamps.length, 0),
 		};
 	}
 }
