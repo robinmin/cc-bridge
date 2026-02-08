@@ -29,9 +29,7 @@ export const WorkspaceList = ({
 		"",
 		list,
 		"",
-		format === "telegram"
-			? "Use `/ws_switch <name>` to change."
-			: "Use 'make ws_switch target=<name>' to change.",
+		format === "telegram" ? "Use `/ws_switch <name>` to change." : "Use 'make ws_switch target=<name>' to change.",
 	].join("\n")}\n`;
 };
 
