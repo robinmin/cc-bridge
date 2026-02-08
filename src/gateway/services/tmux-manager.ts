@@ -77,10 +77,10 @@ export class TmuxManagerError extends Error {
 /**
  * Timeout error class for operations that exceed their time limit
  */
-export class TimeoutError extends Error {
+export class TmuxTimeoutError extends Error {
 	constructor(message: string) {
 		super(message);
-		this.name = "TimeoutError";
+		this.name = "TmuxTimeoutError";
 	}
 }
 
@@ -180,7 +180,7 @@ export class TmuxManager {
 
 		const timeoutPromise = new Promise<never>((_, reject) => {
 			timeoutHandle = setTimeout(() => {
-				reject(new TimeoutError(`Operation "${operation}" timed out after ${timeoutMs}ms`));
+				reject(new TmuxTimeoutError(`Operation "${operation}" timed out after ${timeoutMs}ms`));
 			}, timeoutMs);
 		});
 
