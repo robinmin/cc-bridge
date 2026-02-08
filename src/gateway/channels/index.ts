@@ -5,11 +5,7 @@ export interface Channel {
 	/**
 	 * Sends a message back to the user on this channel.
 	 */
-	sendMessage(
-		chatId: string | number,
-		text: string,
-		options?: unknown,
-	): Promise<void>;
+	sendMessage(chatId: string | number, text: string, options?: unknown): Promise<void>;
 
 	/**
 	 * Shows a typing/working indicator to the user.
