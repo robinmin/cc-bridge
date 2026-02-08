@@ -19,8 +19,7 @@ export class MailboxWatcher {
 	constructor(
 		private channel: Channel,
 		private ipcDir: string = GATEWAY_CONSTANTS.CONFIG.IPC_DIR,
-		private pollInterval: number = GATEWAY_CONSTANTS.CONFIG
-			.IPC_POLL_INTERVAL_MS,
+		private pollInterval: number = GATEWAY_CONSTANTS.CONFIG.IPC_POLL_INTERVAL_MS,
 		private persistenceManager = persistence,
 	) {}
 
@@ -72,36 +71,20 @@ export class MailboxWatcher {
 				if (data.type === "message" && data.chatId && data.text) {
 					await this.channel.sendMessage(data.chatId, data.text);
 					// Get user's workspace for storing message
-					const workspace = await this.persistenceManager.getWorkspace(
-						data.chatId,
-					);
-					await this.persistenceManager.storeMessage(
-						data.chatId,
-						"agent",
-						data.text,
-						workspace,
-					);
-					logger.info(
-						{ chatId: data.chatId, text: data.text },
-						"Delivered proactive message from agent",
-					);
+					const workspace = await this.persistenceManager.getWorkspace(data.chatId);
+					await this.persistenceManager.storeMessage(data.chatId, "agent", data.text, workspace);
+					logger.info({ chatId: data.chatId, text: data.text }, "Delivered proactive message from agent");
 				}
 
 				// Delete processed message
 				await fs.unlink(filePath);
 			} catch (error) {
-				logger.error(
-					{ file, error },
-					"Error processing mailbox message - deleting malformed file",
-				);
+				logger.error({ file, error }, "Error processing mailbox message - deleting malformed file");
 				// Delete the malformed file anyway to prevent infinite loops
 				try {
 					await fs.unlink(filePath);
 				} catch (unlinkError) {
-					logger.error(
-						{ file, error: unlinkError },
-						"Failed to delete malformed mailbox message",
-					);
+					logger.error({ file, error: unlinkError }, "Failed to delete malformed mailbox message");
 				}
 			}
 		}
