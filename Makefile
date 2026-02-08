@@ -109,17 +109,17 @@ bridge-dev:
 ## test: Run bun tests with coverage
 test:
 	@echo "Running tests..."
-	$(BUN) test --coverage
+	cd src && $(BUN) test --coverage
 
 ## test-quick: Run bun tests without coverage
 test-quick:
 	@echo "Running tests (quick)..."
-	$(BUN) test
+	cd src && $(BUN) test
 
 ## test-agent: Run agent unit tests
 test-agent:
 	@echo "Running agent tests..."
-	$(BUN) test src/agent
+	cd src/agent && $(BUN) test
 
 # =============================================================================
 # Code Quality
@@ -145,7 +145,7 @@ code-check:
 	@echo "Running strict validation..."
 	$(BIOME) check --error-on-warnings src
 	@echo "Running tests..."
-	$(BUN) test
+	cd src && $(BUN) test
 	@echo "All checks passed!"
 
 ## code-all: Run all checks (alias for code-check)
