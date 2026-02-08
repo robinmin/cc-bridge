@@ -62,7 +62,7 @@ export const GATEWAY_CONSTANTS = {
 			path.join(process.env.HOME || process.env.USERPROFILE || ".", "xprojects"),
 	},
 	FILESYSTEM_IPC: {
-		BASE_DIR: process.env.IPC_BASE_DIR || "/ipc",
+		BASE_DIR: process.env.IPC_BASE_DIR || "data/ipc",
 		RESPONSE_DIR: "responses",
 		REQUEST_DIR: "requests",
 		DEFAULT_RESPONSE_TIMEOUT_MS: 30000, // 30 seconds
