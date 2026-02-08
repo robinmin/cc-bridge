@@ -16,15 +16,9 @@ export const GATEWAY_CONSTANTS = {
 		PROJECTS_ROOT:
 			process.env.PROJECTS_ROOT ||
 			process.env.XPROJECTS_ROOT ||
-			path.join(
-				process.env.HOME || process.env.USERPROFILE || ".",
-				"xprojects",
-			),
+			path.join(process.env.HOME || process.env.USERPROFILE || ".", "xprojects"),
 		// Read from environment variable with fallback to current directory parent
-		WORKSPACE_ROOT:
-			process.env.WORKSPACE_ROOT ||
-			process.env.XPROJECTS_ROOT ||
-			path.resolve(".."),
+		WORKSPACE_ROOT: process.env.WORKSPACE_ROOT || process.env.XPROJECTS_ROOT || path.resolve(".."),
 	},
 	INSTANCES: {
 		LABEL: "cc-bridge.workspace",
@@ -65,9 +59,23 @@ export const GATEWAY_CONSTANTS = {
 		projectsRoot:
 			process.env.PROJECTS_ROOT ||
 			process.env.XPROJECTS_ROOT ||
-			path.join(
-				process.env.HOME || process.env.USERPROFILE || ".",
-				"xprojects",
-			),
+			path.join(process.env.HOME || process.env.USERPROFILE || ".", "xprojects"),
+	},
+	FILESYSTEM_IPC: {
+		BASE_DIR: process.env.IPC_BASE_DIR || "/ipc",
+		RESPONSE_DIR: "responses",
+		REQUEST_DIR: "requests",
+		DEFAULT_RESPONSE_TIMEOUT_MS: 30000, // 30 seconds
+		DEFAULT_CLEANUP_INTERVAL_MS: 300000, // 5 minutes
+		DEFAULT_FILE_TTL_MS: 3600000, // 1 hour
+		RETRY_DELAY_MS: 100,
+		MAX_FILE_SIZE_MB: 100, // 100MB max file size
+	},
+	TMUX: {
+		SESSION_PREFIX: "claude",
+		MAX_SESSIONS_PER_CONTAINER: 10,
+		DEFAULT_IDLE_TIMEOUT_MS: 30 * 60 * 1000, // 30 minutes
+		SESSION_NAME_SEPARATOR: "-",
+		ENABLED: process.env.ENABLE_TMUX === "true", // Global tmux mode flag
 	},
 };
