@@ -88,29 +88,20 @@ export class PersistenceManager {
 	}
 
 	// --- Messages ---
-	async storeMessage(
-		chatId: string | number,
-		sender: string,
-		text: string,
-		workspace?: string,
-	) {
+	async storeMessage(chatId: string | number, sender: string, text: string, workspace?: string) {
 		const workspaceName = workspace || "cc-bridge";
-		this.db.run(
-			"INSERT INTO messages (chat_id, workspace_name, sender, text) VALUES (?, ?, ?, ?)",
-			[String(chatId), workspaceName, sender, text],
-		);
+		this.db.run("INSERT INTO messages (chat_id, workspace_name, sender, text) VALUES (?, ?, ?, ?)", [
+			String(chatId),
+			workspaceName,
+			sender,
+			text,
+		]);
 	}
 
-	async getHistory(
-		chatId: string | number,
-		limit: number = 50,
-		workspace?: string,
-	): Promise<DBMessage[]> {
+	async getHistory(chatId: string | number, limit: number = 50, workspace?: string): Promise<DBMessage[]> {
 		const workspaceName = workspace || "cc-bridge";
 		return this.db
-			.query(
-				"SELECT * FROM messages WHERE chat_id = ? AND workspace_name = ? ORDER BY id DESC LIMIT ?",
-			)
+			.query("SELECT * FROM messages WHERE chat_id = ? AND workspace_name = ? ORDER BY id DESC LIMIT ?")
 			.all(String(chatId), workspaceName, limit) as DBMessage[];
 	}
 
@@ -123,9 +114,9 @@ export class PersistenceManager {
 	}
 
 	async getSession(chatId: string | number): Promise<string | null> {
-		const result = this.db
-			.query("SELECT instance_name FROM sessions WHERE chat_id = ?")
-			.get(String(chatId)) as { instance_name: string } | null;
+		const result = this.db.query("SELECT instance_name FROM sessions WHERE chat_id = ?").get(String(chatId)) as {
+			instance_name: string;
+		} | null;
 		return result ? result.instance_name : null;
 	}
 
@@ -147,11 +138,7 @@ export class PersistenceManager {
 	}
 
 	async getActiveTasks() {
-		return this.db
-			.query(
-				"SELECT * FROM tasks WHERE status = 'active' AND next_run <= datetime('now')",
-			)
-			.all();
+		return this.db.query("SELECT * FROM tasks WHERE status = 'active' AND next_run <= datetime('now')").all();
 	}
 
 	// --- Workspaces ---
@@ -163,9 +150,9 @@ export class PersistenceManager {
 	}
 
 	async getWorkspace(chatId: string | number): Promise<string> {
-		const result = this.db
-			.query("SELECT workspace_name FROM workspaces WHERE chat_id = ?")
-			.get(String(chatId)) as { workspace_name: string } | null;
+		const result = this.db.query("SELECT workspace_name FROM workspaces WHERE chat_id = ?").get(String(chatId)) as {
+			workspace_name: string;
+		} | null;
 		return result?.workspace_name || "cc-bridge"; // Default to cc-bridge
 	}
 
