@@ -12,10 +12,7 @@ export class ConfigLoader {
 	static load<T>(configPath: string, defaults: T): T {
 		try {
 			if (!fs.existsSync(configPath)) {
-				logger.warn(
-					{ configPath },
-					"Configuration file not found, using defaults",
-				);
+				logger.warn({ configPath }, "Configuration file not found, using defaults");
 				return defaults;
 			}
 
@@ -23,10 +20,7 @@ export class ConfigLoader {
 			const parsed = parse(content);
 
 			if (!parsed || typeof parsed !== "object") {
-				logger.error(
-					{ configPath },
-					"Failed to parse configuration file or invalid JSONC",
-				);
+				logger.error({ configPath }, "Failed to parse configuration file or invalid JSONC");
 				return defaults;
 			}
 
