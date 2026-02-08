@@ -1,5 +1,5 @@
-import path from "node:path";
 import { existsSync } from "node:fs";
+import path from "node:path";
 import type { Channel } from "@/gateway/channels";
 import { GATEWAY_CONSTANTS } from "@/gateway/consts";
 import { logger } from "@/packages/logger";
@@ -29,10 +29,7 @@ export class HostBot implements Bot {
 
 		// Check if the script exists
 		if (!existsSync(resolvedPath)) {
-			logger.warn(
-				{ scriptPath: resolvedPath },
-				"Host command script not found, HostBot commands will fail",
-			);
+			logger.warn({ scriptPath: resolvedPath }, "Host command script not found, HostBot commands will fail");
 		}
 
 		this.scriptPath = resolvedPath;
@@ -54,15 +51,10 @@ export class HostBot implements Bot {
 		if (!menu) return false;
 
 		// 2. Extract the script command (e.g. 'uptime' from 'host_uptime')
-		const scriptCmd = menu.command.includes("_")
-			? menu.command.split("_")[1]
-			: menu.command;
+		const scriptCmd = menu.command.includes("_") ? menu.command.split("_")[1] : menu.command;
 
 		try {
-			logger.debug(
-				{ scriptCmd, fullCommand },
-				"Delegating host command to script",
-			);
+			logger.debug({ scriptCmd, fullCommand }, "Delegating host command to script");
 
 			// Show typing indicator for better UX
 			if (this.channel.showTyping) {
@@ -98,10 +90,7 @@ export class HostBot implements Bot {
 			if (result.timedOut) {
 				proc.kill();
 				logger.warn({ scriptCmd }, "Host command timed out");
-				await this.channel.sendMessage(
-					message.chatId,
-					"⏱️ Command timed out. Please try again.",
-				);
+				await this.channel.sendMessage(message.chatId, "⏱️ Command timed out. Please try again.");
 				return true;
 			}
 
@@ -111,25 +100,13 @@ export class HostBot implements Bot {
 			}
 
 			// Handle error case
-			logger.error(
-				{ scriptCmd, exitCode: result.exitCode, stderr: result.errorOutput },
-				"Host command failed",
-			);
-			await this.channel.sendMessage(
-				message.chatId,
-				"❌ Command failed. Please check system status.",
-			);
+			logger.error({ scriptCmd, exitCode: result.exitCode, stderr: result.errorOutput }, "Host command failed");
+			await this.channel.sendMessage(message.chatId, "❌ Command failed. Please check system status.");
 			return true;
 		} catch (error) {
 			const errorMsg = error instanceof Error ? error.message : String(error);
-			logger.error(
-				{ error: errorMsg, scriptCmd },
-				"Error executing host command",
-			);
-			await this.channel.sendMessage(
-				message.chatId,
-				"❌ Failed to execute command. Please try again.",
-			);
+			logger.error({ error: errorMsg, scriptCmd }, "Error executing host command");
+			await this.channel.sendMessage(message.chatId, "❌ Failed to execute command. Please try again.");
 			return true;
 		}
 	}
