@@ -11,16 +11,10 @@ router.post("/", async (c) => {
 		const { type, chatId, text } = body;
 
 		if (!type || !chatId || !text) {
-			return c.json(
-				{ error: "Missing required fields: type, chatId, text" },
-				400,
-			);
+			return c.json({ error: "Missing required fields: type, chatId, text" }, 400);
 		}
 
-		const ipcMessagesDir = path.join(
-			AGENT_CONSTANTS.EXECUTION.IPC_DIR,
-			"messages",
-		);
+		const ipcMessagesDir = path.join(AGENT_CONSTANTS.EXECUTION.IPC_DIR, "messages");
 
 		// Ensure directory exists (though host should have pre-created it)
 		await fs.mkdir(ipcMessagesDir, { recursive: true });
@@ -28,11 +22,7 @@ router.post("/", async (c) => {
 		const filename = `msg_${Date.now()}_${Math.random().toString(36).substring(7)}.json`;
 		const filePath = path.join(ipcMessagesDir, filename);
 
-		await fs.writeFile(
-			filePath,
-			JSON.stringify({ type, chatId, text }),
-			"utf-8",
-		);
+		await fs.writeFile(filePath, JSON.stringify({ type, chatId, text }), "utf-8");
 
 		return c.json({ status: "ok", file: filename });
 	} catch (error) {
