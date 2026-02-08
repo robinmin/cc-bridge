@@ -21,9 +21,7 @@ describe("IpcClient", () => {
 			},
 			stdout: new ReadableStream({
 				start(controller) {
-					controller.enqueue(
-						new TextEncoder().encode(`other logs\n${mockResponse}\n`),
-					);
+					controller.enqueue(new TextEncoder().encode(`other logs\n${mockResponse}\n`));
 					controller.close();
 				},
 			}),
