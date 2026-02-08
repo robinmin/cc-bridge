@@ -3,10 +3,26 @@ FROM oven/bun:1-slim
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
+    # Essential tools
     git \
     curl \
-    tmux \
+    jq \
     sudo \
+    # Process & system monitoring
+    procps \
+    psmisc \
+    htop \
+    lsof \
+    # Development tools
+    ripgrep \
+    fd-find \
+    tree \
+    file \
+    less \
+    tmux \
+    # Text editor
+    nano \
+    # Cleanup
     && rm -rf /var/lib/apt/lists/*
 
 # ARG for dynamic user creation
@@ -60,7 +76,9 @@ COPY --chown=${USER_NAME}:${USER_NAME} src/agent ./src/agent
 COPY --chown=${USER_NAME}:${USER_NAME} src/dockers/entrypoint.sh /app/entrypoint.sh
 COPY --chown=${USER_NAME}:${USER_NAME} scripts/sync-plugins.sh /app/sync-plugins.sh
 COPY --chown=${USER_NAME}:${USER_NAME} scripts/refresh-discovery-cache.sh /app/refresh-discovery-cache.sh
-RUN chmod +x /app/entrypoint.sh /app/sync-plugins.sh /app/refresh-discovery-cache.sh
+COPY --chown=${USER_NAME}:${USER_NAME} scripts/stop-hook.sh /app/scripts/stop-hook.sh
+RUN mkdir -p /app/scripts && \
+    chmod +x /app/entrypoint.sh /app/sync-plugins.sh /app/refresh-discovery-cache.sh /app/scripts/stop-hook.sh
 
 # Install dependencies
 RUN bun install
