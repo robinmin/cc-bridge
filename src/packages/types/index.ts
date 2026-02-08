@@ -1,5 +1,8 @@
 import { z } from "zod";
 
+// Re-export Claude types for convenience
+export * from "./claude";
+
 // --- Command Execution ---
 export const ExecuteCommandSchema = z.object({
 	command: z.string(),
