@@ -80,12 +80,6 @@ export const Header = ({
 			.filter(Boolean)
 			.join("\n");
 	} else {
-		return [
-			`🛰️ **${title.toUpperCase()}**`,
-			"━━━━━━━━━━━━━━━━━━━",
-			subtitle || "",
-		]
-			.filter(Boolean)
-			.join("\n");
+		return [`🛰️ **${title.toUpperCase()}**`, "━━━━━━━━━━━━━━━━━━━", subtitle || ""].filter(Boolean).join("\n");
 	}
 };
