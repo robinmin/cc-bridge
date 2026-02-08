@@ -16,13 +16,7 @@ interface HealthData {
 	[key: string]: unknown;
 }
 
-export const HealthReport = ({
-	data,
-	format,
-}: {
-	data: HealthData;
-	format: "telegram" | "terminal";
-}) => {
+export const HealthReport = ({ data, format }: { data: HealthData; format: "telegram" | "terminal" }) => {
 	const conn = data.connectivity || {};
 	const env = data.env || {};
 	const fs = data.filesystem || {};
@@ -69,29 +63,17 @@ export const HealthReport = ({
 				? `${YELLOW}注意: 系统运行正常，但存在一些警告或错误。${RESET}`
 				: "⚠️ 注意: 系统运行正常，但存在一些警告或错误。";
 
-	const renderEnv = (
-		key: string,
-		info: { sensitive: boolean; status?: boolean | string; value?: string },
-	) => {
+	const renderEnv = (key: string, info: { sensitive: boolean; status?: boolean | string; value?: string }) => {
 		if (info.sensitive) {
 			return `${key.padEnd(16)} ${StatusIcon({ status: info.status, format })}`;
 		}
-		const val =
-			format === "terminal"
-				? `${BLUE}${info.value}${RESET}`
-				: `\`${info.value}\``;
+		const val = format === "terminal" ? `${BLUE}${info.value}${RESET}` : `\`${info.value}\``;
 		return `${key.padEnd(16)} ${val}`;
 	};
 
-	const renderFs = (
-		name: string,
-		info: { status?: boolean | string; path: string },
-	) => {
+	const renderFs = (name: string, info: { status?: boolean | string; path: string }) => {
 		const icon = StatusIcon({ status: info.status, format });
-		const pathStr =
-			format === "terminal"
-				? `${YELLOW}${info.path}${RESET}`
-				: `\`${info.path}\``;
+		const pathStr = format === "terminal" ? `${YELLOW}${info.path}${RESET}` : `\`${info.path}\``;
 		return `  ${name.padEnd(12)} ${icon} ${pathStr}`;
 	};
 
@@ -143,23 +125,18 @@ export const HealthReport = ({
 				title: "Docker Instances",
 				format,
 				emoji: "🐳",
-				children: docker.map(
-					(d: { name: string; image: string; status: string }) => {
-						const name = d.name;
-						const img =
-							format === "terminal"
-								? `${MAGENTA}${d.image}${RESET}`
-								: `\`${d.image}\``;
-						const st = d.status.includes("Up")
-							? format === "terminal"
-								? `${GREEN}${d.status}${RESET}`
-								: `🟢 ${d.status}`
-							: format === "terminal"
-								? `${RED}${d.status}${RESET}`
-								: `🔴 ${d.status}`;
-						return `  ${name}: [${img}] -> ${st}`;
-					},
-				),
+				children: docker.map((d: { name: string; image: string; status: string }) => {
+					const name = d.name;
+					const img = format === "terminal" ? `${MAGENTA}${d.image}${RESET}` : `\`${d.image}\``;
+					const st = d.status.includes("Up")
+						? format === "terminal"
+							? `${GREEN}${d.status}${RESET}`
+							: `🟢 ${d.status}`
+						: format === "terminal"
+							? `${RED}${d.status}${RESET}`
+							: `🔴 ${d.status}`;
+					return `  ${name}: [${img}] -> ${st}`;
+				}),
 			}),
 		Section({
 			title: "Resources",
