@@ -40,9 +40,7 @@ export const handleHealth = async (c: Context) => {
 			},
 			ANTHROPIC_AUTH: {
 				sensitive: true,
-				status: !!(
-					process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN
-				),
+				status: !!(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN),
 			},
 			PORT: { sensitive: false, value: process.env.PORT || "8080" },
 			NODE_ENV: {
@@ -69,20 +67,15 @@ export const handleHealth = async (c: Context) => {
 
 	// 1. External Connectivity Checks
 	try {
-		const tgRes = await fetch(
-			GATEWAY_CONSTANTS.DIAGNOSTICS.URLS.TELEGRAM_API_BASE,
-			{
-				signal: AbortSignal.timeout(timeout),
-			},
-		);
+		const tgRes = await fetch(GATEWAY_CONSTANTS.DIAGNOSTICS.URLS.TELEGRAM_API_BASE, {
+			signal: AbortSignal.timeout(timeout),
+		});
 		diagnostics.connectivity.telegram = tgRes.ok;
 	} catch {
 		diagnostics.connectivity.telegram = false;
 	}
 
-	const anthropicUrl =
-		process.env.ANTHROPIC_BASE_URL ||
-		GATEWAY_CONSTANTS.DIAGNOSTICS.URLS.ANTHROPIC_API_BASE;
+	const anthropicUrl = process.env.ANTHROPIC_BASE_URL || GATEWAY_CONSTANTS.DIAGNOSTICS.URLS.ANTHROPIC_API_BASE;
 	try {
 		const antRes = await fetch(anthropicUrl, {
 			signal: AbortSignal.timeout(timeout),
@@ -126,31 +119,14 @@ export const handleHealth = async (c: Context) => {
 	};
 
 	const daemons = GATEWAY_CONSTANTS.DIAGNOSTICS.DAEMONS;
-	diagnostics.daemons["cc-bridge"] = await checkDaemon(
-		daemons.CC_BRIDGE.ID,
-		daemons.CC_BRIDGE.PATTERN,
-	);
-	diagnostics.daemons.cloudflared = await checkDaemon(
-		daemons.CLOUDFLARED.ID,
-		daemons.CLOUDFLARED.PATTERN,
-	);
-	diagnostics.daemons.orbstack = await checkDaemon(
-		daemons.ORBSTACK.ID,
-		daemons.ORBSTACK.PATTERN,
-	);
+	diagnostics.daemons["cc-bridge"] = await checkDaemon(daemons.CC_BRIDGE.ID, daemons.CC_BRIDGE.PATTERN);
+	diagnostics.daemons.cloudflared = await checkDaemon(daemons.CLOUDFLARED.ID, daemons.CLOUDFLARED.PATTERN);
+	diagnostics.daemons.orbstack = await checkDaemon(daemons.ORBSTACK.ID, daemons.ORBSTACK.PATTERN);
 
 	// 3.5 Docker Instance List
 	try {
 		const dProc = Bun.spawn(
-			[
-				"docker",
-				"ps",
-				"-a",
-				"--filter",
-				"name=claude-cc-bridge",
-				"--format",
-				"{{.Names}}\t{{.Image}}\t{{.Status}}",
-			],
+			["docker", "ps", "-a", "--filter", "name=claude-cc-bridge", "--format", "{{.Names}}\t{{.Image}}\t{{.Status}}"],
 			{ stderr: "pipe" },
 		);
 		const dOut = await new Response(dProc.stdout).text();
