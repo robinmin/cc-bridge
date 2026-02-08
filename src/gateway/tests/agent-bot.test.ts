@@ -3,7 +3,7 @@ import type { Channel } from "@/gateway/channels";
 import { instanceManager } from "@/gateway/instance-manager";
 import type { Message } from "@/gateway/pipeline";
 import { AgentBot } from "@/gateway/pipeline/agent-bot";
-import { IpcClient } from "@/packages/ipc/client";
+import { IpcClient } from "@/packages/ipc";
 
 type MockPersistence = {
 	getSession: () => Promise<null>;
