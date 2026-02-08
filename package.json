@@ -12,7 +12,10 @@
 		"check": "biome check --write src"
 	},
 	"dependencies": {
+		"@fastify/cors": "^11.2.0",
+		"@fastify/rate-limit": "^10.3.0",
 		"@hono/zod-validator": "^0.7.6",
+		"fastify": "^5.7.4",
 		"hono": "^4.6.14",
 		"hono-pino": "^0.10.3",
 		"jsonc-parser": "^3.3.1",
