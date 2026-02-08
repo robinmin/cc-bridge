@@ -9,8 +9,7 @@ describe("StdioIpcAdapter", () => {
 
 		// Mock input stream
 		const inputData = [
-			JSON.stringify({ id: "1", method: "POST", path: "/test", body: {} }) +
-				"\n",
+			`${JSON.stringify({ id: "1", method: "POST", path: "/test", body: {} })}\n`,
 			`${JSON.stringify({ id: "2", method: "POST", path: "/test" })}\n`,
 		];
 
@@ -54,9 +53,7 @@ describe("StdioIpcAdapter", () => {
 		});
 
 		const outputs: string[] = [];
-		const adapter = new StdioIpcAdapter(app, stream, (msg) =>
-			outputs.push(msg),
-		);
+		const adapter = new StdioIpcAdapter(app, stream, (msg) => outputs.push(msg));
 		await adapter.start();
 
 		expect(outputs.length).toBe(1);
@@ -76,9 +73,7 @@ describe("StdioIpcAdapter", () => {
 		});
 
 		const outputs: string[] = [];
-		const adapter = new StdioIpcAdapter(app, stream, (msg) =>
-			outputs.push(msg),
-		);
+		const adapter = new StdioIpcAdapter(app, stream, (msg) => outputs.push(msg));
 		await adapter.start();
 
 		expect(outputs.length).toBe(0);
