@@ -1,10 +1,7 @@
 import type { Channel } from "@/gateway/channels";
 import { instanceManager } from "@/gateway/instance-manager";
 import { HelpReport } from "@/gateway/output/HelpReport";
-import {
-	WorkspaceList,
-	WorkspaceStatus,
-} from "@/gateway/output/WorkspaceReport";
+import { WorkspaceList, WorkspaceStatus } from "@/gateway/output/WorkspaceReport";
 import { persistence } from "@/gateway/persistence";
 import { logger } from "@/packages/logger";
 import type { Bot, Message } from "./index";
@@ -69,14 +66,8 @@ export class MenuBot implements Bot {
 					}
 					await this.handleWorkspaceAdd(message, workspaceName);
 				} catch (err) {
-					logger.error(
-						{ err: err instanceof Error ? err.message : String(err) },
-						"Failed to create workspace",
-					);
-					await this.channel.sendMessage(
-						message.chatId,
-						"❌ Failed to create workspace. Please try again.",
-					);
+					logger.error({ err: err instanceof Error ? err.message : String(err) }, "Failed to create workspace");
+					await this.channel.sendMessage(message.chatId, "❌ Failed to create workspace. Please try again.");
 				}
 				return true;
 			}
@@ -94,13 +85,9 @@ export class MenuBot implements Bot {
 				return true;
 
 			case "/ws_status": {
-				const current = await this.persistenceManager.getSession(
-					message.chatId,
-				);
+				const current = await this.persistenceManager.getSession(message.chatId);
 				const instances = await instanceManager.refresh();
-				const inst = current
-					? instances.find((i) => i.name === current)
-					: undefined;
+				const inst = current ? instances.find((i) => i.name === current) : undefined;
 
 				const report = WorkspaceStatus({
 					current,
@@ -116,15 +103,10 @@ export class MenuBot implements Bot {
 			case "/ws_list": {
 				const allFolders = await instanceManager.getWorkspaceFolders();
 				const allInstances = await instanceManager.refresh();
-				const currentSession = await this.persistenceManager.getSession(
-					message.chatId,
-				);
+				const currentSession = await this.persistenceManager.getSession(message.chatId);
 
 				if (allFolders.length === 0) {
-					await this.channel.sendMessage(
-						message.chatId,
-						"⚠️ No workspaces found in root folder.",
-					);
+					await this.channel.sendMessage(message.chatId, "⚠️ No workspaces found in root folder.");
 				} else {
 					const workspaces = allFolders.map((folder) => {
 						const isActive = folder === currentSession;
@@ -159,24 +141,13 @@ export class MenuBot implements Bot {
 					}
 
 					const workspaces = await instanceManager.refresh();
-					const found = workspaces.find(
-						(i) => i.name.toLowerCase() === target.toLowerCase(),
-					);
+					const found = workspaces.find((i) => i.name.toLowerCase() === target.toLowerCase());
 
 					if (!found) {
-						await this.channel.sendMessage(
-							message.chatId,
-							`❌ Workspace \`${target}\` not found.`,
-						);
+						await this.channel.sendMessage(message.chatId, `❌ Workspace \`${target}\` not found.`);
 					} else {
-						await this.persistenceManager.setSession(
-							message.chatId,
-							found.name,
-						);
-						await this.channel.sendMessage(
-							message.chatId,
-							`✅ Switched to workspace: **${found.name}**`,
-						);
+						await this.persistenceManager.setSession(message.chatId, found.name);
+						await this.channel.sendMessage(message.chatId, `✅ Switched to workspace: **${found.name}**`);
 					}
 				} catch (err) {
 					logger.error(
@@ -207,24 +178,15 @@ export class MenuBot implements Bot {
 			const report = await res.text();
 			await this.channel.sendMessage(message.chatId, report);
 		} catch (error) {
-			logger.error(
-				{ error: error instanceof Error ? error.message : String(error) },
-				"Error in bridge_status command",
-			);
-			await this.channel.sendMessage(
-				message.chatId,
-				"❌ Failed to fetch detailed system status.",
-			);
+			logger.error({ error: error instanceof Error ? error.message : String(error) }, "Error in bridge_status command");
+			await this.channel.sendMessage(message.chatId, "❌ Failed to fetch detailed system status.");
 		}
 	}
 
 	/**
 	 * Handles workspace creation: checks if workspace exists, creates it with git init
 	 */
-	async handleWorkspaceAdd(
-		message: Message,
-		workspaceName: string,
-	): Promise<void> {
+	async handleWorkspaceAdd(message: Message, workspaceName: string): Promise<void> {
 		// Validate workspace name (alphanumeric, dash, underscore, no spaces)
 		const validName = /^[a-zA-Z0-9_-]+$/;
 		if (!validName.test(workspaceName)) {
@@ -238,12 +200,8 @@ export class MenuBot implements Bot {
 		// Get the projects root from config
 		const { ConfigLoader } = await import("@/packages/config");
 		const { GATEWAY_CONSTANTS } = await import("@/gateway/consts");
-		const config = ConfigLoader.load(
-			GATEWAY_CONSTANTS.CONFIG.CONFIG_FILE,
-			GATEWAY_CONSTANTS.DEFAULT_CONFIG,
-		);
-		const projectsRoot =
-			config.projectsRoot || GATEWAY_CONSTANTS.CONFIG.PROJECTS_ROOT;
+		const config = ConfigLoader.load(GATEWAY_CONSTANTS.CONFIG.CONFIG_FILE, GATEWAY_CONSTANTS.DEFAULT_CONFIG);
+		const projectsRoot = config.projectsRoot || GATEWAY_CONSTANTS.CONFIG.PROJECTS_ROOT;
 
 		// Check if workspace directory already exists
 		const { existsSync } = await import("node:fs");
@@ -280,10 +238,7 @@ export class MenuBot implements Bot {
 			});
 			const exitCode = await gitInit.exited;
 			if (exitCode !== 0) {
-				logger.warn(
-					{ exitCode, workspacePath },
-					"git init failed, but workspace was created",
-				);
+				logger.warn({ exitCode, workspacePath }, "git init failed, but workspace was created");
 			} else {
 				logger.info({ workspacePath }, "Initialized git repository");
 			}
@@ -303,10 +258,7 @@ export class MenuBot implements Bot {
 			});
 			const exitCode = await tasksInit.exited;
 			if (exitCode !== 0) {
-				logger.warn(
-					{ exitCode, workspacePath },
-					"tasks init failed, but workspace was created",
-				);
+				logger.warn({ exitCode, workspacePath }, "tasks init failed, but workspace was created");
 			} else {
 				logger.info({ workspacePath }, "Initialized tasks project");
 			}
@@ -326,20 +278,14 @@ export class MenuBot implements Bot {
 			});
 			await gitAdd.exited;
 
-			const gitCommit = Bun.spawn(
-				["git", "commit", "-m", "project initialization"],
-				{
-					cwd: workspacePath,
-					stdout: "pipe",
-					stderr: "pipe",
-				},
-			);
+			const gitCommit = Bun.spawn(["git", "commit", "-m", "project initialization"], {
+				cwd: workspacePath,
+				stdout: "pipe",
+				stderr: "pipe",
+			});
 			const exitCode = await gitCommit.exited;
 			if (exitCode !== 0) {
-				logger.warn(
-					{ exitCode, workspacePath },
-					"git commit failed, but workspace was created",
-				);
+				logger.warn({ exitCode, workspacePath }, "git commit failed, but workspace was created");
 			} else {
 				logger.info({ workspacePath }, "Created initial git commit");
 			}
