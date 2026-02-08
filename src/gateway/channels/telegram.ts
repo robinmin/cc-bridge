@@ -23,11 +23,7 @@ type ChatAction =
 export class TelegramClient {
 	constructor(private botToken: string) {}
 
-	async sendMessage(
-		chatId: string | number,
-		text: string,
-		options?: { parse_mode?: string },
-	): Promise<void> {
+	async sendMessage(chatId: string | number, text: string, options?: { parse_mode?: string }): Promise<void> {
 		const url = `${GATEWAY_CONSTANTS.DIAGNOSTICS.URLS.TELEGRAM_API_BASE}/bot${this.botToken}/sendMessage`;
 		const response = await fetch(url, {
 			method: "POST",
@@ -46,10 +42,7 @@ export class TelegramClient {
 		}
 	}
 
-	async sendChatAction(
-		chatId: string | number,
-		action: ChatAction = "typing",
-	): Promise<void> {
+	async sendChatAction(chatId: string | number, action: ChatAction = "typing"): Promise<void> {
 		const url = `${GATEWAY_CONSTANTS.DIAGNOSTICS.URLS.TELEGRAM_API_BASE}/bot${this.botToken}/sendChatAction`;
 		const response = await fetch(url, {
 			method: "POST",
@@ -68,13 +61,8 @@ export class TelegramClient {
 		}
 	}
 
-	async setCommands(
-		commands: { command: string; description: string }[],
-	): Promise<void> {
-		logger.debug(
-			{ count: commands.length, commands },
-			"Updating Telegram bot menu commands",
-		);
+	async setCommands(commands: { command: string; description: string }[]): Promise<void> {
+		logger.debug({ count: commands.length, commands }, "Updating Telegram bot menu commands");
 		const url = `${GATEWAY_CONSTANTS.DIAGNOSTICS.URLS.TELEGRAM_API_BASE}/bot${this.botToken}/setMyCommands`;
 		const response = await fetch(url, {
 			method: "POST",
@@ -110,25 +98,20 @@ export class TelegramChannel implements Channel, ChannelAdapter {
 		this.client = new TelegramClient(botToken);
 	}
 
-	async sendMessage(
-		chatId: string | number,
-		text: string,
-		options?: unknown,
-	): Promise<void> {
-		await this.client.sendMessage(
-			chatId,
-			text,
-			options as { parse_mode?: string },
-		);
+	async sendMessage(chatId: string | number, text: string, options?: unknown): Promise<void> {
+		// Log outgoing message with truncated content
+		const maxLength = 256;
+		const truncatedText = text.length > maxLength ? `${text.substring(0, maxLength)}...` : text;
+		logger.info(`[${chatId}] <== ${truncatedText.replace(/\n/g, "\\n")}`);
+
+		await this.client.sendMessage(chatId, text, options as { parse_mode?: string });
 	}
 
 	async showTyping(chatId: string | number): Promise<void> {
 		await this.client.sendChatAction(chatId, "typing");
 	}
 
-	async setMenu(
-		commands: { command: string; description: string }[],
-	): Promise<void> {
+	async setMenu(commands: { command: string; description: string }[]): Promise<void> {
 		await this.client.setCommands(commands);
 	}
 
