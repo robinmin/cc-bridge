@@ -52,9 +52,7 @@ export class InstanceManager {
 					newInstances.set(name, {
 						name,
 						containerId: data.ID,
-						status: data.Status.toLowerCase().includes("up")
-							? "running"
-							: "stopped",
+						status: data.Status.toLowerCase().includes("up") ? "running" : "stopped",
 						image: data.Image,
 					});
 				} catch (e) {
@@ -63,10 +61,7 @@ export class InstanceManager {
 			}
 
 			this.instances = newInstances;
-			logger.debug(
-				{ count: this.instances.size },
-				"Discovered agent instances",
-			);
+			logger.debug({ count: this.instances.size }, "Discovered agent instances");
 
 			// Setup IPC directories for all discovered instances
 			for (const instance of this.instances.values()) {
@@ -81,10 +76,7 @@ export class InstanceManager {
 	}
 
 	private setupIpcDirectories(instanceName: string) {
-		const baseDir = path.resolve(
-			GATEWAY_CONSTANTS.CONFIG.IPC_DIR,
-			instanceName,
-		);
+		const baseDir = path.resolve(GATEWAY_CONSTANTS.CONFIG.IPC_DIR, instanceName);
 		const dirs = ["messages", "tasks", "snapshots"];
 
 		for (const dir of dirs) {
@@ -107,9 +99,7 @@ export class InstanceManager {
 		try {
 			if (!fs.existsSync(root)) return [];
 			const dirs = await fs.promises.readdir(root, { withFileTypes: true });
-			return dirs
-				.filter((d) => d.isDirectory() && !d.name.startsWith("."))
-				.map((d) => d.name);
+			return dirs.filter((d) => d.isDirectory() && !d.name.startsWith(".")).map((d) => d.name);
 		} catch (error) {
 			logger.error({ error, root }, "Failed to list workspace folders");
 			return [];
