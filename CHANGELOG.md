@@ -5,6 +5,65 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-02-07
+
+### 💥 Breaking Changes
+
+- **Technology Stack Migration**: Complete rewrite from Python/FastAPI to TypeScript/Bun + Hono for improved performance and type safety.
+  - Removed all Python dependencies (uv, ruff, pytest)
+  - Replaced FastAPI with Hono web framework
+  - Migrated to Bun runtime and package manager
+- **Project Structure**: Restructured codebase with new `src/packages/` organization for better modularity
+- **Testing Framework**: Switched from pytest to Bun test with updated test patterns
+
+### ✨ New Features
+
+- **Multi-Protocol IPC Support**: Flexible IPC client factory supporting:
+  - TCP socket communication for fast local development
+  - Unix socket for inter-process communication
+  - Docker exec for container-based deployment
+  - Host mode for running without Docker
+  - Remote mode for distributed systems
+- **Circuit Breaker Pattern**: Added resilience layer with automatic failure detection and recovery for IPC clients
+- **Workspace Support**: Multi-workspace session management with isolated environments
+- **MCP & Plugins Integration**: Enabled Model Context Protocol and plugin support for extensibility
+- **HTTP API Server**: New REST API for agent container with endpoints for execute, health, sessions, and status queries
+
+### 🔧 Improvements
+
+- **Enhanced Makefile**: Simplified code quality targets with Biome integration
+  - `make code-fix-all`: Safe auto-fixes only
+  - `make code-fix-unsafe`: All auto-fixes including code changes
+  - `make code-check`: Strict validation with error-on-warnings
+- **Type Safety**: Full TypeScript coverage with strict type checking
+- **Performance**: Faster execution with Bun runtime and optimized IPC communication
+- **Code Quality**: Integrated Biome for linting and formatting (replacing Ruff)
+- **Error Handling**: Improved error types and structured logging throughout the codebase
+
+### 🐛 Fixes
+
+- Fixed type safety issues with proper non-null assertion handling
+- Resolved import path inconsistencies after code consolidation
+- Fixed TmuxManager method accessibility for testing with protected methods
+- Corrected unused variable warnings with proper underscore prefixing
+
+### 🔒 Security
+
+- Improved API key validation and authentication middleware
+- Enhanced rate limiting with configurable windows
+
+### Migration Notes
+
+If upgrading from v0.2.0:
+
+1. **Install Bun**: `curl -fsSL https://bun.sh/install | bash`
+2. **Update dependencies**: `bun install`
+3. **Update Makefile targets**: Use `make code-fix-all` instead of `make format`
+4. **Python removal**: All Python code has been migrated to TypeScript
+5. **Configuration**: Update environment variables to use new `src/dockers/.env.example`
+
+---
+
 ## [0.2.0] - 2026-02-04
 
 ### Added
@@ -60,4 +119,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed system daemon persistence issues on macOS by standardizing absolute paths in `.plist` configurations.
 
 ---
+[0.3.0]: https://github.com/hanxiao/claudecode-telegram/releases/tag/v0.3.0
+[0.2.0]: https://github.com/hanxiao/claudecode-telegram/releases/tag/v0.2.0
 [0.1.0]: https://github.com/hanxiao/claudecode-telegram/releases/tag/v0.1.0
