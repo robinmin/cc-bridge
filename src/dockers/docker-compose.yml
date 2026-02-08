@@ -41,7 +41,7 @@ services:
       - ../../:/workspaces/${WORKSPACE_NAME:-cc-bridge}:rw
       
       # IPC Mailbox and Logs
-      - ../../data/ipc/${WORKSPACE_NAME:-cc-bridge}:/workspaces/${WORKSPACE_NAME:-cc-bridge}/data/ipc:rw
+      - ../../data/ipc/${WORKSPACE_NAME:-cc-bridge}:/ipc/${WORKSPACE_NAME:-cc-bridge}:rw
       - ../../data/logs:/workspaces/${WORKSPACE_NAME:-cc-bridge}/data/logs:rw
 
     # Environment variables
@@ -52,10 +52,28 @@ services:
       # Workspace settings
       - WORKSPACE_NAME=${WORKSPACE_NAME:-cc-bridge}
       - INSTANCE_NAME=${WORKSPACE_NAME:-cc-bridge}
-      - AGENT_MODE=server
-      - AGENT_SOCKET=data/ipc/${WORKSPACE_NAME:-cc-bridge}/agent.sock
+      # Use TCP mode for faster IPC from host
+      - AGENT_MODE=tcp
+      - AGENT_TCP_PORT=3001
       - CLAUDE_AGENT_SKILLS=1
       - BRAVE_API_KEY=${BRAVE_API_KEY}
+
+      # Claude CLI expects ANTHROPIC_API_KEY for authentication
+      - ANTHROPIC_API_KEY=${ANTHROPIC_AUTH_TOKEN}
+
+      # Gateway callback URL for Stop Hook
+      - GATEWAY_CALLBACK_URL=http://host.docker.internal:8080/claude-callback
+
+      # IPC base directory for filesystem communication
+      - IPC_BASE_DIR=/ipc
+
+      # HTTP API Server Configuration
+      - HTTP_PORT=${HTTP_PORT:-3000}
+      - HTTP_HOST=${HTTP_HOST:-0.0.0.0}
+      - HTTP_API_KEY=${HTTP_API_KEY:-dev-key-change-in-production}
+      - HTTP_AUTH=${HTTP_AUTH:-true}
+      - HTTP_RATE_LIMIT_MAX=${HTTP_RATE_LIMIT_MAX:-100}
+      - HTTP_RATE_LIMIT_WINDOW=${HTTP_RATE_LIMIT_WINDOW:-1 minute}
 
       # Python settings
       - PYTHONUNBUFFERED=1
@@ -70,9 +88,19 @@ services:
     # Restart policy (none for development, unless-stopped for production)
     restart: unless-stopped
 
+    # Port mappings
+    ports:
+      - "${HTTP_PORT:-3000}:3000"  # HTTP API Server
+      - "3001:3001"  # Agent IPC (TCP fallback for performance)
+
     # The bridge server communicates via a persistent Unix Domain Socket (low-latency)
     # with a fall back to 'docker exec' streams.
-    command: ["bun", "run", "src/agent/index.ts"]
+    # Start tmux server for persistent Claude sessions
+    command: >
+      sh -c "
+        tmux start-server &&
+        bun run src/agent/index.ts
+      "
 
     # Health check
     healthcheck:
