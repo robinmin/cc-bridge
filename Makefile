@@ -125,33 +125,31 @@ test-agent:
 # Code Quality
 # =============================================================================
 
-## code-lint: Run Biome linter
+## code-lint: Show lint issues (no fixes)
 code-lint:
-	@echo "Running linter..."
+	@echo "Checking lint issues..."
 	$(BIOME) lint src
 
-## code-format: Format code with Biome
-code-format:
-	@echo "Formatting code..."
-	$(BIOME) format --write src
-
-## code-check: Run Biome check (lint + format)
-code-check:
-	@echo "Running code check..."
+## code-fix-all: Apply safe auto-fixes only
+code-fix-all:
+	@echo "Applying safe auto-fixes..."
 	$(BIOME) check --write src
 
-## code-all: Run all checks (check + test)
-code-all:
-	@echo "Running Biome checks..."
-	$(BIOME) check src
+## code-fix-unsafe: Apply ALL auto-fixes (including unsafe)
+code-fix-unsafe:
+	@echo "Applying all auto-fixes (including unsafe)..."
+	$(BIOME) check --write --unsafe src
+
+## code-check: Run validation (fails on warnings)
+code-check:
+	@echo "Running strict validation..."
+	$(BIOME) check --error-on-warnings src
 	@echo "Running tests..."
 	$(BUN) test
 	@echo "All checks passed!"
 
-## code-fix-all: Auto-fix everything, then validate
-code-fix-all: code-check
-	@echo "Running validation after fixes..."
-	$(MAKE) code-all
+## code-all: Run all checks (alias for code-check)
+code-all: code-check
 
 # =============================================================================
 # Gateway (System-Level LaunchDaemon)
