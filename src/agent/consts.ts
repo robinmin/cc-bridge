@@ -14,6 +14,9 @@ export const AGENT_CONSTANTS = {
 		CONFIG_FILE: "data/config/agent.jsonc",
 	},
 
+	// --- State Management ---
+	STATE_BASE_DIR: "data/state",
+
 	// --- File Operations ---
 	FILES: {
 		ENCODING_UTF8: "utf-8",
