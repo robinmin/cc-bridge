@@ -48,8 +48,7 @@ export class TaskScheduler {
 
 	async checkTasks() {
 		try {
-			const dueTasks =
-				(await this.persistenceManager.getActiveTasks()) as ScheduledTask[];
+			const dueTasks = (await this.persistenceManager.getActiveTasks()) as ScheduledTask[];
 			if (dueTasks.length === 0) return;
 
 			logger.info({ count: dueTasks.length }, "Found due tasks");
@@ -84,10 +83,7 @@ export class TaskScheduler {
 			});
 
 			if (response.error) {
-				logger.error(
-					{ taskId: task.id, error: response.error },
-					"Task execution failed",
-				);
+				logger.error({ taskId: task.id, error: response.error }, "Task execution failed");
 			} else {
 				logger.info({ taskId: task.id }, "Task executed successfully");
 			}
