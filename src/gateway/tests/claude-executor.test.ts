@@ -5,7 +5,7 @@ import {
 	executeClaudeViaIpc,
 	validateAndSanitizePrompt,
 } from "@/gateway/services/claude-executor";
-import { IpcClient } from "@/packages/ipc/client";
+import { IpcClient } from "@/packages/ipc";
 
 // Mock IpcClient
 const mockIpcSuccess = (stdout: string) => {
