@@ -18,11 +18,7 @@
 		},
 		"wandb": {
 			"command": "uvx",
-			"args": [
-				"--from",
-				"git+https://github.com/wandb/wandb-mcp-server",
-				"wandb_mcp_server"
-			]
+			"args": ["--from", "git+https://github.com/wandb/wandb-mcp-server", "wandb_mcp_server"]
 		},
 		"jupyter": {
 			"command": "uvx",
