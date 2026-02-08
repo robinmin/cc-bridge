@@ -24,10 +24,7 @@ const app = new Hono();
 app.use("*", pinoLogger({ pino: logger }));
 
 // Load External Configuration
-const config = ConfigLoader.load(
-	AGENT_CONSTANTS.EXECUTION.CONFIG_FILE,
-	AGENT_CONSTANTS.DEFAULT_CONFIG,
-);
+const config = ConfigLoader.load(AGENT_CONSTANTS.EXECUTION.CONFIG_FILE, AGENT_CONSTANTS.DEFAULT_CONFIG);
 
 // Apply log level from config
 setLogLevel(config.logLevel);
