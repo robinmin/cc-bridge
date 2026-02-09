@@ -1,7 +1,7 @@
 # CC-Bridge User Manual
 
-**Version**: 2.0.0
-**Last Updated**: 2025-02-07
+**Version**: 2.1.0
+**Last Updated**: 2026-02-08
 **Status**: Production Ready
 
 ---
@@ -212,6 +212,36 @@ https://api.telegram.org/bot<YOUR_BOT_TOKEN>/getUpdates
 ```
 
 Look for `chat_id` in the response.
+
+### 3.4 Lark/Feishu Setup
+
+**Step 1: Create a Lark App**
+
+1. Go to the [Lark Developer Console](https://open.larksuite.com/open-apis/authen/v1/index).
+2. Click **Create Custom App** and give it a name.
+3. In **App Settings > Basic Info**, find your `App ID` and `App Secret`.
+
+**Step 2: Enable Bot Capabilities**
+
+1. In the left sidebar, go to **App Capabilities > Bot**.
+2. Click **Enable Bot**.
+
+**Step 3: Configure Event Subscriptions**
+
+1. Go to **Development Config > Event Subscriptions**.
+2. Set the **Request URL** to `https://your-domain.com/webhook/feishu`.
+3. Add the `im.message.receive_v1` event subscription.
+4. Ensure you have the `im:message` and `im:message.p2p_msg` permissions.
+
+**Step 4: Configure Environment**
+
+Update your `.env` with the credentials from the console:
+```bash
+FEISHU_APP_ID=cli_xxx
+FEISHU_APP_SECRET=xxx
+FEISHU_ENCRYPT_KEY=xxx
+FEISHU_VERIFICATION_TOKEN=xxx
+```
 
 ---
 
@@ -518,6 +548,10 @@ All inputs are validated:
 | `AGENT_TCP_PORT` | Agent TCP port | 3001 |
 | `ANTHROPIC_AUTH_TOKEN` | Claude API token | - |
 | `TELEGRAM_BOT_TOKEN` | Telegram bot token | - |
+| `FEISHU_APP_ID` | Lark/Feishu App ID | - |
+| `FEISHU_APP_SECRET` | Lark/Feishu App Secret | - |
+| `FEISHU_ENCRYPT_KEY` | Lark/Feishu Encryption Key | - |
+| `FEISHU_VERIFICATION_TOKEN` | Lark/Feishu Verification Token | - |
 | `ENABLE_TMUX` | Enable async mode | false |
 | `FILE_CLEANUP_ENABLED` | Enable cleanup | true |
 
@@ -582,6 +616,7 @@ make lint
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 2.1.0 | 2026-02-08 | Added Lark/Feishu support, configuration guide, and environment reference |
 | 2.0.0 | 2025-02-07 | Complete rewrite for Docker-first workflow, TCP IPC, make commands |
 | 1.0.0 | 2026-02-02 | Initial user manual |
 
