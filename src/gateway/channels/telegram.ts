@@ -120,17 +120,24 @@ export class TelegramChannel implements Channel, ChannelAdapter {
 	}
 
 	parseWebhook(body: unknown): Message | null {
+		if (!body || typeof body !== "object") return null;
 		const webhookBody = body as Record<string, unknown>;
-		if (!webhookBody || !webhookBody.message) return null;
 
+		if (!webhookBody.message || typeof webhookBody.message !== "object") return null;
 		const msg = webhookBody.message as Record<string, unknown>;
-		const from = msg.from as Record<string, unknown> | undefined;
+
+		if (!msg.chat || typeof msg.chat !== "object") return null;
 		const chat = msg.chat as Record<string, unknown>;
+
+		if (!chat.id) return null;
+
+		const from = msg.from && typeof msg.from === "object" ? (msg.from as Record<string, unknown>) : undefined;
 
 		return {
 			channelId: "telegram",
 			chatId: chat.id as string | number,
-			text: (msg.text as string) || "",
+			text: typeof msg.text === "string" ? msg.text : "",
+			sender: (from?.username as string) || (from?.first_name as string) || "unknown",
 			updateId: webhookBody.update_id as number,
 			user: {
 				id: from?.id as string | number,
