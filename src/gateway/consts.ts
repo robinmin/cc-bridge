@@ -27,6 +27,8 @@ export const GATEWAY_CONSTANTS = {
 	DIAGNOSTICS: {
 		URLS: {
 			TELEGRAM_API_BASE: "https://api.telegram.org",
+			FEISHU_API_BASE: "https://open.feishu.cn",
+			LARK_API_BASE: "https://open.larksuite.com",
 			ANTHROPIC_API_BASE: "https://api.anthropic.com",
 		},
 		DAEMONS: {
@@ -57,9 +59,13 @@ export const GATEWAY_CONSTANTS = {
 		logFormat: "json",
 		serviceName: "gateway",
 		projectsRoot:
-			process.env.PROJECTS_ROOT ||
-			process.env.XPROJECTS_ROOT ||
-			path.join(process.env.HOME || process.env.USERPROFILE || ".", "xprojects"),
+			process.env.XPROJECTS_ROOT || path.join(process.env.HOME || process.env.USERPROFILE || ".", "xprojects"),
+		feishu: {
+			appId: process.env.FEISHU_APP_ID || "",
+			appSecret: process.env.FEISHU_APP_SECRET || "",
+			domain: (process.env.FEISHU_DOMAIN as "feishu" | "lark") || "feishu",
+			encryptKey: process.env.FEISHU_ENCRYPT_KEY || "",
+		},
 	},
 	FILESYSTEM_IPC: {
 		BASE_DIR: process.env.IPC_BASE_DIR || "data/ipc",
