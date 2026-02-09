@@ -1,9 +1,9 @@
 export class UpdateTracker {
-	private processed: Map<number, number> = new Map();
+	private processed: Map<string | number, number> = new Map();
 	private maxEntries = 1000;
 	private ttlMs = 10 * 60 * 1000; // 10 minutes
 
-	async isProcessed(updateId: number): Promise<boolean> {
+	async isProcessed(updateId: string | number): Promise<boolean> {
 		const now = Date.now();
 
 		// Periodic cleanup
