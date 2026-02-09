@@ -1,7 +1,7 @@
 # CC-Bridge Developer Specification
 
-**Version**: 2.0.0
-**Last Updated**: 2025-02-07
+**Version**: 2.1.0
+**Last Updated**: 2026-02-08
 **Status**: Production Ready
 
 ---
@@ -115,9 +115,10 @@ CC-Bridge is a **Bun/Hono-based** Telegram bot bridge that enables remote intera
 src/
 ├── gateway/                    # Gateway service
 │   ├── channels/               # Channel adapters
-│   │   └── telegram.ts         # Telegram client
+│   │   ├── telegram.ts         # Telegram client
+│   │   └── feishu.ts           # Feishu/Lark client
 │   ├── routes/                 # HTTP routes
-│   │   ├── webhook.ts          # Telegram webhook
+│   │   ├── webhook.ts          # Unified/Channel webhooks
 │   │   ├── health.ts           # Health checks
 │   │   └── claude-callback.ts  # Agent callback endpoint
 │   ├── pipeline/               # Bot pipeline
@@ -476,7 +477,7 @@ export class RateLimitService {
 
 #### GET `/health`
 
-Health check endpoint (requires authentication).
+Health check endpoint (requires authentication via `HEALTH_API_KEY`).
 
 **Response**:
 ```json
@@ -487,12 +488,12 @@ Health check endpoint (requires authentication).
 }
 ```
 
-#### POST `/webhook`
+#### POST `/webhook`, `/webhook/telegram`, `/webhook/feishu`
 
-Receive Telegram webhook updates.
+Receive Telegram or Lark/Feishu webhook updates. `/webhook` is a legacy unified endpoint that auto-detects the channel.
 
-**Request Body**: Telegram update object
-**Response**: `{ status: "ok" }`
+**Request Body**: Telegram update object or Lark/Feishu event object
+**Response**: `{ status: "ok" }` or `{ challenge: "..." }` (for Lark verification)
 
 #### POST `/claude-callback`
 
@@ -793,6 +794,10 @@ export class MyService {
 | `AGENT_TCP_PORT` | Agent TCP port | 3001 |
 | `ANTHROPIC_AUTH_TOKEN` | Claude API token | - |
 | `TELEGRAM_BOT_TOKEN` | Telegram bot token | - |
+| `FEISHU_APP_ID` | Lark/Feishu App ID | - |
+| `FEISHU_APP_SECRET` | Lark/Feishu App Secret | - |
+| `FEISHU_ENCRYPT_KEY` | Lark/Feishu Payload Encryption Key | - |
+| `FEISHU_VERIFICATION_TOKEN` | Lark/Feishu Verification Token | - |
 | `ENABLE_TMUX` | Enable tmux mode | false |
 | `FILE_CLEANUP_ENABLED` | Enable file cleanup | true |
 
