@@ -3,7 +3,7 @@ export interface Message {
 	chatId: string | number;
 	text: string;
 	sender?: string;
-	updateId?: number;
+	updateId?: string | number;
 	user?: {
 		id: string | number;
 		username?: string;
