@@ -1,0 +1,18 @@
+{
+	"$schema": "https://raw.githubusercontent.com/robinmin/cc-bridge/main/schemas/gateway.schema.json",
+	"port": 8080,
+	"logLevel": "debug",
+	"serviceName": "gateway",
+	// Path to project workspaces
+	// "projectsRoot": "~/xprojects",
+
+	// Feishu/Lark Configuration
+	// Move your credentials here and remove them from plist/env
+	"feishu": {
+		"appId": "cli_a903a98cace1c07e",
+		"appSecret": "YOUR_APP_SECRET_HERE",
+		"encryptKey": "YOUR_ENCRYPT_KEY_HERE",
+		"domain": "lark"
+		// "verificationToken": "sS4Jl2ufqV2mSVSyOX6MmNkwQsw46vSg" // Not currently used by the bot
+	}
+}

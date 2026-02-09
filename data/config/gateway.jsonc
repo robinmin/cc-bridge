@@ -1,7 +1,0 @@
-{
-  "port": 8080,
-  "ipcPollInterval": 1000,
-  "refreshInterval": 30000,
-  "logLevel": "debug",
-  "logFormat": "text"
-}
