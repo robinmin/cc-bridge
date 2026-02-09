@@ -50,6 +50,7 @@ export class UnixSocketIpcClient implements IIpcClient {
 				"Host: localhost",
 				"Content-Type: application/json",
 				"Accept: application/json",
+				"Connection: close", // Essential for one-off request/response on raw socket
 			];
 
 			if (payload) {
@@ -59,7 +60,7 @@ export class UnixSocketIpcClient implements IIpcClient {
 			const httpRequest = [...headers.join("\r\n"), "\r\n", payload || ""].join("\r\n");
 
 			// Create a promise-based socket connection
-			const _response = await new Promise<string>((resolve, reject) => {
+			const rawResponse = await new Promise<string>((resolve, reject) => {
 				const socket = net.createConnection({ path: socketPath });
 
 				let responseData = "";
@@ -92,7 +93,7 @@ export class UnixSocketIpcClient implements IIpcClient {
 			});
 
 			// Parse HTTP response
-			const parts = responseData.split("\r\n\r\n");
+			const parts = rawResponse.split("\r\n\r\n");
 			const headersPart = parts[0];
 			const bodyPart = parts.slice(1).join("\r\n");
 
