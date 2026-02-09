@@ -38,6 +38,7 @@ export interface SessionPoolConfig {
  */
 export class SessionPoolService {
 	private sessions: Map<string, SessionMetadata> = new Map();
+	private pendingCreations: Map<string, Promise<SessionMetadata>> = new Map();
 	private tmuxManager: TmuxManager;
 	private config: Required<SessionPoolConfig>;
 	private cleanupTimer: ReturnType<typeof setInterval> | null = null;
@@ -80,10 +81,13 @@ export class SessionPoolService {
 			return;
 		}
 
-		logger.info("Starting session pool service", {
-			maxSessions: this.config.maxSessions,
-			inactivityTimeout: this.config.inactivityTimeoutMs,
-		});
+		logger.info(
+			{
+				maxSessions: this.config.maxSessions,
+				inactivityTimeout: this.config.inactivityTimeoutMs,
+			},
+			"Starting session pool service",
+		);
 
 		// List existing tmux sessions and register them
 		await this.discoverExistingSessions();
@@ -251,7 +255,7 @@ export class SessionPoolService {
 		}
 
 		// Check if session exists
-		let session = this.sessions.get(workspace);
+		const session = this.sessions.get(workspace);
 
 		if (session) {
 			// Update last activity
@@ -262,18 +266,33 @@ export class SessionPoolService {
 			return session;
 		}
 
+		// Check duplicate creation requests (race condition fix)
+		const pendingPromise = this.pendingCreations.get(workspace);
+		if (pendingPromise) {
+			logger.debug({ workspace }, "Waiting for pending session creation");
+			return pendingPromise;
+		}
+
 		// Check session limit
 		if (this.sessions.size >= this.config.maxSessions) {
 			throw new Error(`Session limit reached (${this.config.maxSessions}). Cannot create new session.`);
 		}
 
-		// Create new session
-		session = await this.createSession(workspace);
-		this.sessions.set(workspace, session);
+		// Create new session with locking
+		const creationPromise = (async () => {
+			try {
+				const session = await this.createSession(workspace);
+				this.sessions.set(workspace, session);
+				logger.info({ workspace, sessionName: session.sessionName }, "Created new session");
+				return session;
+			} finally {
+				this.pendingCreations.delete(workspace);
+			}
+		})();
 
-		logger.info({ workspace, sessionName: session.sessionName }, "Created new session");
+		this.pendingCreations.set(workspace, creationPromise);
 
-		return session;
+		return creationPromise;
 	}
 
 	/**
