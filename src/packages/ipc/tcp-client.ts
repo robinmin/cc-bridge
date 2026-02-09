@@ -26,7 +26,7 @@ export class TcpIpcClient implements IIpcClient {
 		return true;
 	}
 
-	async sendRequest(request: IpcRequest, timeout = 120000): Promise<IpcResponse> {
+	async sendRequest(request: IpcRequest, timeout = 300000): Promise<IpcResponse> {
 		const { method, path: requestPath, body } = request;
 		const payload = body ? JSON.stringify(body) : undefined;
 
