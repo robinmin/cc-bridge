@@ -1,5 +1,6 @@
 import type { Message } from "@/gateway/pipeline";
 
+// Export type definitions for external use and channel implementations
 export interface Channel {
 	name: string;
 	/**
@@ -20,3 +21,7 @@ export interface ChannelAdapter {
 	 */
 	parseWebhook(body: unknown): Message | null;
 }
+
+// Export channel implementations
+export { FeishuChannel } from "./feishu";
+export { TelegramChannel, TelegramClient } from "./telegram";
