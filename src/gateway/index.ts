@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { pinoLogger } from "hono-pino";
+import { FeishuChannel } from "@/gateway/channels/feishu";
 import { TelegramChannel } from "@/gateway/channels/telegram";
 import { GATEWAY_CONSTANTS } from "@/gateway/consts";
 import { instanceManager } from "@/gateway/instance-manager";
@@ -12,7 +13,7 @@ import { MenuBot } from "@/gateway/pipeline/menu-bot";
 import { rateLimiter } from "@/gateway/rate-limiter";
 import { handleCallbackHealth, handleClaudeCallback } from "@/gateway/routes/claude-callback";
 import { handleHealth } from "@/gateway/routes/health";
-import { handleWebhook } from "@/gateway/routes/webhook";
+import { handleFeishuWebhook, handleTelegramWebhook, handleWebhook } from "@/gateway/routes/webhook";
 import { FileCleanupService } from "@/gateway/services/file-cleanup";
 import { FileSystemIpc } from "@/gateway/services/filesystem-ipc";
 import { IdempotencyService } from "@/gateway/services/IdempotencyService";
@@ -52,13 +53,42 @@ setLogLevel(config.logLevel);
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
 const PORT = config.port;
 
+// Feishu/Lark Configuration (from config file or env vars)
+const FEISHU_APP_ID = config.feishu.appId;
+const FEISHU_APP_SECRET = config.feishu.appSecret;
+const FEISHU_DOMAIN = config.feishu.domain;
+const FEISHU_ENCRYPT_KEY = config.feishu.encryptKey;
+
 if (!BOT_TOKEN) {
 	logger.warn("TELEGRAM_BOT_TOKEN is not set.");
 }
 
-// Initialize Channel and Bots
+// Initialize Channels and Bots
 const telegram = new TelegramChannel(BOT_TOKEN);
 const bots = [new MenuBot(telegram), new HostBot(telegram), new AgentBot(telegram)];
+
+// Initialize Feishu Channel (optional)
+let feishu: FeishuChannel | undefined;
+let feishuBots: ReturnType<typeof createBotsForChannel> | undefined;
+
+if (FEISHU_APP_ID && FEISHU_APP_SECRET) {
+	logger.info(`Feishu/Lark channel enabled (domain: ${FEISHU_DOMAIN})`);
+	feishu = new FeishuChannel(FEISHU_APP_ID, FEISHU_APP_SECRET, FEISHU_DOMAIN, FEISHU_ENCRYPT_KEY);
+	feishuBots = createBotsForChannel(feishu);
+
+	// Initialize Feishu Menu
+	feishu
+		.setMenu(MenuBot.getAllMenus(feishuBots))
+		.then(() => logger.info("Feishu/Lark bot menu updated"))
+		.catch((err) => logger.error({ err }, "Failed to update Feishu/Lark bot menu"));
+} else {
+	logger.debug("Feishu/Lark channel not configured (FEISHU_APP_ID and FEISHU_APP_SECRET not set)");
+}
+
+// Helper function to create bots for a channel
+function createBotsForChannel(channel: TelegramChannel | FeishuChannel) {
+	return [new MenuBot(channel), new HostBot(channel), new AgentBot(channel)];
+}
 
 // Initialize Telegram Menu
 telegram
@@ -117,7 +147,14 @@ const responseFileReader = new ResponseFileReader({
 
 // Routes
 app.get("/health", authMiddleware, handleHealth);
-app.post("/webhook", (c) => handleWebhook(c, { telegram, bots }));
+
+// Channel-specific webhook routes
+app.post("/webhook/telegram", (c) => handleTelegramWebhook(c, { telegram, bots }));
+app.post("/webhook/feishu", (c) => handleFeishuWebhook(c, { telegram, feishu, bots, feishuBots }));
+
+// Legacy unified webhook route for backward compatibility
+app.post("/webhook", (c) => handleWebhook(c, { telegram, feishu, bots, feishuBots }));
+
 app.post("/claude-callback", (c) =>
 	handleClaudeCallback(c, {
 		telegram,
