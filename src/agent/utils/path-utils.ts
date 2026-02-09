@@ -54,7 +54,14 @@ export function validatePath(filePath: string): string {
 	const absolutePath = path.resolve(filePath);
 
 	// Check if the path is within the workspace root
-	if (!absolutePath.startsWith(workspaceRoot)) {
+	// Ensure we don't accidentally allow sibling directories with similar prefixes
+	// e.g. /workspace/foo should not match /workspace/foobar
+	const isExactMatch = absolutePath === workspaceRoot;
+	const isChildPath = absolutePath.startsWith(
+		workspaceRoot.endsWith(path.sep) ? workspaceRoot : `${workspaceRoot}${path.sep}`,
+	);
+
+	if (!isExactMatch && !isChildPath) {
 		throw new Error(
 			`Path validation failed: "${filePath}" is outside the allowed workspace directory "${workspaceRoot}"`,
 		);
