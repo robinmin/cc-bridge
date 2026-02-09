@@ -5,6 +5,68 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-02-08
+
+### ✨ New Features
+
+- **Feishu/Lark Channel Integration**: Added support for Feishu (飞书) and Lark enterprise messaging platforms
+  - Multi-domain support (feishu.cn and larksuite.com)
+  - AES-256-CBC encryption with SHA-256 key derivation for secure webhooks
+  - URL verification challenge handling for event subscription setup
+  - Markdown and text message format support
+- **Webhook Route Separation**: Split `/webhook` into channel-specific endpoints
+  - `/webhook/telegram` - Telegram webhook with channel-specific preprocessing
+  - `/webhook/feishu` - Feishu/Lark webhook with encryption support
+  - Shared message processing pipeline for consistent handling
+- **Workspace Database Schema**: Added `workspace_name` column to messages table for multi-workspace support
+
+### 🔧 Improvements
+
+- **Simplified Makefile**: Streamlined target naming for better developer experience
+  - `dev` instead of `bridge-dev` - Start development server
+  - `test` / `test-quick` - Run tests with/without coverage
+  - `lint` / `format` / `check` - Code quality targets
+  - `gateway-install` instead of `setup-system` - Clear naming
+  - `status` instead of `bridge-status` - Health check command
+  - `clean` - Remove build artifacts and temporary files
+- **IPC Connection Handling**: Added proper connection close handling for Unix socket IPC
+  - `Connection: close` header prevents connection reuse issues
+  - Improved reliability for one-off request/response patterns
+
+### 🐛 Fixes
+
+- **Feishu Encryption Algorithm**: Fixed incorrect encryption implementation
+  - Changed from MD5 to SHA-256 key derivation
+  - Switched from AES-128 to AES-256-CBC
+  - Updated IV extraction to use first 16 bytes of encrypted data
+- **Feishu Message Format**: Fixed message content format
+  - Changed from `post` format to `text` format for simpler messages
+  - Proper content serialization for Feishu API requirements
+- **Test Validation Errors**: Fixed webhook validation test expectations
+  - Updated test to handle Zod validation error format correctly
+  - Changed invalid JSON test to expect 400 (correct HTTP status) instead of 500
+
+### Migration Notes
+
+If upgrading from v0.3.0:
+
+1. **Environment Variables**: Add Feishu/Lark configuration
+   ```bash
+   FEISHU_APP_ID=your_app_id
+   FEISHU_APP_SECRET=your_app_secret
+   FEISHU_DOMAIN=feishu  # or lark
+   FEISHU_ENCRYPT_KEY=your_encrypt_key
+   FEISHU_VERIFICATION_TOKEN=your_verification_token
+   ```
+2. **Webhook URLs**: Update to use new channel-specific endpoints
+   - Telegram: `https://your-domain.com/webhook/telegram`
+   - Feishu: `https://your-domain.com/webhook/feishu`
+3. **Makefile Targets**: Use new simplified target names
+   - `make dev` instead of `make bridge-dev`
+   - `make gateway-install` instead of `make setup-system`
+
+---
+
 ## [0.3.0] - 2026-02-07
 
 ### 💥 Breaking Changes
@@ -119,6 +181,7 @@ If upgrading from v0.2.0:
 - Fixed system daemon persistence issues on macOS by standardizing absolute paths in `.plist` configurations.
 
 ---
+[0.4.0]: https://github.com/hanxiao/claudecode-telegram/releases/tag/v0.4.0
 [0.3.0]: https://github.com/hanxiao/claudecode-telegram/releases/tag/v0.3.0
 [0.2.0]: https://github.com/hanxiao/claudecode-telegram/releases/tag/v0.2.0
 [0.1.0]: https://github.com/hanxiao/claudecode-telegram/releases/tag/v0.1.0
