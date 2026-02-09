@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "WebSearch",
-      "Bash(make:*)"
+      "Bash(make:*)",
+      "Skill(rd2:tasks-unit)"
     ]
   }
 }
