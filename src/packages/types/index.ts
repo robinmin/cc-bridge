@@ -8,7 +8,7 @@ export const ExecuteCommandSchema = z.object({
 	command: z.string(),
 	args: z.array(z.string()).optional(),
 	cwd: z.string().optional(),
-	timeout: z.number().optional().default(120000), // Default 120s
+	timeout: z.number().optional().default(300000), // Default 300s
 });
 
 export type ExecuteCommandRequest = z.infer<typeof ExecuteCommandSchema>;
@@ -63,6 +63,15 @@ export interface FileEntry {
 export interface ListDirResponse {
 	entries: FileEntry[];
 }
+
+// --- Notify ---
+export const NotifySchema = z.object({
+	type: z.string(),
+	chatId: z.union([z.string(), z.number()]),
+	text: z.string(),
+});
+
+export type NotifyRequest = z.infer<typeof NotifySchema>;
 
 // --- JSON-RPC / IPC Envelope ---
 export interface IpcRequest {
