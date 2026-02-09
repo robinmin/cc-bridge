@@ -1,7 +1,10 @@
 import type { Context } from "hono";
+import type { Channel, ChannelAdapter } from "@/gateway/channels";
+import type { FeishuChannel } from "@/gateway/channels/feishu";
+import { decryptFeishuWebhook, isEncryptedFeishuWebhook } from "@/gateway/channels/feishu";
 import type { TelegramChannel } from "@/gateway/channels/telegram";
 import { persistence } from "@/gateway/persistence";
-import type { Bot } from "@/gateway/pipeline";
+import type { Bot, Message } from "@/gateway/pipeline";
 import { rateLimiter } from "@/gateway/rate-limiter";
 import { updateTracker } from "@/gateway/tracker";
 import { logger } from "@/packages/logger";
@@ -12,18 +15,16 @@ const WEBHOOK_PROCESSING_TIMEOUT_MS = 120000;
 
 export interface WebhookContext {
 	telegram: TelegramChannel;
+	feishu?: FeishuChannel;
 	bots: Bot[];
+	feishuBots?: Bot[];
 }
 
 /**
  * Wraps a bot's handle call with timeout protection
  * Uses atomic state transitions to prevent race conditions between timeout and completion
  */
-async function handleBotWithTimeout(
-	bot: Bot,
-	message: { chatId: string | number; text: string },
-	telegram: TelegramChannel,
-): Promise<boolean> {
+async function handleBotWithTimeout(bot: Bot, message: Message, channel: Channel): Promise<boolean> {
 	// State machine: 'pending' -> 'completed' | 'timeout'
 	// Only ONE transition allowed (atomic via object reference)
 	const state = { current: "pending" as "pending" | "completed" | "timeout" };
@@ -50,7 +51,7 @@ async function handleBotWithTimeout(
 			);
 
 			// Send timeout notification to user (async, non-blocking)
-			telegram
+			channel
 				.sendMessage(
 					message.chatId,
 					"⏱️ Taking longer than expected. If you don't get a response soon, please try again.",
@@ -82,26 +83,27 @@ async function handleBotWithTimeout(
 	return result;
 }
 
-export async function handleWebhook(c: Context, { telegram, bots }: WebhookContext) {
-	const body = await c.req.json();
-	const message = telegram.parseWebhook(body);
-
-	if (!message) {
-		logger.debug({ body }, "Ignored webhook: no message or unsupported update type");
-		return c.json({ status: "ignored", reason: "no message" });
-	}
-
+/**
+ * Common webhook message processing logic
+ * Handles deduplication, rate limiting, persistence, and bot delivery
+ */
+async function processWebhookMessage(
+	c: Context,
+	message: Message,
+	channel: Channel,
+	channelBots: Bot[],
+): Promise<Response> {
 	// Deduplication
 	if (message.updateId && (await updateTracker.isProcessed(message.updateId))) {
 		logger.debug({ updateId: message.updateId }, "Ignored duplicate update");
-		return c.json({ status: "ignored", reason: "duplicate" });
+		return c.json({ status: "ok" });
 	}
 
 	// Rate Limiting
 	if (!(await rateLimiter.isAllowed(message.chatId))) {
 		const retry = await rateLimiter.getRetryAfter(message.chatId);
 		logger.warn({ chatId: message.chatId }, "Rate limit exceeded");
-		await telegram.sendMessage(message.chatId, `⚠️ Too many requests. Please try again in ${retry}s.`);
+		await channel.sendMessage(message.chatId, `⚠️ Too many requests. Please try again in ${retry}s.`);
 		return c.json({ status: "rate_limited" }, 429);
 	}
 
@@ -112,8 +114,8 @@ export async function handleWebhook(c: Context, { telegram, bots }: WebhookConte
 	await persistence.storeMessage(message.chatId, message.sender || "user", message.text, workspace);
 
 	// Show typing indicator before processing (optional, non-blocking)
-	if (telegram.showTyping) {
-		telegram.showTyping(message.chatId).catch((err) => {
+	if (channel.showTyping) {
+		channel.showTyping(message.chatId).catch((err) => {
 			logger.debug({ err }, "Failed to show typing indicator (non-critical)");
 		});
 	}
@@ -124,9 +126,9 @@ export async function handleWebhook(c: Context, { telegram, bots }: WebhookConte
 	let handled = false;
 	let lastError: unknown = null;
 
-	for (const bot of bots) {
+	for (const bot of channelBots) {
 		try {
-			handled = await handleBotWithTimeout(bot, message, telegram);
+			handled = await handleBotWithTimeout(bot, message, channel);
 			if (handled) {
 				logger.debug({ bot: bot.name }, "Message handled by bot");
 				break;
@@ -147,10 +149,133 @@ export async function handleWebhook(c: Context, { telegram, bots }: WebhookConte
 	// If no bot handled the message and there was an error, notify user
 	if (!handled && lastError) {
 		logger.warn({ chatId: message.chatId }, "No bot handled the message, and there was an error");
-		await telegram
+		await channel
 			.sendMessage(message.chatId, "❌ Sorry, something went wrong processing your request. Please try again.")
 			.catch((err) => logger.error({ err }, "Failed to send error notification"));
 	}
 
 	return c.json({ status: "ok" });
+}
+
+/**
+ * Handle Telegram webhook
+ * Route: POST /webhook/telegram
+ */
+export async function handleTelegramWebhook(c: Context, { telegram, bots }: WebhookContext): Promise<Response> {
+	const body = await c.req.json();
+
+	// Parse webhook using the Telegram channel adapter
+	const message = (telegram as ChannelAdapter).parseWebhook(body);
+
+	if (!message) {
+		logger.debug({ body }, "Ignored Telegram webhook: no message or unsupported update type");
+		return c.json({ status: "ignored", reason: "no message" });
+	}
+
+	// Process the message through common logic
+	return processWebhookMessage(c, message, telegram, bots);
+}
+
+/**
+ * Handle Feishu/Lark webhook
+ * Route: POST /webhook/feishu
+ */
+export async function handleFeishuWebhook(c: Context, { feishu, feishuBots }: WebhookContext): Promise<Response> {
+	// Check if Feishu channel is configured
+	if (!feishu || !feishuBots) {
+		logger.debug("Received Feishu webhook but Feishu channel is not configured");
+		return c.json({ status: "ignored", reason: "feishu not configured" }, 503);
+	}
+
+	const rawBody = await c.req.json();
+	logger.debug({ body: rawBody, headers: c.req.header() }, "Received Feishu/Lark webhook request");
+	let body = rawBody;
+
+	// Handle encrypted webhooks
+	if (isEncryptedFeishuWebhook(rawBody)) {
+		const encryptKey = feishu.getEncryptKey();
+		if (!encryptKey) {
+			logger.warn({ body: rawBody }, "Received encrypted Feishu webhook but FEISHU_ENCRYPT_KEY is not configured");
+			return c.json({ status: "error", message: "FEISHU_ENCRYPT_KEY not configured" }, 500);
+		}
+
+		try {
+			// Decrypt the webhook payload
+			const decrypted = decryptFeishuWebhook(rawBody.encrypt, encryptKey);
+
+			// Handle URL verification challenge
+			const urlVerification = feishu.handleUrlVerification(decrypted);
+			if (urlVerification) {
+				logger.info("Feishu/Lark URL verification challenge handled successfully");
+				return c.json(urlVerification);
+			}
+
+			// Use decrypted payload for normal processing
+			body = decrypted;
+		} catch (error) {
+			logger.error(
+				{ error, rawBody },
+				"Failed to decrypt Feishu webhook - possibly encryption key mismatch or corrupted payload",
+			);
+			return c.json({ status: "error", message: "Failed to decrypt webhook" }, 400);
+		}
+	}
+
+	// Parse webhook using the Feishu channel adapter
+	const message = (feishu as ChannelAdapter).parseWebhook(body);
+
+	if (!message) {
+		logger.debug(
+			{ body },
+			"Feishu webhook ignored: no message found in event or unsupported update type (expected im.message.receive_v1)",
+		);
+		return c.json({ status: "ignored", reason: "no message" });
+	}
+
+	// Process the message through common logic
+	return processWebhookMessage(c, message, feishu, feishuBots);
+}
+
+/**
+ * Legacy unified webhook handler for backward compatibility
+ * Route: POST /webhook
+ *
+ * @deprecated Use /webhook/telegram or /webhook/feishu instead
+ *
+ * This handler detects the channel type based on request body structure
+ * and delegates to the appropriate channel-specific handler.
+ */
+export async function handleWebhook(c: Context, context: WebhookContext): Promise<Response> {
+	const body = await c.req.json();
+
+	// Handle null/undefined body
+	if (!body || typeof body !== "object") {
+		logger.debug({ body }, "Ignored webhook: null or non-object body");
+		return c.json({ status: "ignored", reason: "unknown channel" });
+	}
+
+	// Detect channel type based on body structure
+	const bodyObj = body as Record<string, unknown>;
+
+	// Check if this is an encrypted Feishu webhook
+	if ("encrypt" in bodyObj && typeof bodyObj.encrypt === "string") {
+		return handleFeishuWebhook(c, context);
+	}
+
+	// Check if this is a Feishu webhook (has schema and header.event_type)
+	if ("schema" in bodyObj && "header" in bodyObj) {
+		const header = bodyObj.header as Record<string, unknown>;
+		if ("event_type" in header) {
+			return handleFeishuWebhook(c, context);
+		}
+	}
+
+	// Check if this is a Telegram webhook (has update_id)
+	if ("update_id" in bodyObj) {
+		return handleTelegramWebhook(c, context);
+	}
+
+	// Unknown channel type
+	logger.debug({ body }, "Ignored webhook: unknown channel type");
+	return c.json({ status: "ignored", reason: "unknown channel" });
 }
