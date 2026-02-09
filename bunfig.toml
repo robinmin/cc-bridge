@@ -2,5 +2,16 @@
 # Vendors directory contains downloaded sample code - excluded from project scope
 
 [test]
-# Test configuration
-# Run tests with `bun test src` to only test project code
+# Ignore specific directories and file types
+coveragePathIgnorePatterns = [
+  "**/node_modules/**",
+  "**/build/**",
+  "vendors/**",
+  "*.config.js"
+]
+
+# Always enable coverage
+coverage = true
+
+# Specifically exclude test files themselves from the report
+coverageSkipTestFiles = true
