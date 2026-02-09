@@ -8,7 +8,7 @@
 
 ## 1. Executive Summary
 
-CC-Bridge is a **Telegram-to-Claude Code bridge** built with **Bun/Hono** that enables remote interaction with Claude Code through Telegram messaging. The system features a **decoupled, service-oriented design** with a **Gateway Service** and **Container Agent**.
+CC-Bridge is a **Telegram/Lark-to-Claude Code bridge** built with **Bun/Hono** that enables remote interaction with Claude Code through popular messaging platforms. The system features a **decoupled, service-oriented design** with a **Gateway Service** and **Container Agent**.
 
 ### Key Architectural Changes (v2.0)
 
@@ -25,7 +25,9 @@ CC-Bridge is a **Telegram-to-Claude Code bridge** built with **Bun/Hono** that e
 ```mermaid
 graph TD
     User((User)) <--> Telegram["Telegram Bot API"]
+    User <--> Lark["Lark/Feishu Open Platform"]
     Telegram <--> CF["Cloudflare Tunnel (cloudflared)"]
+    Lark <--> CF
     CF <--> Gateway["Gateway Service (Bun/Hono)"]
 
     Gateway ---|SQLite| DB[("Persistence Layer")]
@@ -240,10 +242,10 @@ sequenceDiagram
 
 **Schema:**
 ```sql
--- Message history with workspace support
+-- Message history with multi-channel and workspace support
 CREATE TABLE messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    chat_id TEXT NOT NULL,
+    chat_id TEXT NOT NULL, -- Supports string IDs for Lark/Feishu
     workspace_name TEXT NOT NULL DEFAULT 'cc-bridge',
     sender TEXT NOT NULL,
     text TEXT NOT NULL,
@@ -501,6 +503,7 @@ make docker-restart
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 2.1.0 | 2026-02-08 | Added Lark/Feishu integration, enhanced logging, and type standardization |
 | 2.0.0 | 2025-02-07 | Major update: IPC factory, circuit breaker, tmux mode, services layer |
 | 1.0.0 | 2026-02-02 | Initial architecture specification |
 
