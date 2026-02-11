@@ -1,6 +1,6 @@
 import { describe, expect, mock, spyOn, test } from "bun:test";
 import { TaskScheduler } from "@/gateway/task-scheduler";
-import { IpcClient } from "@/packages/ipc";
+import { IpcFactory } from "@/packages/ipc";
 
 type MockPersistenceForScheduler = {
 	getActiveTasks: () => Promise<
@@ -62,16 +62,25 @@ describe("TaskScheduler", () => {
 			mockInstanceManager as unknown as MockInstanceManagerForScheduler,
 		);
 
-		// Mock IpcClient
-		const mockSendRequest = spyOn(IpcClient.prototype, "sendRequest").mockResolvedValue({
-			id: "task-1",
-			status: 200,
-			result: { stdout: "ok" },
-		});
+		// Mock IpcFactory.create to return a mock client
+		const mockSendRequest = mock(() =>
+			Promise.resolve({
+				id: "task-1",
+				status: 200,
+				result: { stdout: "ok" },
+			}),
+		);
+		const mockIpcClient = {
+			sendRequest: mockSendRequest,
+			isAvailable: () => true,
+			getMethod: () => "mock",
+		};
+		const mockCreate = spyOn(IpcFactory, "create").mockReturnValue(mockIpcClient as never);
 
 		await scheduler.checkTasks();
 
 		expect(mockGetActiveTasks).toHaveBeenCalled();
+		expect(mockCreate).toHaveBeenCalled();
 		expect(mockSendRequest).toHaveBeenCalled();
 		expect(mockSaveTask).toHaveBeenCalledWith(
 			expect.objectContaining({
@@ -80,7 +89,7 @@ describe("TaskScheduler", () => {
 			}),
 		);
 
-		mockSendRequest.mockRestore();
+		mockCreate.mockRestore();
 	});
 
 	test("should start and stop", async () => {
