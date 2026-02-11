@@ -14,6 +14,7 @@ import { rateLimiter } from "@/gateway/rate-limiter";
 import { handleCallbackHealth, handleClaudeCallback } from "@/gateway/routes/claude-callback";
 import { handleHealth } from "@/gateway/routes/health";
 import { handleFeishuWebhook, handleTelegramWebhook, handleWebhook } from "@/gateway/routes/webhook";
+import { ErrorRecoveryService } from "@/gateway/services/ErrorRecoveryService";
 import { FileCleanupService } from "@/gateway/services/file-cleanup";
 import { FileSystemIpc } from "@/gateway/services/filesystem-ipc";
 import { IdempotencyService } from "@/gateway/services/IdempotencyService";
@@ -145,6 +146,9 @@ const responseFileReader = new ResponseFileReader({
 	readRetryDelayMs: 100,
 });
 
+// Initialize ErrorRecoveryService for callback error handling and dead-letter queue
+const errorRecoveryService = new ErrorRecoveryService();
+
 // Routes
 app.get("/health", authMiddleware, handleHealth);
 
@@ -161,6 +165,7 @@ app.post("/claude-callback", (c) =>
 		idempotencyService,
 		rateLimitService,
 		responseFileReader,
+		errorRecoveryService,
 	}),
 );
 
@@ -171,6 +176,7 @@ app.get("/callback-health", (c) =>
 		idempotencyService,
 		rateLimitService,
 		responseFileReader,
+		errorRecoveryService,
 	}),
 );
 
