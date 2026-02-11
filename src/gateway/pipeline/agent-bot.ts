@@ -64,12 +64,30 @@ export class AgentBot implements Bot {
 		}
 
 		if (!instance) {
-			logger.warn({ chatId: message.chatId }, "No running instances available for message");
-			await this.channel.sendMessage(
-				message.chatId,
-				"⚠️ No running Claude instance found. Use `/list` to check status.",
-			);
-			return true;
+			// Retry with a short backoff in case the cache is stale or the container is starting
+			const retryDelaysMs = [500, 1500];
+			for (const delayMs of retryDelaysMs) {
+				const refreshed = await instanceManager.refresh();
+				instance = refreshed.find((i) => i.status === "running");
+				if (instance) {
+					logger.info(
+						{ chatId: message.chatId, instance: instance.name, delayMs },
+						"Instance found after refresh retry",
+					);
+					await this.persistenceManager.setSession(message.chatId, instance.name);
+					break;
+				}
+				await new Promise((resolve) => setTimeout(resolve, delayMs));
+			}
+
+			if (!instance) {
+				logger.warn({ chatId: message.chatId }, "No running instances available for message");
+				await this.channel.sendMessage(
+					message.chatId,
+					"⚠️ No running Claude instance found. Use `/list` to check status.",
+				);
+				return true;
+			}
 		}
 
 		// 2. Get user's current workspace for context isolation
@@ -121,7 +139,10 @@ export class AgentBot implements Bot {
 			return true;
 		}
 
-		// 4. Validate user input before processing
+		// 4. Send immediate progress feedback before expensive operations (disabled in production)
+		// await this.channel.sendMessage(message.chatId, "🤔 Thinking...");
+
+		// 5. Validate user input before processing
 		const validationResult = validateAndSanitizePrompt(message.text);
 		if (!validationResult.valid) {
 			logger.warn({ chatId: message.chatId, reason: validationResult.reason }, "Message validation failed");
@@ -129,19 +150,16 @@ export class AgentBot implements Bot {
 			return true;
 		}
 
-		// 4. Get message history for context (workspace-specific)
+		// 6. Get message history for context (workspace-specific)
 		const history = await this.persistenceManager.getHistory(message.chatId, 11, workspace); // latest 10 + current
 
-		// 5. Execute Claude request with retry logic
+		// 7. Execute Claude request with retry logic
 		const result = await this.executeWithRetry(instance, message, history, workspace);
 
 		// 6. Handle result
 		if (isAsyncResult(result)) {
 			// Async mode: response will arrive via callback endpoint
 			logger.info({ requestId: result.requestId, chatId: message.chatId }, "Async request submitted to Claude");
-
-			// Optionally send "processing" message to user
-			await this.channel.sendMessage(message.chatId, "⏳ Processing your request...");
 
 			// Store user message (workspace-specific) - response will be stored via callback
 			await this.persistenceManager.storeMessage(message.chatId, "user", message.text, workspace);
@@ -385,7 +403,7 @@ export class AgentBot implements Bot {
 		instance: { name: string; containerId: string; status: string },
 	): Promise<void> {
 		try {
-			const sessionPool = this.getSessionPool(instance.containerId);
+			const sessionPool = await this.getSessionPool(instance.containerId);
 			const sessions = sessionPool.listSessions();
 			const stats = sessionPool.getStats();
 
@@ -423,7 +441,7 @@ export class AgentBot implements Bot {
 	): Promise<void> {
 		try {
 			const workspace = await this.persistenceManager.getWorkspace(message.chatId);
-			const sessionPool = this.getSessionPool(instance.containerId);
+			const sessionPool = await this.getSessionPool(instance.containerId);
 			const session = sessionPool.getSession(workspace);
 
 			let output = `📍 **Current Workspace:** ${workspace}\n`;
@@ -470,7 +488,7 @@ export class AgentBot implements Bot {
 			}
 
 			const currentWorkspace = await this.persistenceManager.getWorkspace(message.chatId);
-			const sessionPool = this.getSessionPool(instance.containerId);
+			const sessionPool = await this.getSessionPool(instance.containerId);
 
 			// Get or create target session
 			const targetSession = await sessionPool.getOrCreateSession(targetWorkspace);
@@ -519,7 +537,7 @@ export class AgentBot implements Bot {
 				return;
 			}
 
-			const sessionPool = this.getSessionPool(instance.containerId);
+			const sessionPool = await this.getSessionPool(instance.containerId);
 			const session = await sessionPool.getOrCreateSession(workspace);
 
 			let output = `✅ **Workspace session created:** ${workspace}\n\n`;
@@ -550,7 +568,7 @@ export class AgentBot implements Bot {
 		workspace: string,
 	): Promise<void> {
 		try {
-			const sessionPool = this.getSessionPool(instance.containerId);
+			const sessionPool = await this.getSessionPool(instance.containerId);
 
 			// Check if session exists
 			const session = sessionPool.getSession(workspace);
@@ -583,7 +601,7 @@ export class AgentBot implements Bot {
 	/**
 	 * Get or create session pool for a container
 	 */
-	private getSessionPool(containerId: string): SessionPoolService {
+	private async getSessionPool(containerId: string): Promise<SessionPoolService> {
 		let pool = this.sessionPools.get(containerId);
 
 		if (!pool) {
@@ -595,10 +613,13 @@ export class AgentBot implements Bot {
 				enableAutoCleanup: true,
 			});
 
-			// Start the pool (discover existing sessions)
-			pool.start().catch((err) => {
+			// Start the pool (discover existing sessions) before adding to map
+			try {
+				await pool.start();
+			} catch (err) {
 				logger.error({ err, containerId }, "Failed to start session pool");
-			});
+				throw err; // Propagate error to caller
+			}
 
 			this.sessionPools.set(containerId, pool);
 			logger.info({ containerId }, "Created new session pool for container");
