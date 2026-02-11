@@ -48,7 +48,10 @@ describe("Webhook Routes - Separated Handlers", () => {
 		test("handleFeishuWebhook should accept WebhookContext with feishu and feishuBots", () => {
 			// Verify the function signature accepts the correct parameters
 			const mockContext = {
-				req: { json: async () => ({ schema: "2.0" }) },
+				req: {
+					json: async () => ({ schema: "2.0" }),
+					header: () => ({}),
+				},
 				json: async (data: unknown) => data,
 			} as unknown;
 
