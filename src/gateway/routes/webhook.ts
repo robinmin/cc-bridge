@@ -5,6 +5,7 @@ import { decryptFeishuWebhook, isEncryptedFeishuWebhook } from "@/gateway/channe
 import type { TelegramChannel } from "@/gateway/channels/telegram";
 import { persistence } from "@/gateway/persistence";
 import type { Bot, Message } from "@/gateway/pipeline";
+import { BotRouter } from "@/gateway/pipeline/bot-router";
 import { rateLimiter } from "@/gateway/rate-limiter";
 import { updateTracker } from "@/gateway/tracker";
 import { logger } from "@/packages/logger";
@@ -96,7 +97,7 @@ async function processWebhookMessage(
 	// Deduplication
 	if (message.updateId && (await updateTracker.isProcessed(message.updateId))) {
 		logger.debug({ updateId: message.updateId }, "Ignored duplicate update");
-		return c.json({ status: "ok" });
+		return c.json({ status: "ignored", reason: "duplicate" });
 	}
 
 	// Rate Limiting
@@ -107,11 +108,8 @@ async function processWebhookMessage(
 		return c.json({ status: "rate_limited" }, 429);
 	}
 
-	// Get user's current workspace for storing message
-	const workspace = await persistence.getWorkspace(message.chatId);
-
-	// Store incoming message (workspace-specific)
-	await persistence.storeMessage(message.chatId, message.sender || "user", message.text, workspace);
+	// Note: User message storage is handled by the bot (agent-bot.ts)
+	// to avoid duplicate storage in async mode
 
 	// Show typing indicator before processing (optional, non-blocking)
 	if (channel.showTyping) {
@@ -120,30 +118,34 @@ async function processWebhookMessage(
 		});
 	}
 
-	// Process through Chain of Bots (Bubbling)
+	// Process through Bot Router (instant pattern-based routing)
 	logger.info(`[${message.chatId}] ==> ${message.text}`);
 
 	let handled = false;
 	let lastError: unknown = null;
 
-	for (const bot of channelBots) {
+	// Use BotRouter for instant routing (eliminates sequential timeout exposure)
+	const router = new BotRouter(channelBots);
+	const targetBot = router.route(message);
+
+	if (targetBot) {
 		try {
-			handled = await handleBotWithTimeout(bot, message, channel);
+			handled = await handleBotWithTimeout(targetBot, message, channel);
 			if (handled) {
-				logger.debug({ bot: bot.name }, "Message handled by bot");
-				break;
+				logger.debug({ bot: targetBot.name }, "Message handled by bot");
 			}
 		} catch (error) {
 			lastError = error;
 			logger.error(
 				{
-					bot: bot.name,
+					bot: targetBot.name,
 					error: error instanceof Error ? error.message : String(error),
 				},
 				"Error in bot delivery",
 			);
-			// Continue to next bot instead of breaking
 		}
+	} else {
+		logger.warn({ chatId: message.chatId }, "BotRouter returned null - no bot available");
 	}
 
 	// If no bot handled the message and there was an error, notify user
@@ -246,7 +248,13 @@ export async function handleFeishuWebhook(c: Context, { feishu, feishuBots }: We
  * and delegates to the appropriate channel-specific handler.
  */
 export async function handleWebhook(c: Context, context: WebhookContext): Promise<Response> {
-	const body = await c.req.json();
+	let body: unknown;
+	try {
+		body = await c.req.json();
+	} catch {
+		logger.debug({ body: "invalid json" }, "Ignored webhook: invalid JSON");
+		return c.json({ status: "ignored", reason: "unknown channel" });
+	}
 
 	// Handle null/undefined body
 	if (!body || typeof body !== "object") {
