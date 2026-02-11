@@ -511,8 +511,9 @@ describe("Webhook Routing - handleWebhook", () => {
 				},
 			};
 
+			// Use AgentBot name so BotRouter will route to it
 			const errorBot = {
-				name: "ErrorBot",
+				name: "AgentBot",
 				handle: mock(async () => {
 					throw new Error("Test error");
 				}),
