@@ -54,7 +54,7 @@ function host_main() {
         "ps")
             cmd_host_ps
             ;;
-        "help")
+        "help"|"--help"|"-h")
             cmd_host_help
             ;;
         *)
