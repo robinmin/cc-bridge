@@ -9,10 +9,47 @@ import {
 	type CallbackSuccessResponse,
 	CallbackSuccessResponseSchema,
 } from "@/gateway/schemas/callback";
+import type { ErrorRecoveryService } from "@/gateway/services/ErrorRecoveryService";
+import { ErrorType } from "@/gateway/services/ErrorRecoveryService";
 import type { IdempotencyService } from "@/gateway/services/IdempotencyService";
 import type { RateLimitService } from "@/gateway/services/RateLimitService";
 import { FileReadError, FileReadErrorType, type ResponseFileReader } from "@/gateway/services/ResponseFileReader";
 import { logger } from "@/packages/logger";
+
+/**
+ * Maximum number of retries for failed callback processing
+ */
+const MAX_CALLBACK_RETRIES = 3;
+
+/**
+ * Retry delay between attempts (ms)
+ */
+const RETRY_DELAY_MS = 1000;
+
+/**
+ * Execute a function with retry logic
+ */
+async function withRetry<T>(
+	fn: () => Promise<T>,
+	maxRetries: number = MAX_CALLBACK_RETRIES,
+	delayMs: number = RETRY_DELAY_MS,
+): Promise<T> {
+	let lastError: Error | undefined;
+
+	for (let attempt = 1; attempt <= maxRetries + 1; attempt++) {
+		try {
+			return await fn();
+		} catch (error) {
+			lastError = error instanceof Error ? error : new Error(String(error));
+			if (attempt <= maxRetries) {
+				logger.debug({ attempt, maxRetries, error: lastError.message }, "Callback processing failed, will retry");
+				await new Promise((resolve) => setTimeout(resolve, delayMs * attempt));
+			}
+		}
+	}
+
+	throw lastError;
+}
 
 /**
  * Configuration for callback handler
@@ -22,6 +59,7 @@ export interface CallbackContext {
 	idempotencyService?: IdempotencyService;
 	rateLimitService?: RateLimitService;
 	responseFileReader?: ResponseFileReader;
+	errorRecoveryService?: ErrorRecoveryService;
 }
 
 /**
@@ -192,16 +230,15 @@ export async function handleClaudeCallback(c: Context, context: CallbackContext)
 			}
 		}
 
-		// 3. Idempotency check
+		// 3. Idempotency check (just check, don't mark yet)
 		let isDuplicate = false;
 		if (context.idempotencyService) {
 			if (context.idempotencyService.isDuplicate(requestId)) {
 				logger.info({ requestId }, "Duplicate callback detected");
 				isDuplicate = true;
-			} else {
-				// Mark as processed early to prevent race conditions
-				context.idempotencyService.markProcessed(requestId, chatId, workspace);
 			}
+			// Note: markProcessed is called AFTER successful file read
+			// This ensures we don't mark a request as processed if file read fails
 		}
 
 		// If duplicate, return success immediately
@@ -267,12 +304,72 @@ export async function handleClaudeCallback(c: Context, context: CallbackContext)
 			return c.json(createErrorResponse("Internal server error", "unknown_error"), 500);
 		}
 
+		// 4b. Mark as processed AFTER successful file read
+		// This ensures idempotency is only marked when the request is actually processed
+		if (context.idempotencyService) {
+			context.idempotencyService.markProcessed(requestId, chatId, workspace);
+		}
+
 		// 5. Process response asynchronously
 		// We respond immediately and process in the background
 		const response = c.json({ status: "accepted" }, 202);
 
-		processCallbackAsync(requestId, chatId, workspace, responseData, context).catch((err) => {
-			logger.error({ err, requestId, chatId, workspace }, "Async callback processing failed");
+		// Process callback with retry logic to prevent errors from being swallowed
+		// Track attempt count for error recovery context
+		let attemptCount = 0;
+		withRetry(
+			async () => {
+				attemptCount++;
+				await processCallbackAsync(requestId, chatId, workspace, responseData, context);
+			},
+			MAX_CALLBACK_RETRIES,
+			RETRY_DELAY_MS,
+		).catch(async (err) => {
+			const error = err instanceof Error ? err : new Error(String(err));
+			logger.error(
+				{ err: error, requestId, chatId, workspace, attemptCount },
+				"Async callback processing failed after all retries",
+			);
+
+			// Use ErrorRecoveryService for dead-letter handling when available
+			if (context.errorRecoveryService) {
+				const recoveryContext: {
+					errorType: ErrorType;
+					requestId: string;
+					workspace: string;
+					error: Error;
+					attemptCount: number;
+					metadata?: Record<string, unknown>;
+				} = {
+					errorType: ErrorType.CALLBACK,
+					requestId,
+					workspace,
+					error,
+					attemptCount,
+					metadata: {
+						chatId: String(chatId),
+						responseFilePreserved: true, // Response file remains for recovery
+					},
+				};
+
+				try {
+					await context.errorRecoveryService.handleError(recoveryContext);
+					logger.info({ requestId, workspace }, "Error queued for recovery via ErrorRecoveryService");
+				} catch (recoveryErr) {
+					logger.error({ err: recoveryErr, requestId }, "Failed to queue error for recovery");
+				}
+			}
+
+			// Attempt to notify user via Telegram (best effort)
+			try {
+				const errorMsg = sanitizeErrorMessage(error.message);
+				await context.telegram.sendMessage(
+					chatId,
+					`Failed to deliver Claude response after ${attemptCount} attempts: ${errorMsg}. The request has been queued for recovery.`,
+				);
+			} catch (telegramErr) {
+				logger.error({ error: telegramErr, requestId, chatId }, "Failed to send failure notification to user");
+			}
 		});
 
 		const duration = Date.now() - startTime;
@@ -346,6 +443,15 @@ async function processCallbackAsync(
 			parseMode: "Markdown",
 		});
 
+		// 3. Store agent response to persistence (critical for conversation history)
+		const { persistence } = await import("@/gateway/persistence");
+		await persistence.storeMessage(
+			typeof chatId === "string" ? chatId : String(chatId),
+			"agent",
+			response.output,
+			workspace,
+		);
+
 		const duration = Date.now() - startTime;
 
 		logger.info(
@@ -356,7 +462,7 @@ async function processCallbackAsync(
 				duration,
 				callbackAttempts: response.callback?.attempts || 1,
 			},
-			"Response delivered to Telegram",
+			"Response delivered to Telegram and stored to history",
 		);
 
 		// Note: Response file cleanup is handled by FileCleanupService
