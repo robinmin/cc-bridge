@@ -78,7 +78,7 @@ describe("FeishuChannel", () => {
 			await feishu.sendMessage("oc_test12345", "Test message");
 
 			const sendMessageCall = mockCalls.find((call) => call.url.includes("messages"));
-			expect(sendMessageCall?.body?.msg_type).toBe("post");
+			expect(sendMessageCall?.body?.msg_type).toBe("text");
 			expect(sendMessageCall?.body?.receive_id).toBe("oc_test12345");
 		});
 	});
