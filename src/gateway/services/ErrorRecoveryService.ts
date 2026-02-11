@@ -53,6 +53,7 @@ export interface RecoveryStrategy {
 	backoffMs: number;
 	fallbackAction?: () => Promise<void>;
 	circuitBreakerThreshold?: number;
+	circuitBreakerResetMs?: number;
 	circuitBreakResetMs?: number;
 }
 
@@ -92,6 +93,7 @@ export class ErrorRecoveryService {
 					maxRetries: 3,
 					backoffMs: 1000,
 					circuitBreakerThreshold: 10,
+					circuitBreakerResetMs: 300000,
 					circuitBreakResetMs: 300000, // 5 minutes
 				},
 			],
@@ -101,6 +103,7 @@ export class ErrorRecoveryService {
 					maxRetries: 3,
 					backoffMs: 2000,
 					circuitBreakerThreshold: 5,
+					circuitBreakerResetMs: 300000,
 					circuitBreakResetMs: 300000,
 				},
 			],
@@ -110,6 +113,7 @@ export class ErrorRecoveryService {
 					maxRetries: 3,
 					backoffMs: 1000,
 					circuitBreakerThreshold: 10,
+					circuitBreakerResetMs: 300000,
 					circuitBreakResetMs: 300000,
 				},
 			],
@@ -119,6 +123,7 @@ export class ErrorRecoveryService {
 					maxRetries: 5,
 					backoffMs: 500,
 					circuitBreakerThreshold: 20,
+					circuitBreakerResetMs: 300000,
 					circuitBreakResetMs: 300000,
 				},
 			],
@@ -128,6 +133,7 @@ export class ErrorRecoveryService {
 					maxRetries: 2,
 					backoffMs: 5000,
 					circuitBreakerThreshold: 3,
+					circuitBreakerResetMs: 600000,
 					circuitBreakResetMs: 600000, // 10 minutes
 				},
 			],
@@ -138,6 +144,7 @@ export class ErrorRecoveryService {
 					backoffMs: 0,
 					circuitBreakerThreshold: 5,
 					circuitBreakerResetMs: 300000,
+					circuitBreakResetMs: 300000,
 				},
 			],
 		]);
@@ -451,7 +458,7 @@ export class ErrorRecoveryService {
 			if (!state.isOpen) continue;
 
 			const strategy = this.recoveryStrategies.get(errorType);
-			const resetThreshold = strategy?.circuitBreakerResetMs || 300000;
+			const resetThreshold = strategy?.circuitBreakerResetMs ?? strategy?.circuitBreakResetMs ?? 300000;
 
 			if (now - state.lastFailureTime > resetThreshold) {
 				this.circuitBreakers.set(errorType, {
@@ -513,7 +520,9 @@ export class ErrorRecoveryService {
 			}
 		},
 		error: (msg: string, meta?: Record<string, unknown>) => {
-			console.error(`[ErrorRecovery] ERROR ${msg}`, meta || "");
+			if (process.env.NODE_ENV !== "test") {
+				console.error(`[ErrorRecovery] ERROR ${msg}`, meta || "");
+			}
 		},
 		debug: (msg: string, meta?: Record<string, unknown>) => {
 			if (process.env.NODE_ENV !== "test") {
