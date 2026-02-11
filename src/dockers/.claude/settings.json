@@ -120,6 +120,19 @@
 			"Read(./secrets/**)"
 		]
 	},
+	"hooks": {
+		"Stop": [
+			{
+				"matcher": "*",
+				"hooks": [
+					{
+						"type": "command",
+						"command": "/app/scripts/container_cmd.sh response"
+					}
+				]
+			}
+		]
+	},
 	"enabledPlugins": {
 		"superpowers@claude-plugins-official": true,
 		"typescript-lsp@claude-plugins-official": true,
