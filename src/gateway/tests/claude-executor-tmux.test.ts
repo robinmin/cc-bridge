@@ -118,17 +118,13 @@ describe("ClaudeExecutor Tmux Integration", () => {
 	});
 
 	describe("executeClaude mode selection", () => {
-		test("should use sync mode by default", async () => {
-			// Mock executeClaudeRaw for sync mode
-			const _originalRaw = (await import("@/gateway/services/claude-executor")).executeClaudeRaw;
-
-			// For this test, we just verify the mode selection logic works
-			// by checking that it respects the useTmux flag
+		test("should use tmux mode by default (production default)", async () => {
+			// Production default: ENABLE_TMUX=true for better performance
 			const config = { workspace: "test" };
 			const useTmux = config.useTmux ?? process.env.ENABLE_TMUX === "true";
 
-			// Default should be sync (useTmux = false unless env var is set)
-			expect(useTmux).toBe(false);
+			// Default should be tmux (useTmux = true with ENABLE_TMUX=true in production)
+			expect(useTmux).toBe(true);
 		});
 
 		test("should respect explicit useTmux flag", async () => {
@@ -142,10 +138,10 @@ describe("ClaudeExecutor Tmux Integration", () => {
 
 			// Explicit true should use tmux
 			expect(useTmuxTrue).toBe(true);
-			// Explicit false should use sync
+			// Explicit false should use sync mode (override env var)
 			expect(useTmuxFalse).toBe(false);
-			// Undefined follows env var (which is false by default)
-			expect(useTmxUndefined).toBe(false);
+			// Undefined follows env var (which is true in production)
+			expect(useTmxUndefined).toBe(true);
 		});
 	});
 
