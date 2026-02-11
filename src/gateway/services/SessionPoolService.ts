@@ -397,7 +397,7 @@ export class SessionPoolService {
 			session.lastActivityAt = Date.now();
 			session.status = "active";
 
-			logger.trace({ workspace, activeRequests: session.activeRequests }, "Request start tracked");
+			logger.debug({ workspace, activeRequests: session.activeRequests }, "Request start tracked");
 		}
 	}
 
@@ -414,7 +414,7 @@ export class SessionPoolService {
 				session.status = "idle";
 			}
 
-			logger.trace({ workspace, activeRequests: session.activeRequests }, "Request complete tracked");
+			logger.debug({ workspace, activeRequests: session.activeRequests }, "Request complete tracked");
 		}
 	}
 
