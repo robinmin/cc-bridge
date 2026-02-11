@@ -20,11 +20,14 @@ app.post("/", zValidator("json", ExecuteCommandSchema), async (c) => {
 		}
 		console.info(`Executing command: ${cmdList.join(" ")} in ${workingDir || "current directory"}`);
 
-		// For minimaxi API, Claude CLI needs ANTHROPIC_API_KEY to use ANTHROPIC_AUTH_TOKEN value
-		const childEnv: Record<string, string> = {
-			...process.env,
-			ANTHROPIC_API_KEY: process.env.ANTHROPIC_AUTH_TOKEN || process.env.ANTHROPIC_API_KEY || "",
-		};
+		// Prefer ANTHROPIC_API_KEY when provided; otherwise use ANTHROPIC_AUTH_TOKEN
+		const childEnv = { ...process.env } as Record<string, string>;
+		if (process.env.ANTHROPIC_API_KEY) {
+			childEnv.ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+		} else if (process.env.ANTHROPIC_AUTH_TOKEN) {
+			childEnv.ANTHROPIC_AUTH_TOKEN = process.env.ANTHROPIC_AUTH_TOKEN;
+			delete childEnv.ANTHROPIC_API_KEY;
+		}
 
 		const proc = Bun.spawn(cmdList, {
 			cwd: workingDir,
