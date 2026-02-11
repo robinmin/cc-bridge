@@ -318,11 +318,24 @@ export class TmuxManager {
 
 	/**
 	 * Escape a string for safe use in single quotes in shell
-	 * Replaces ' with '\'' (end quote, escaped quote, start quote)
+	 * - Replaces ' with '\'' (end quote, escaped quote, start quote)
+	 * - Removes or escapes control characters that break tmux/ssh
+	 * - Handles carriage returns and newlines that cause syntax errors
 	 * Protected for testability
 	 */
 	protected escapeForShell(text: string): string {
-		return text.replace(/'/g, "'\\''");
+		// Replace single quotes: ' -> '\''
+		let escaped = text.replace(/'/g, "'\\''");
+		// Remove carriage returns and newlines (they break tmux commands)
+		escaped = escaped.replace(/[\r\n]/g, "");
+		// Escape other control characters that might cause issues
+		escaped = escaped.replace(/[\x00-\x1f\x7f]/g, "");
+		return escaped;
+	}
+
+	protected quoteForShell(value: string): string {
+		const escaped = this.escapeForShell(value);
+		return `'${escaped}'`;
 	}
 
 	/**
@@ -402,12 +415,14 @@ export class TmuxManager {
 			"Creating new tmux session",
 		);
 
+		// Create tmux session with bash as login shell to source .bashrc for PATH
 		const { stderr, exitCode } = await this.execInContainer(containerId, [
 			"tmux",
 			"new-session",
 			"-d",
 			"-s",
 			sessionName,
+			"bash", // Use bash explicitly
 		]);
 
 		if (exitCode !== 0) {
@@ -488,15 +503,18 @@ export class TmuxManager {
 		// Escape prompt for shell
 		const escapedPrompt = this.escapeForShell(prompt);
 
-		// Set environment variables for Stop Hook
-		const envVars = [
-			`export REQUEST_ID=${metadata.requestId}`,
-			`export CHAT_ID=${metadata.chatId}`,
-			`export WORKSPACE_NAME=${metadata.workspace}`,
+		// Build command: export env vars, run container_cmd.sh request
+		// PATH is inherited from Dockerfile.agent ENV (no need to re-export)
+		// container_cmd.sh handles Claude execution and response callback
+		const safeRequestId = this.quoteForShell(metadata.requestId);
+		const safeChatId = this.quoteForShell(metadata.chatId);
+		const safeWorkspace = this.quoteForShell(metadata.workspace);
+		const command = [
+			`export REQUEST_ID=${safeRequestId}`,
+			`export CHAT_ID=${safeChatId}`,
+			`export WORKSPACE_NAME=${safeWorkspace}`,
+			`/app/scripts/container_cmd.sh request '${escapedPrompt}'`,
 		].join("; ");
-
-		// Build Claude command with environment
-		const command = `${envVars}; claude -p '${escapedPrompt}'`;
 
 		logger.debug(
 			{
@@ -544,7 +562,7 @@ export class TmuxManager {
 				"Prompt sent to tmux session successfully",
 			);
 		} catch (error) {
-			if (error instanceof TimeoutError) {
+			if (error instanceof Error && error.name === "TimeoutError") {
 				logger.error(
 					{
 						...errorContext,
@@ -776,12 +794,14 @@ export class TmuxManager {
 	async createWorkspaceSession(containerId: string, sessionName: string, workspace: string): Promise<void> {
 		logger.info({ containerId, sessionName, workspace }, "Creating workspace tmux session");
 
+		// Create tmux session with bash as login shell to source .bashrc for PATH
 		const { stderr, exitCode } = await this.execInContainer(containerId, [
 			"tmux",
 			"new-session",
 			"-d",
 			"-s",
 			sessionName,
+			"bash", // Use bash explicitly
 		]);
 
 		if (exitCode !== 0) {
@@ -930,8 +950,6 @@ export class TmuxManager {
 			// Note: We can't recover workspace/chatId from session name alone
 			// because we'd need to parse the sanitized names which is lossy
 			// In production, consider persisting this metadata to disk
-
-			this.lastSyncTime = Date.now();
 
 			logger.info(
 				{
