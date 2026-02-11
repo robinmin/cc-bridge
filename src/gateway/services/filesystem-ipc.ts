@@ -8,6 +8,22 @@ import type { CallbackMetadata, ClaudeResponseFile } from "@/packages/types";
 export type { ClaudeResponseFile, CallbackMetadata };
 
 /**
+ * Regex for validating workspace names (alphanumeric, underscore, hyphen only)
+ */
+const WORKSPACE_NAME_REGEX = /^[a-zA-Z0-9_-]+$/;
+
+/**
+ * Validate workspace name to prevent directory traversal attacks
+ */
+function validateWorkspaceName(workspace: string): void {
+	if (!WORKSPACE_NAME_REGEX.test(workspace)) {
+		throw new Error(
+			`Invalid workspace name: ${workspace}. Only alphanumeric characters, underscores, and hyphens are allowed.`,
+		);
+	}
+}
+
+/**
  * Configuration for FileSystemIpc
  */
 export interface FileSystemIpcConfig {
@@ -60,6 +76,9 @@ export class FileSystemIpc {
 	 * Retries if file doesn't exist yet (with timeout)
 	 */
 	async readResponse(workspace: string, requestId: string): Promise<ClaudeResponseFile> {
+		// Validate workspace name to prevent directory traversal
+		validateWorkspaceName(workspace);
+
 		const filePath = this.getResponsePath(workspace, requestId);
 		const startTime = Date.now();
 		const timeout = this.config.responseTimeout;
@@ -156,6 +175,9 @@ export class FileSystemIpc {
 	 * Delete a response file after processing
 	 */
 	async deleteResponse(workspace: string, requestId: string): Promise<void> {
+		// Validate workspace name to prevent directory traversal
+		validateWorkspaceName(workspace);
+
 		const filePath = this.getResponsePath(workspace, requestId);
 
 		try {
@@ -183,6 +205,9 @@ export class FileSystemIpc {
 	 * Check if a response file exists
 	 */
 	async responseExists(workspace: string, requestId: string): Promise<boolean> {
+		// Validate workspace name to prevent directory traversal
+		validateWorkspaceName(workspace);
+
 		const filePath = this.getResponsePath(workspace, requestId);
 
 		try {
@@ -295,6 +320,13 @@ export class FileSystemIpc {
 	private startCleanup(): void {
 		if (this.destroyed || this.cleanupTimer) {
 			return; // Don't start if destroyed or already started
+		}
+		if (this.config.cleanupInterval <= 0) {
+			logger.debug(
+				{ intervalMs: this.config.cleanupInterval },
+				"Skipping periodic file cleanup (interval <= 0)",
+			);
+			return;
 		}
 
 		this.cleanupTimer = setInterval(() => {
