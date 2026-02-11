@@ -118,6 +118,35 @@ describe("handleClaudeCallback (Hardened)", () => {
 			expect(response.headers.get("X-Request-Id")).toBe("req-001");
 		});
 
+		test("should accept negative chatId for Telegram group chats", async () => {
+			const mockResponse: ResponseFile = {
+				requestId: "req-neg-001",
+				chatId: -123456789,
+				workspace: "test-workspace",
+				timestamp: new Date().toISOString(),
+				output: "Group chat response",
+				exitCode: 0,
+			};
+
+			await writeFile(
+				path.join(testIpcDir, "test-workspace", "responses", "req-neg-001.json"),
+				JSON.stringify(mockResponse),
+			);
+
+			const response = await app.request("/claude-callback", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					requestId: "req-neg-001",
+					chatId: -123456789,
+					workspace: "test-workspace",
+				}),
+			});
+
+			expect(response.status).toBe(202);
+			expect(await response.json()).toEqual({ status: "accepted" });
+		});
+
 		test("should process callback asynchronously", async () => {
 			const mockResponse: ResponseFile = {
 				requestId: "req-002",
