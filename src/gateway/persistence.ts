@@ -1,6 +1,7 @@
 import { Database } from "bun:sqlite";
 import fs from "node:fs";
 import path from "node:path";
+import { logger } from "@/packages/logger";
 
 export interface DBMessage {
 	id?: number;
@@ -33,8 +34,84 @@ export interface DBWorkspace {
 	last_updated: string;
 }
 
+/**
+ * Simple LRU Cache entry with TTL support
+ */
+interface CacheEntry<T> {
+	value: T;
+	expiresAt: number;
+}
+
+/**
+ * Simple LRU Cache with TTL (Time To Live) support
+ */
+class LRUCache<T> {
+	private cache: Map<string, CacheEntry<T>>;
+	private maxSize: number;
+	private ttlMs: number;
+
+	constructor(maxSize: number, ttlMinutes: number) {
+		this.cache = new Map();
+		this.maxSize = maxSize;
+		this.ttlMs = ttlMinutes * 60 * 1000;
+	}
+
+	get(key: string): T | null {
+		const entry = this.cache.get(key);
+		if (!entry) {
+			return null;
+		}
+
+		// Check if expired
+		if (Date.now() > entry.expiresAt) {
+			this.cache.delete(key);
+			return null;
+		}
+
+		// Move to end (most recently used)
+		this.cache.delete(key);
+		this.cache.set(key, entry);
+
+		return entry.value;
+	}
+
+	set(key: string, value: T): void {
+		// Remove oldest if at capacity
+		if (this.cache.size >= this.maxSize) {
+			const firstKey = this.cache.keys().next().value;
+			if (firstKey) {
+				this.cache.delete(firstKey);
+			}
+		}
+
+		this.cache.set(key, {
+			value,
+			expiresAt: Date.now() + this.ttlMs,
+		});
+	}
+
+	delete(key: string): void {
+		this.cache.delete(key);
+	}
+
+	clear(): void {
+		this.cache.clear();
+	}
+
+	get size(): number {
+		return this.cache.size;
+	}
+}
+
+// Cache key generator for history
+function historyCacheKey(chatId: string | number, limit: number, workspace: string): string {
+	return `history:${chatId}:${limit}:${workspace}`;
+}
+
 export class PersistenceManager {
 	private db: Database;
+	private historyCache: LRUCache<DBMessage[]> | null;
+	private enableCache: boolean;
 
 	constructor(dbPath: string = "data/gateway.db") {
 		const dir = path.dirname(dbPath);
@@ -42,6 +119,18 @@ export class PersistenceManager {
 			fs.mkdirSync(dir, { recursive: true });
 		}
 		this.db = new Database(dbPath);
+
+		// Check ENABLE_LRU_HISTORY environment variable (default: false)
+		const enableLruHistory = process.env.ENABLE_LRU_HISTORY === "true" || process.env.ENABLE_LRU_HISTORY === "1";
+		this.enableCache = enableLruHistory;
+
+		// Initialize cache if enabled (100 entries, 5 minutes TTL)
+		this.historyCache = this.enableCache ? new LRUCache<DBMessage[]>(100, 5) : null;
+
+		if (this.enableCache) {
+			logger.info({ enabled: true }, "LRU history cache enabled");
+		}
+
 		this.init();
 	}
 
@@ -90,6 +179,15 @@ export class PersistenceManager {
 	// --- Messages ---
 	async storeMessage(chatId: string | number, sender: string, text: string, workspace?: string) {
 		const workspaceName = workspace || "cc-bridge";
+
+		// Invalidate cache for this chat/workspace when storing new message
+		if (this.historyCache) {
+			// Invalidate all cached entries for this chat/workspace (any limit)
+			for (const limit of [10, 20, 50, 100]) {
+				this.historyCache.delete(historyCacheKey(chatId, limit, workspaceName));
+			}
+		}
+
 		this.db.run("INSERT INTO messages (chat_id, workspace_name, sender, text) VALUES (?, ?, ?, ?)", [
 			String(chatId),
 			workspaceName,
@@ -100,9 +198,30 @@ export class PersistenceManager {
 
 	async getHistory(chatId: string | number, limit: number = 50, workspace?: string): Promise<DBMessage[]> {
 		const workspaceName = workspace || "cc-bridge";
-		return this.db
+
+		// Check cache first if enabled
+		if (this.historyCache) {
+			const cacheKey = historyCacheKey(chatId, limit, workspaceName);
+			const cached = this.historyCache.get(cacheKey);
+			if (cached) {
+				logger.debug({ chatId, limit, workspace: workspaceName, hit: true }, "History cache hit");
+				return cached;
+			}
+			logger.debug({ chatId, limit, workspace: workspaceName, hit: false }, "History cache miss");
+		}
+
+		// Fetch from database
+		const result = this.db
 			.query("SELECT * FROM messages WHERE chat_id = ? AND workspace_name = ? ORDER BY id DESC LIMIT ?")
 			.all(String(chatId), workspaceName, limit) as DBMessage[];
+
+		// Store in cache if enabled
+		if (this.historyCache) {
+			const cacheKey = historyCacheKey(chatId, limit, workspaceName);
+			this.historyCache.set(cacheKey, result);
+		}
+
+		return result;
 	}
 
 	// --- Sessions ---
