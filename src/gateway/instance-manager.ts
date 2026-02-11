@@ -12,6 +12,8 @@ export interface AgentInstance {
 
 export class InstanceManager {
 	private instances: Map<string, AgentInstance> = new Map();
+	private parseErrorCount = 0;
+	private totalParseAttempts = 0;
 
 	async refresh(): Promise<AgentInstance[]> {
 		try {
@@ -26,6 +28,8 @@ export class InstanceManager {
 				"{{json .}}",
 			]);
 
+			// Wait for process to complete and read output
+			await proc.exited;
 			const output = await new Response(proc.stdout).text();
 			const lines = output.trim().split("\n");
 
@@ -33,6 +37,8 @@ export class InstanceManager {
 
 			for (const line of lines) {
 				if (!line.trim()) continue;
+				this.totalParseAttempts++;
+
 				try {
 					const data = JSON.parse(line);
 					// data example: {"ID":"...","Names":"...","Status":"...","Labels":"...","Image":"..."}
@@ -56,7 +62,8 @@ export class InstanceManager {
 						image: data.Image,
 					});
 				} catch (e) {
-					logger.error({ line, error: e }, "Error parsing docker ps output");
+					this.parseErrorCount++;
+					logger.warn({ line, error: e }, "Error parsing docker ps output");
 				}
 			}
 
@@ -70,7 +77,7 @@ export class InstanceManager {
 
 			return Array.from(this.instances.values());
 		} catch (error) {
-			console.error("Failed to refresh instances:", error);
+			logger.error({ error }, "Failed to refresh instances");
 			return Array.from(this.instances.values());
 		}
 	}
@@ -89,6 +96,16 @@ export class InstanceManager {
 
 	getInstances(): AgentInstance[] {
 		return Array.from(this.instances.values());
+	}
+
+	/**
+	 * Get parsing metrics for monitoring error rates
+	 */
+	getMetrics(): { parseErrorCount: number; errorRate: number } {
+		return {
+			parseErrorCount: this.parseErrorCount,
+			errorRate: this.totalParseAttempts > 0 ? this.parseErrorCount / this.totalParseAttempts : 0,
+		};
 	}
 
 	/**
