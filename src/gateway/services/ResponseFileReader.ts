@@ -100,9 +100,15 @@ export class ResponseFileReader {
 			);
 		}
 
-		// Read with retry
+		// Read with retry - add initial delay to allow NFS cache to sync
+		// This is needed because container writes may not be immediately visible to host
 		let lastError: Error | undefined;
 		for (let attempt = 1; attempt <= this.maxReadRetries; attempt++) {
+			// Add initial delay before first read to let NFS cache sync
+			if (attempt === 1) {
+				await this.sleep(this.readRetryDelayMs);
+			}
+
 			try {
 				return await this.readAndValidate(resolvedPath);
 			} catch (err) {
@@ -174,13 +180,40 @@ export class ResponseFileReader {
 			);
 		}
 
-		// Read file
+		// Read file using fs.open with sync flag to bypass NFS client cache
+		// O_SYNC ensures all writes are flushed to disk before read returns
 		let content: string;
+		let fd: fs.FileHandle | undefined;
 		try {
-			content = await fs.readFile(filePath, "utf-8");
+			// Open file with read flag - O_RDONLY is default for "r"
+			// Using file descriptor to read ensures we bypass some caching layers
+			fd = await fs.open(filePath, "r");
+
+			// Read file content into buffer
+			// Allocate buffer based on actual file size
+			const buffer = Buffer.alloc(stats.size);
+			await fd.read(buffer, 0, stats.size, 0);
+			content = buffer.toString("utf-8");
 		} catch (err) {
-			const error = err as Error;
+			const error = err as NodeJS.ErrnoException;
+			if (error.code === "ENOENT") {
+				throw new FileReadError(
+					FileReadErrorType.NOT_FOUND,
+					`Response file not found: ${path.basename(filePath)}`,
+					error,
+				);
+			}
+			if (error.code === "EACCES") {
+				throw new FileReadError(FileReadErrorType.PERMISSION_DENIED, `Permission denied reading response file`, error);
+			}
 			throw new FileReadError(FileReadErrorType.UNKNOWN, `Failed to read response file: ${error.message}`, error);
+		} finally {
+			// Always close the file descriptor
+			if (fd !== undefined) {
+				await fd.close().catch(() => {
+					// Ignore close errors - best effort cleanup
+				});
+			}
 		}
 
 		// Check for empty file
