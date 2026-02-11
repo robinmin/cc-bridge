@@ -67,7 +67,9 @@ export class HostBot implements Bot {
 				stdout: "pipe",
 				stderr: "pipe",
 				env: {
-					...process.env,
+					// Only pass necessary environment variables to prevent leaks
+					PATH: process.env.PATH,
+					HOME: process.env.HOME,
 					WORKSPACE_ROOT: GATEWAY_CONSTANTS.CONFIG.WORKSPACE_ROOT,
 				},
 			});
