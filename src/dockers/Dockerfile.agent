@@ -26,21 +26,21 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # ARG for dynamic user creation
-ARG USER_NAME=bun
+ARG USER_NAME=robin
 ARG USER_ID=1000
 ARG GROUP_ID=1000
 ARG WORKSPACE_NAME=cc-bridge
 
-# Create a group and user matching the host
-# We use /Users/${USER_NAME} to match macOS structure
-RUN groupadd -g ${GROUP_ID} ${USER_NAME} || true && \
-    useradd -u ${USER_ID} -g ${GROUP_ID} -m -s /bin/bash -d /Users/${USER_NAME} ${USER_NAME} || true
+# Simple user setup: ensure passwd/group entries exist for UID/GID
+RUN mkdir -p /Users/${USER_NAME} && \
+    (getent group ${GROUP_ID} >/dev/null 2>&1 || echo "${USER_NAME}:x:${GROUP_ID}:" >> /etc/group) && \
+    (getent passwd ${USER_ID} >/dev/null 2>&1 || echo "${USER_NAME}:x:${USER_ID}:${GROUP_ID}::/Users/${USER_NAME}:/bin/bash" >> /etc/passwd)
 
 # Ensure the home directory exists and is owned by the user (as root)
 RUN mkdir -p /Users/${USER_NAME}/.claude && \
     chown -R ${USER_ID}:${GROUP_ID} /Users
 
-# Ensure sudo privileges for the new user
+# Ensure sudo privileges for the user (if sudo is needed)
 RUN echo "${USER_NAME} ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
 
 # Ensure workspace directory structure exists and is writable
@@ -52,14 +52,15 @@ RUN mkdir -p /app && \
     chown -R ${USER_ID}:${GROUP_ID} /app
 
 # Switch to non-root user
-USER ${USER_NAME}
+USER ${USER_ID}:${GROUP_ID}
 
 # Install Claude tools in /app (NOT affected by volume mounts)
 WORKDIR /app
 RUN bun add @anthropic-ai/claude-code @anthropic-ai/claude-agent-sdk
 
-# Add local bin to PATH
-ENV PATH="/app/node_modules/.bin:${PATH}"
+# Set PATH at container level for all processes (no reliance on .bashrc)
+# Includes: /app/node_modules/.bin (claude CLI), bun, jq, curl, tmux, etc.
+ENV PATH="/app/node_modules/.bin:/usr/local/bun/bin:/usr/local/bin:/usr/bin:/bin:/usr/local/bun-node-fallback-bin"
 
 # Set working directory to workspace (dynamic based on build arg)
 WORKDIR /workspaces/${WORKSPACE_NAME}
@@ -72,22 +73,17 @@ COPY --chown=${USER_NAME}:${USER_NAME} tsconfig.json ./
 COPY --chown=${USER_NAME}:${USER_NAME} src/packages ./src/packages
 COPY --chown=${USER_NAME}:${USER_NAME} src/agent ./src/agent
 
-# Copy automation scripts to /app to avoid being overwritten by volume mounts
-COPY --chown=${USER_NAME}:${USER_NAME} src/dockers/entrypoint.sh /app/entrypoint.sh
-COPY --chown=${USER_NAME}:${USER_NAME} scripts/sync-plugins.sh /app/sync-plugins.sh
-COPY --chown=${USER_NAME}:${USER_NAME} scripts/refresh-discovery-cache.sh /app/refresh-discovery-cache.sh
-COPY --chown=${USER_NAME}:${USER_NAME} scripts/stop-hook.sh /app/scripts/stop-hook.sh
-RUN mkdir -p /app/scripts && \
-    chmod +x /app/entrypoint.sh /app/sync-plugins.sh /app/refresh-discovery-cache.sh /app/scripts/stop-hook.sh
+# Copy automation scripts to /app (container_cmd.sh is mounted via docker-compose.yml)
+COPY --chown=${USER_NAME}:${USER_NAME} --chmod=755 scripts/sync-plugins.sh /app/sync-plugins.sh
+COPY --chown=${USER_NAME}:${USER_NAME} --chmod=755 scripts/refresh-discovery-cache.sh /app/refresh-discovery-cache.sh
+RUN mkdir -p /app/scripts
 
 # Install dependencies
 RUN bun install
 
 # Switch to non-root user for final execution
-USER ${USER_NAME}
+USER ${USER_ID}:${GROUP_ID}
 
-# Entrypoint handles initialization (like plugin sync)
-ENTRYPOINT ["/app/entrypoint.sh"]
-
-# Default command
-CMD ["bun", "run", "src/agent/index.ts"]
+# Entrypoint: initialize environment, then start agent server
+# Use shell form to run init, then exec to bun (replaces shell PID)
+ENTRYPOINT ["/bin/bash", "-c", "/app/scripts/container_cmd.sh init && exec bun run src/agent/index.ts"]
