@@ -142,7 +142,7 @@ export class RateLimitService {
 		wsLimit.count++;
 		ipLimitEntry.count++;
 
-		logger.trace(
+		logger.debug(
 			{
 				workspace,
 				ip,
@@ -334,5 +334,14 @@ export class RateLimitService {
 		this.workspaceLimits.clear();
 		this.ipLimits.clear();
 		logger.info("RateLimitService data cleared");
+	}
+
+	/**
+	 * Destroy the service and clean up resources
+	 */
+	destroy(): void {
+		this.stopCleanup();
+		this.clear();
+		logger.info("RateLimitService destroyed");
 	}
 }
