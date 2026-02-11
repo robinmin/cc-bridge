@@ -8,6 +8,7 @@ console.log = (...args) => logger.info(args.length === 1 ? args[0] : args);
 console.error = (...args) => logger.error(args.length === 1 ? args[0] : args);
 console.warn = (...args) => logger.warn(args.length === 1 ? args[0] : args);
 console.debug = (...args) => logger.debug(args.length === 1 ? args[0] : args);
+console.info = (...args) => logger.info(args.length === 1 ? args[0] : args);
 
 import { AGENT_CONSTANTS } from "@/agent/consts";
 import executeRoute from "@/agent/routes/execute";
