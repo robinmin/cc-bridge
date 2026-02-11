@@ -18,8 +18,8 @@ export const CallbackRequestSchema = z.object({
 		})
 		.refine((val) => {
 			const numVal = typeof val === "string" ? parseInt(val, 10) : val;
-			return !Number.isNaN(numVal) && numVal > 0;
-		}, "chatId must be a positive number"),
+			return !Number.isNaN(numVal) && numVal !== 0;
+		}, "chatId must be a non-zero number"),
 	workspace: z
 		.string({
 			required_error: "workspace is required",
