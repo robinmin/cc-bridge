@@ -6,7 +6,7 @@ services:
       context: ../..
       dockerfile: src/dockers/Dockerfile.agent
       args:
-        - USER_NAME=${USER_NAME:-bun}
+        - USER_NAME=${USER_NAME:-robin}
         - USER_ID=${USER_ID:-1000}
         - GROUP_ID=${GROUP_ID:-1000}
         - WORKSPACE_NAME=${WORKSPACE_NAME:-cc-bridge}
@@ -22,26 +22,27 @@ services:
     # Volume mounts
     volumes:
       # Individual file mounts for Claude configuration
-      - ./.claude/settings.json:/Users/${USER_NAME:-bun}/.claude/settings.json:rw
-      - ./.claude/CLAUDE.md:/Users/${USER_NAME:-bun}/.claude/CLAUDE.md:rw
-      
-      # Persistent state and authentication from host
-      - ~/.claude.json:/Users/${USER_NAME:-bun}/.claude.json:rw
-      - ~/.claude/plugins:/Users/${USER_NAME:-bun}/.claude/plugins:rw
-      - ~/.claude/cache:/Users/${USER_NAME:-bun}/.claude/cache:rw
-      - ~/.claude/statsig:/Users/${USER_NAME:-bun}/.claude/statsig:rw
-      - ~/.claude/session-env:/Users/${USER_NAME:-bun}/.claude/session-env:rw
-      - ~/.claude/bridge:/Users/${USER_NAME:-bun}/.claude/bridge:rw
-      - ~/.claude/hooks:/Users/${USER_NAME:-bun}/.claude/hooks:rw
+      # USER_NAME is passed from Makefile (defaults to current user)
+      - ./.claude/settings.json:/Users/${USER_NAME}/.claude/settings.json:rw
+      - ./.claude/CLAUDE.md:/Users/${USER_NAME}/.claude/CLAUDE.md:rw
 
-      # Fixed mount point for automation scripts (robustness)
-      - ../../scripts:/app/scripts:rw
-      
+      # Persistent state and authentication from host
+      - ~/.claude/plugins:/Users/${USER_NAME}/.claude/plugins:rw
+      - ~/.claude/cache:/Users/${USER_NAME}/.claude/cache:rw
+      - ~/.claude/statsig:/Users/${USER_NAME}/.claude/statsig:rw
+      - ~/.claude/session-env:/Users/${USER_NAME}/.claude/session-env:rw
+      - ~/.claude/bridge:/Users/${USER_NAME}/.claude/bridge:rw
+      - ~/.claude/hooks:/Users/${USER_NAME}/.claude/hooks:rw
+
+      # Fixed mount point for automation scripts (container_cmd.sh mounted here)
+      - ../../scripts/container_cmd.sh:/app/scripts/container_cmd.sh:rw
+
       # Workspace volume mapping
-      - ../../:/workspaces/${WORKSPACE_NAME:-cc-bridge}:rw
-      
-      # IPC Mailbox and Logs
+      - ../../../${WORKSPACE_NAME:-cc-bridge}:/workspaces/${WORKSPACE_NAME:-cc-bridge}:rw
+
+      # IPC directories
       - ../../data/ipc/${WORKSPACE_NAME:-cc-bridge}:/ipc/${WORKSPACE_NAME:-cc-bridge}:rw
+      - ../../data/ipc/data:/ipc/data:rw
       - ../../data/logs:/workspaces/${WORKSPACE_NAME:-cc-bridge}/data/logs:rw
 
     # Environment variables
@@ -56,16 +57,22 @@ services:
       - AGENT_MODE=tcp
       - AGENT_TCP_PORT=3001
       - CLAUDE_AGENT_SKILLS=1
-      - BRAVE_API_KEY=${BRAVE_API_KEY}
 
-      # Claude CLI expects ANTHROPIC_API_KEY for authentication
-      - ANTHROPIC_API_KEY=${ANTHROPIC_AUTH_TOKEN}
+      # Claude CLI expects ANTHROPIC_BASE_URL/ANTHROPIC_API_KEY/ANTHROPIC_AUTH_TOKEN for authentication
+      - ANTHROPIC_BASE_URL=${ANTHROPIC_BASE_URL:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - ANTHROPIC_AUTH_TOKEN=${ANTHROPIC_AUTH_TOKEN:-}
 
       # Gateway callback URL for Stop Hook
       - GATEWAY_CALLBACK_URL=http://host.docker.internal:8080/claude-callback
+      - GATEWAY_URL=http://host.docker.internal:8080
 
-      # IPC base directory for filesystem communication
+      # LRU History Cache (for performance optimization)
+      - ENABLE_LRU_HISTORY=${ENABLE_LRU_HISTORY:-false}
+
+      # IPC directories for filesystem communication
       - IPC_BASE_DIR=/ipc
+      - IPC_DATA_DIR=/ipc/data
 
       # HTTP API Server Configuration
       - HTTP_PORT=${HTTP_PORT:-3000}
@@ -90,17 +97,16 @@ services:
 
     # Port mappings
     ports:
-      - "${HTTP_PORT:-3000}:3000"  # HTTP API Server
-      - "3001:3001"  # Agent IPC (TCP fallback for performance)
+      - "${HTTP_PORT:-3000}:3000" # HTTP API Server
+      - "3001:3001" # Agent IPC (TCP fallback for performance)
 
     # The bridge server communicates via a persistent Unix Domain Socket (low-latency)
     # with a fall back to 'docker exec' streams.
     # Start tmux server for persistent Claude sessions
-    command: >
-      sh -c "
-        tmux start-server &&
-        bun run src/agent/index.ts
-      "
+    command:
+      - sh
+      - -c
+      - tmux start-server && bun run src/agent/index.ts
 
     # Health check
     healthcheck:
