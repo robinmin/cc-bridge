@@ -458,7 +458,7 @@ export async function executeClaudeWithHistory(
 		const prompt = buildClaudePrompt(userMessage, history);
 		return await executeClaudeViaIpc(instance, prompt, config);
 	} catch (error: unknown) {
-		if (error instanceof ValidationError) {
+		if (error instanceof ClaudeValidationError) {
 			// Re-raise validation errors as-is
 			throw error;
 		}
@@ -612,7 +612,8 @@ export async function executeClaude(
 	config: ClaudeExecutionConfigExtended = {},
 ): Promise<ClaudeExecutionResultOrAsync> {
 	// Determine execution mode
-	const useTmux = (config.useTmux ?? config.useTmux === undefined) ? process.env.ENABLE_TMUX === "true" : false;
+	// If explicitly set, use that value; otherwise default to env var or false
+	const useTmux = config.useTmux ?? process.env.ENABLE_TMUX === "true";
 
 	// Build prompt with history if provided
 	const promptToSend = config.history ? buildClaudePrompt(prompt, config.history) : prompt;
