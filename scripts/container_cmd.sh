@@ -43,6 +43,91 @@ log_error() {
     echo "[$(date +"%Y-%m-%dT%H:%M:%S%z")] [container_cmd.sh] ERROR: $1" >&2
 }
 
+strip_claude_hooks() {
+    # Default: strip hooks only in hybrid mode (can override with STRIP_STOP_HOOK=0/1)
+    local strip="${STRIP_STOP_HOOK:-}"
+    if [[ -z "$strip" ]]; then
+        if [[ "${IPC_MODE:-}" != "hybrid" && "${AGENT_MODE:-}" != "hybrid" ]]; then
+            return 0
+        fi
+    else
+        if [[ "$strip" == "0" || "$strip" == "false" ]]; then
+            return 0
+        fi
+    fi
+
+    local settings_path="${HOME:-/Users/${USER_NAME}}/.claude/settings.json"
+    local tmp_path="${settings_path}.tmp"
+
+    if [[ -f "$settings_path" ]] && command -v jq &> /dev/null; then
+        if jq 'del(.hooks)' "$settings_path" > "$tmp_path" 2>/dev/null; then
+            # Avoid mv over bind-mounted file; overwrite contents instead
+            cat "$tmp_path" > "$settings_path" 2>/dev/null || true
+        fi
+        rm -f "$tmp_path" 2>/dev/null || true
+    fi
+}
+
+now_epoch() {
+    date +%s
+}
+
+file_mtime_epoch() {
+    local path="$1"
+    if stat -c %Y "$path" >/dev/null 2>&1; then
+        stat -c %Y "$path"
+    else
+        stat -f %m "$path" 2>/dev/null || echo 0
+    fi
+}
+
+callback_lock_path() {
+    local base_dir="$1"
+    local request_id="$2"
+    echo "${base_dir}/${request_id}.callback_lock"
+}
+
+callback_marker_path() {
+    local base_dir="$1"
+    local request_id="$2"
+    echo "${base_dir}/${request_id}.callback_sent"
+}
+
+callback_lock_acquire() {
+    local lock_dir="$1"
+    local ttl="${CALLBACK_LOCK_TTL_SEC:-60}"
+    local now
+    now=$(now_epoch)
+
+    if mkdir "$lock_dir" 2>/dev/null; then
+        echo -n "$$ $now" > "${lock_dir}/meta" 2>/dev/null || true
+        return 0
+    fi
+
+    local meta="${lock_dir}/meta"
+    local mtime
+    mtime=$(file_mtime_epoch "$meta")
+    if [[ "$mtime" -gt 0 && $((now - mtime)) -gt "$ttl" ]]; then
+        rm -rf "$lock_dir" 2>/dev/null || true
+        if mkdir "$lock_dir" 2>/dev/null; then
+            echo -n "$$ $now" > "${lock_dir}/meta" 2>/dev/null || true
+            return 0
+        fi
+    fi
+
+    return 1
+}
+
+callback_lock_release() {
+    local lock_dir="$1"
+    rm -rf "$lock_dir" 2>/dev/null || true
+}
+
+callback_mark_sent() {
+    local marker_file="$1"
+    echo -n "sent $(date -u +"%Y-%m-%dT%H:%M:%SZ")" > "$marker_file" 2>/dev/null || true
+}
+
 xml_escape() {
     # Escape XML special characters to keep Claude message payload valid
     # Order matters: escape & first to avoid double-escaping
@@ -73,6 +158,12 @@ Environment Variables (set by docker-compose.yml):
   IPC_BASE_DIR         IPC base directory (default: /ipc)
   WORKSPACE_NAME       Workspace name (default: cc-bridge)
   CHAT_ID              Chat ID for the conversation
+  IPC_MODE             IPC mode (callback_payload or hybrid)
+  STRIP_STOP_HOOK      Force strip Stop hook (1/0). Default: auto in hybrid mode
+  START_AGENT_ON_INIT  Start agent after init (1/0). Default: 1
+  CALLBACK_LOCK_TTL_SEC         Stale lock TTL (default: 60)
+  HYBRID_FALLBACK_DELAY_SEC     Wait before inline fallback (default: 1.5)
+  HYBRID_FALLBACK_RETRY_SEC      Extra wait if lock exists (default: 1)
 
 Examples:
   container_cmd.sh request "Hello Claude"
@@ -88,6 +179,24 @@ EOF
 
 cmd_init() {
     log_info "Initializing container environment..."
+
+    # Strip Stop hooks in inline mode to prevent duplicate callbacks
+    strip_claude_hooks
+
+    # Best-effort cleanup of old hybrid marker files
+    if command -v find &> /dev/null; then
+        find "${IPC_BASE_DIR:-/ipc}/data" -type f -name "*.callback_sent" -mmin +60 -delete 2>/dev/null || true
+    fi
+
+    # Ensure tmux server is running (required for persistent sessions)
+    if command -v tmux &> /dev/null; then
+        if ! tmux ls &> /dev/null; then
+            log_info "Starting tmux server..."
+            tmux start-server
+        fi
+    else
+        log_warn "tmux not available - persistent sessions may not work"
+    fi
 
     # Sync plugins if claude CLI is available
     if command -v claude &> /dev/null; then
@@ -114,6 +223,11 @@ cmd_init() {
     fi
 
     log_info "Initialization complete"
+
+    # Start the agent server after init
+    if [[ "${START_AGENT_ON_INIT:-1}" != "0" ]]; then
+        cmd_start
+    fi
 }
 
 # =============================================================================
@@ -189,18 +303,23 @@ cmd_request() {
     # Parse Claude's JSON output format
     # Extract 'result' field which contains the actual text output
     # Use is_error to determine exitCode
-    local parse_error=false
-    CLAUDE_OUTPUT=$(echo "$claude_result" | jq -r '.result // empty' 2>/dev/null || true)
-    local is_error
-    is_error=$(echo "$claude_result" | jq -r '.is_error // false' 2>/dev/null || true)
+    if command -v jq &> /dev/null; then
+        CLAUDE_OUTPUT=$(echo "$claude_result" | jq -r '.result // empty' 2>/dev/null || true)
+        local is_error
+        is_error=$(echo "$claude_result" | jq -r '.is_error // false' 2>/dev/null || true)
 
-    if [[ -z "$CLAUDE_OUTPUT" ]]; then
-        log_warn "JSON parsing failed, falling back to raw output"
-        CLAUDE_OUTPUT="$claude_result"
-        CLAUDE_EXIT=$claude_exit
-    elif [[ "$is_error" == "true" ]]; then
-        CLAUDE_EXIT=1
+        if [[ -z "$CLAUDE_OUTPUT" ]]; then
+            log_warn "JSON parsing failed, falling back to raw output"
+            CLAUDE_OUTPUT="$claude_result"
+            CLAUDE_EXIT=$claude_exit
+        elif [[ "$is_error" == "true" ]]; then
+            CLAUDE_EXIT=1
+        else
+            CLAUDE_EXIT=$claude_exit
+        fi
     else
+        log_warn "jq not available; using raw Claude output"
+        CLAUDE_OUTPUT="$claude_result"
         CLAUDE_EXIT=$claude_exit
     fi
 
@@ -223,7 +342,31 @@ EOF
 
     log_info "Done: $request_id exit=$CLAUDE_EXIT"
 
-    # Call response inline since Stop hook may not trigger in -p mode
+    # Hybrid mode: rely on Stop hook first, fallback to inline response if needed
+    if [[ "${IPC_MODE:-}" == "hybrid" ]] || [[ "${AGENT_MODE:-}" == "hybrid" ]]; then
+        local marker_dir="${IPC_BASE_DIR}/data/${workspace}"
+        local marker_file
+        marker_file=$(callback_marker_path "$marker_dir" "$request_id")
+        local lock_dir
+        lock_dir=$(callback_lock_path "$marker_dir" "$request_id")
+
+        # Give Stop hook a short window to fire
+        sleep "${HYBRID_FALLBACK_DELAY_SEC:-1.5}"
+
+        if [[ -f "$marker_file" ]]; then
+            log_debug "Hybrid: callback already sent, skipping inline response"
+            return 0
+        fi
+
+        # Attempt to acquire lock for fallback; if locked, Stop hook is running
+        if ! callback_lock_acquire "$lock_dir"; then
+            log_debug "Hybrid: callback lock exists, skipping inline response"
+            return 0
+        fi
+        CALLBACK_LOCK_HELD=1
+    fi
+
+    # Default: call response inline
     cmd_response
 }
 
@@ -249,7 +392,26 @@ cmd_response() {
         fi
     fi
 
-    local data_file="${IPC_BASE_DIR}/data/${workspace}/${request_id}.json"
+    local data_dir="${IPC_BASE_DIR}/data/${workspace}"
+    local data_file="${data_dir}/${request_id}.json"
+    local marker_file
+    marker_file=$(callback_marker_path "$data_dir" "$request_id")
+    local lock_dir
+    lock_dir=$(callback_lock_path "$data_dir" "$request_id")
+
+    mkdir -p "$data_dir" 2>/dev/null || true
+
+    # Ensure only one callback attempt runs at a time for this request
+    if [[ "${CALLBACK_LOCK_HELD:-0}" != "1" ]]; then
+        if ! callback_lock_acquire "$lock_dir"; then
+            log_debug "Callback lock exists, skipping duplicate response: $lock_dir"
+            return 0
+        fi
+    fi
+    # Always release lock on exit
+    local release_lock
+    release_lock() { callback_lock_release "$lock_dir"; }
+    trap release_lock EXIT
 
     # Read Claude output from temp file (written by request command)
     # This is needed because Stop hook runs in separate process
@@ -366,7 +528,9 @@ EOF
 
     # Optional callback payload mode: include output directly
     if [[ "${IPC_MODE:-}" == "callback_payload" ]] || \
-       [[ "${AGENT_MODE:-}" == "callback_payload" ]]; then
+       [[ "${AGENT_MODE:-}" == "callback_payload" ]] || \
+       [[ "${IPC_MODE:-}" == "hybrid" ]] || \
+       [[ "${AGENT_MODE:-}" == "hybrid" ]]; then
         payload=$(printf '%s' "$payload" | jq \
             --arg output "$output" \
             --argjson exitCode "$exit_code" \
@@ -416,6 +580,7 @@ EOF
                 log_info "Callback succeeded (attempt $attempt, HTTP $http_code)"
                 callback_success=true
                 callback_error=""
+                callback_mark_sent "$marker_file"
                 break
             fi
 
