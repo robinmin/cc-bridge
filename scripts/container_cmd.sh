@@ -13,9 +13,6 @@
 set -eo pipefail
 
 # Configuration - rely on docker-compose.yml environment variables
-# IPC_DATA_DIR is set via docker-compose.yml, fallback to /ipc/data if not set
-export IPC_DATA_DIR="${IPC_DATA_DIR:-/ipc/data}"
-
 # IPC_BASE_DIR is set via docker-compose.yml, fallback to /ipc if not set
 export IPC_BASE_DIR="${IPC_BASE_DIR:-/ipc}"
 
@@ -31,11 +28,19 @@ export PATH="/app/node_modules/.bin:/usr/local/bun/bin:/usr/local/bin:/usr/bin:/
 # =============================================================================
 
 log_info() {
-    echo "[container_cmd.sh] $1"
+    echo "[$(date +"%Y-%m-%dT%H:%M:%S%z")] [container_cmd.sh] $1"
 }
 
 log_warn() {
-    echo "[container_cmd.sh] ⚠️  Warning: $1" >&2
+    echo "[$(date +"%Y-%m-%dT%H:%M:%S%z")] [container_cmd.sh] ⚠️  Warning: $1" >&2
+}
+
+log_debug() {
+    echo "[$(date +"%Y-%m-%dT%H:%M:%S%z")] [container_cmd.sh] DEBUG: $1" >&2
+}
+
+log_error() {
+    echo "[$(date +"%Y-%m-%dT%H:%M:%S%z")] [container_cmd.sh] ERROR: $1" >&2
 }
 
 xml_escape() {
@@ -65,9 +70,7 @@ Usage:
 
 Environment Variables (set by docker-compose.yml):
   GATEWAY_URL          Gateway URL (default: http://host.docker.internal:8080)
-  GATEWAY_CALLBACK_URL Callback URL (default: ${GATEWAY_URL}/claude-callback)
   IPC_BASE_DIR         IPC base directory (default: /ipc)
-  IPC_DATA_DIR         Data directory for temp files (default: /ipc/data)
   WORKSPACE_NAME       Workspace name (default: cc-bridge)
   CHAT_ID              Chat ID for the conversation
 
@@ -143,20 +146,20 @@ cmd_request() {
 
     [[ -n "$message" ]] || { echo "Error: Message required" >&2; exit 1; }
 
-    echo "[container_cmd.sh] request_id=$request_id session=${SESSION_NAME:-default}"
+    log_info "request_id=$request_id session=${SESSION_NAME:-default}"
 
     # Create temp file to share Claude output with response command
-    local data_dir="${IPC_DATA_DIR}/${workspace}"
+    local data_dir="${IPC_BASE_DIR}/data/${workspace}"
     mkdir -p "$data_dir"
     local data_file="${data_dir}/${request_id}.json"
 
     # Write request_id to well-known file for Stop hook to read
     # Stop hook runs in separate process without REQUEST_ID env var
-    local latest_file="${IPC_DATA_DIR}/${workspace}/latest_request_id"
+    local latest_file="${IPC_BASE_DIR}/data/${workspace}/latest_request_id"
     echo -n "$request_id" > "$latest_file"
 
     # Debug: log the data file path
-    echo "[container_cmd.sh] DEBUG: data_file=$data_file" >&2
+    log_debug "data_file=$data_file"
 
     # Run Claude and capture output with JSON format for structured data
     # Only set env vars if not already set (allows override from outside)
@@ -192,7 +195,7 @@ cmd_request() {
     is_error=$(echo "$claude_result" | jq -r '.is_error // false' 2>/dev/null || true)
 
     if [[ -z "$CLAUDE_OUTPUT" ]]; then
-        echo "[container_cmd.sh] Warning: JSON parsing failed, falling back to raw output" >&2
+        log_warn "JSON parsing failed, falling back to raw output"
         CLAUDE_OUTPUT="$claude_result"
         CLAUDE_EXIT=$claude_exit
     elif [[ "$is_error" == "true" ]]; then
@@ -201,10 +204,14 @@ cmd_request() {
         CLAUDE_EXIT=$claude_exit
     fi
 
+    if [[ -z "$CLAUDE_OUTPUT" ]]; then
+        CLAUDE_OUTPUT="⚠️ Claude returned an empty response."
+    fi
+
     # Write output to temp file for response command to read
     # Stop hook runs in separate process, can't inherit these vars
     # Using JSON format for structured data storage
-    echo "[container_cmd.sh] DEBUG: Writing data_file=$data_file" >&2
+    log_debug "Writing data_file=$data_file"
     cat > "$data_file" <<EOF
 {
     "claude_output": $(printf '%s' "$CLAUDE_OUTPUT" | jq -Rs .),
@@ -212,9 +219,9 @@ cmd_request() {
     "chat_id": $([[ "$chat_id" =~ ^-?[0-9]+$ ]] && echo "$chat_id" || echo "\"$chat_id\"")
 }
 EOF
-    echo "[container_cmd.sh] DEBUG: data_file written, exists=$(test -f "$data_file" && echo yes || echo no)" >&2
+    log_debug "data_file written, exists=$(test -f "$data_file" && echo yes || echo no)"
 
-    echo "[container_cmd.sh] Done: $request_id exit=$CLAUDE_EXIT"
+    log_info "Done: $request_id exit=$CLAUDE_EXIT"
 
     # Call response inline since Stop hook may not trigger in -p mode
     cmd_response
@@ -236,13 +243,13 @@ cmd_response() {
 
     # Try to get request_id from latest file if not set (Stop hook scenario)
     if [[ "$request_id" == "unknown" ]] || [[ -z "$request_id" ]]; then
-        local latest_file="${IPC_DATA_DIR}/${workspace}/latest_request_id"
+        local latest_file="${IPC_BASE_DIR}/data/${workspace}/latest_request_id"
         if [[ -f "$latest_file" ]]; then
             request_id=$(cat "$latest_file" 2>/dev/null || echo "unknown")
         fi
     fi
 
-    local data_file="${IPC_DATA_DIR}/${workspace}/${request_id}.json"
+    local data_file="${IPC_BASE_DIR}/data/${workspace}/${request_id}.json"
 
     # Read Claude output from temp file (written by request command)
     # This is needed because Stop hook runs in separate process
@@ -266,17 +273,22 @@ cmd_response() {
 
         # Clean up the data file
         rm -f "$data_file" 2>/dev/null || true
-        echo "[container_cmd.sh] DEBUG: read output='${output:0:50}...' exit_code=$exit_code chat_id=$chat_id" >&2
+        log_debug "read output='${output:0:50}...' exit_code=$exit_code chat_id=$chat_id"
     else
         # Data file may have already been cleaned up by inline response call
         # This is normal in some execution scenarios
-        echo "[container_cmd.sh] DEBUG: Data file not found (already cleaned up or never created): $data_file" >&2
+        log_debug "Data file not found (already cleaned up or never created): $data_file"
     fi
 
     [[ "$request_id" != "unknown" ]] || { echo "Error: REQUEST_ID not set" >&2; exit 1; }
     if [[ -z "$chat_id" || "$chat_id" == "default" ]]; then
         echo "Error: CHAT_ID not set" >&2
         exit 1
+    fi
+
+    if [[ -z "$output" ]]; then
+        log_warn "Claude output is empty; using fallback message"
+        output="⚠️ Claude returned an empty response."
     fi
 
     local ipc_dir="${IPC_BASE_DIR}/${workspace}/responses"
@@ -286,7 +298,7 @@ cmd_response() {
     if [[ "$had_data_file" == "false" ]]; then
         local existing_response="${ipc_dir}/${request_id}.json"
         if [[ -f "$existing_response" ]]; then
-            echo "[container_cmd.sh] DEBUG: Response file already exists, skipping overwrite: $existing_response" >&2
+            log_debug "Response file already exists, skipping overwrite: $existing_response"
             return 0
         fi
     fi
@@ -352,6 +364,17 @@ EOF
             '{requestId: $requestId, chatId: $chatId, workspace: $workspace}')
     fi
 
+    # Optional callback payload mode: include output directly
+    if [[ "${IPC_MODE:-}" == "callback_payload" ]] || \
+       [[ "${AGENT_MODE:-}" == "callback_payload" ]]; then
+        payload=$(printf '%s' "$payload" | jq \
+            --arg output "$output" \
+            --argjson exitCode "$exit_code" \
+            --arg error "" \
+            --arg timestamp "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
+            '. + {output: $output, exitCode: $exitCode, timestamp: $timestamp} + (if $error != "" then {error: $error} else {} end)')
+    fi
+
     # Send HTTP callback with retry logic and exponential backoff
     local max_retries="${CALLBACK_MAX_RETRIES:-3}"
     local retry_delay="${CALLBACK_RETRY_DELAY_SEC:-1}"
@@ -363,7 +386,7 @@ EOF
     local retry_timestamps=()
 
     if [[ -z "${GATEWAY_URL}" ]]; then
-        echo "[container_cmd.sh] Callback skipped: GATEWAY_URL not set"
+        log_warn "Callback skipped: GATEWAY_URL not set"
         callback_error="no_gateway_url"
     else
         while [[ $attempt -lt $max_retries ]]; do
@@ -390,7 +413,7 @@ EOF
             rm -f "$temp_response"
 
             if [[ $http_code -ge 200 && $http_code -lt 300 ]]; then
-                echo "[container_cmd.sh] Callback succeeded (attempt $attempt, HTTP $http_code)"
+                log_info "Callback succeeded (attempt $attempt, HTTP $http_code)"
                 callback_success=true
                 callback_error=""
                 break
@@ -399,22 +422,22 @@ EOF
             # Do not retry on client errors (4xx)
             if [[ $http_code -ge 400 && $http_code -lt 500 ]]; then
                 callback_error="client_error: HTTP $http_code"
-                echo "[container_cmd.sh] Callback failed (HTTP $http_code) - client error, not retrying; body='${response_body}'"
+                log_warn "Callback failed (HTTP $http_code) - client error, not retrying; body='${response_body}'"
                 break
             fi
 
             callback_error="server_error: HTTP $http_code"
             if [[ -n "$response_body" ]]; then
-                echo "[container_cmd.sh] Callback failed (HTTP $http_code); body='${response_body}'" >&2
+                log_warn "Callback failed (HTTP $http_code); body='${response_body}'"
             fi
 
             if [[ $attempt -lt $max_retries ]]; then
-                echo "[container_cmd.sh] Callback failed (HTTP $http_code), retrying in ${retry_delay}s... (attempt $attempt/$max_retries)"
+                log_warn "Callback failed (HTTP $http_code), retrying in ${retry_delay}s... (attempt $attempt/$max_retries)"
                 sleep $retry_delay
                 retry_delay=$(awk "BEGIN {print $retry_delay * 2}")
             else
-                echo "[container_cmd.sh] Callback failed after $max_retries attempts (HTTP $http_code)"
-                echo "[container_cmd.sh] Response file preserved for MailboxWatcher polling: $response_file"
+                log_warn "Callback failed after $max_retries attempts (HTTP $http_code)"
+                log_info "Response file preserved for MailboxWatcher polling: $response_file"
             fi
         done
     fi
@@ -446,7 +469,7 @@ EOF
         fi
     fi
 
-    echo "[container_cmd.sh] Response: $request_id exit=$exit_code"
+    log_info "Response: $request_id exit=$exit_code"
 }
 
 # =============================================================================
