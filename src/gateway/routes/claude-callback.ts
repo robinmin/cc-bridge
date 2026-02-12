@@ -15,6 +15,7 @@ import type { IdempotencyService } from "@/gateway/services/IdempotencyService";
 import type { RateLimitService } from "@/gateway/services/RateLimitService";
 import { FileReadError, FileReadErrorType, type ResponseFileReader } from "@/gateway/services/ResponseFileReader";
 import { logger } from "@/packages/logger";
+import { GATEWAY_CONSTANTS } from "@/gateway/consts";
 
 /**
  * Maximum number of retries for failed callback processing
@@ -246,15 +247,76 @@ export async function handleClaudeCallback(c: Context, context: CallbackContext)
 			return sendSuccessResponse(c, true);
 		}
 
-		// 4. Read and validate response file
+		// 4. Read and validate response file or use callback payload when enabled
 		let responseData: unknown;
+		let payloadResponse: {
+			requestId: string;
+			chatId: string | number;
+			workspace: string;
+			timestamp: string;
+			output: string;
+			exitCode: number;
+			error?: string;
+			callback?: {
+				success: boolean;
+				attempts: number;
+				error?: string;
+				retryTimestamps: string[];
+			};
+		} | null = null;
 		try {
+			if (GATEWAY_CONSTANTS.FILESYSTEM_IPC.USE_CALLBACK_PAYLOAD) {
+				const payload = validationResult.data;
+				const payloadOutput =
+					typeof payload.output === "string" ? payload.output.trim() : payload.output;
+				const payloadHasOutput = typeof payloadOutput === "string" && payloadOutput.length > 0;
+				const payloadHasError = typeof payload.error === "string" && payload.error.trim().length > 0;
+				if ((payloadHasOutput || payloadHasError) && payload.exitCode !== undefined) {
+					payloadResponse = {
+						requestId,
+						chatId,
+						workspace,
+						timestamp: payload.timestamp || new Date().toISOString(),
+						output: payload.output ?? "",
+						exitCode: payload.exitCode,
+						error: payload.error,
+						callback: payload.callback,
+					};
+					responseData = payloadResponse;
+				}
+			}
+
 			if (context.responseFileReader) {
-				responseData = await context.responseFileReader.readResponseFile(workspace, requestId);
-			} else {
-				// Fallback: return 503 if no reader configured
+				const fileResponse = await context.responseFileReader.readResponseFile(workspace, requestId);
+
+				if (payloadResponse) {
+					const payloadLen = payloadResponse.output.trim().length;
+					const fileLen = fileResponse.output.trim().length;
+					if (fileLen > payloadLen) {
+						responseData = fileResponse;
+					}
+				} else {
+					responseData = fileResponse;
+				}
+			} else if (!responseData) {
 				logger.error({ requestId, workspace }, "No ResponseFileReader configured");
 				return c.json(createErrorResponse("Service unavailable", "no_reader_configured"), 503);
+			}
+
+			if (responseData && context.responseFileReader) {
+				const parsed = responseData as { output?: string };
+				const emptyOutputRetryDelays = [200, 500];
+				for (const delayMs of emptyOutputRetryDelays) {
+					if (parsed?.output && parsed.output.trim().length > 0) {
+						break;
+					}
+					logger.warn(
+						{ requestId, delayMs },
+						"Empty output detected after read; retrying response file read",
+					);
+					await new Promise((resolve) => setTimeout(resolve, delayMs));
+					responseData = await context.responseFileReader.readResponseFile(workspace, requestId);
+				}
 			}
 		} catch (err) {
 			if (err instanceof FileReadError) {
@@ -498,6 +560,7 @@ async function processCallbackAsync(
  * - Includes callback metadata if available
  */
 function formatOutputForTelegram(response: {
+	requestId: string;
 	output: string;
 	exitCode: number;
 	error?: string;
@@ -508,6 +571,11 @@ function formatOutputForTelegram(response: {
 	};
 }): string {
 	let output = response.output;
+
+	if (output.trim().length === 0) {
+		logger.warn({ requestId: response.requestId }, "Empty Claude output; sending fallback message");
+		return "⚠️ Claude returned an empty response.";
+	}
 
 	// Telegram message limit is 4096 characters
 	const MAX_LENGTH = 4000; // Leave some margin
