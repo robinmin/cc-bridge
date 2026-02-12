@@ -89,7 +89,9 @@ export const GATEWAY_CONSTANTS = {
     // Prefer callback payload output over filesystem when enabled
     USE_CALLBACK_PAYLOAD:
       process.env.IPC_MODE === "callback_payload" ||
-      process.env.AGENT_MODE === "callback_payload",
+      process.env.AGENT_MODE === "callback_payload" ||
+      process.env.IPC_MODE === "hybrid" ||
+      process.env.AGENT_MODE === "hybrid",
   },
   TMUX: {
     SESSION_PREFIX: "claude",
