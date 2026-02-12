@@ -92,9 +92,9 @@ RUN mkdir -p /app/scripts
 # Install dependencies
 RUN bun install
 
+
 # Switch to non-root user for final execution
 USER ${USER_ID}:${GROUP_ID}
 
 # Entrypoint: initialize environment, then start agent server
 # Use shell form to run init, then exec to bun (replaces shell PID)
-ENTRYPOINT ["/bin/bash", "-c", "/app/scripts/container_cmd.sh init && exec bun run src/agent/index.ts"]
