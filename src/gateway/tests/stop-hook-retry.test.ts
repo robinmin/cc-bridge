@@ -135,8 +135,8 @@ describe("Stop Hook Retry Logic", () => {
 	let testDataDir: string;
 
 	beforeEach(async () => {
-		testIpcDir = process.env.TEST_IPC_DIR || "./data/test-ipc";
-		testDataDir = path.join(testIpcDir, "data");
+	testIpcDir = process.env.TEST_IPC_DIR || "./data/test-ipc";
+	testDataDir = path.join(testIpcDir, "data");
 
 		// Clean up test directory
 		if (existsSync(testIpcDir)) {
@@ -169,7 +169,6 @@ describe("Stop Hook Retry Logic", () => {
 
 		const result = await runResponseCommand({
 			IPC_BASE_DIR: testIpcDir,
-			IPC_DATA_DIR: testDataDir,
 			REQUEST_ID: "test-success-001",
 			CHAT_ID: "123456",
 			WORKSPACE_NAME: "cc-bridge",
@@ -193,7 +192,6 @@ describe("Stop Hook Retry Logic", () => {
 
 		const result = await runResponseCommand({
 			IPC_BASE_DIR: testIpcDir,
-			IPC_DATA_DIR: testDataDir,
 			REQUEST_ID: "test-retry-001",
 			CHAT_ID: "123456",
 			WORKSPACE_NAME: "cc-bridge",
@@ -215,7 +213,6 @@ describe("Stop Hook Retry Logic", () => {
 
 		const result = await runResponseCommand({
 			IPC_BASE_DIR: testIpcDir,
-			IPC_DATA_DIR: testDataDir,
 			REQUEST_ID: "test-4xx-001",
 			CHAT_ID: "123456",
 			WORKSPACE_NAME: "cc-bridge",
@@ -239,7 +236,6 @@ describe("Stop Hook Retry Logic", () => {
 
 		const result = await runResponseCommand({
 			IPC_BASE_DIR: testIpcDir,
-			IPC_DATA_DIR: testDataDir,
 			REQUEST_ID: "test-offline-001",
 			CHAT_ID: "123456",
 			WORKSPACE_NAME: "cc-bridge",
@@ -261,7 +257,6 @@ describe("Stop Hook Retry Logic", () => {
 
 		const result = await runResponseCommand({
 			IPC_BASE_DIR: testIpcDir,
-			IPC_DATA_DIR: testDataDir,
 			REQUEST_ID: "test-no-callback-001",
 			CHAT_ID: "123456",
 			WORKSPACE_NAME: "cc-bridge",
@@ -281,7 +276,6 @@ describe("Stop Hook Retry Logic", () => {
 		// Missing REQUEST_ID - explicitly set to empty string
 		const result = await runResponseCommand({
 			IPC_BASE_DIR: testIpcDir,
-			IPC_DATA_DIR: testDataDir,
 			REQUEST_ID: "", // Explicitly unset
 			CHAT_ID: "123456",
 			WORKSPACE_NAME: "cc-bridge",
@@ -297,7 +291,6 @@ describe("Stop Hook Retry Logic", () => {
 
 		const result = await runResponseCommand({
 			IPC_BASE_DIR: testIpcDir,
-			IPC_DATA_DIR: testDataDir,
 			REQUEST_ID: "test-timeout-001",
 			CHAT_ID: "123456",
 			WORKSPACE_NAME: "cc-bridge",
@@ -319,7 +312,6 @@ describe("Stop Hook Retry Logic", () => {
 
 		const result = await runResponseCommand({
 			IPC_BASE_DIR: testIpcDir,
-			IPC_DATA_DIR: testDataDir,
 			REQUEST_ID: "test-error-001",
 			CHAT_ID: "123456",
 			WORKSPACE_NAME: "cc-bridge",
@@ -340,7 +332,6 @@ describe("Stop Hook Retry Logic", () => {
 
 		const result = await runResponseCommand({
 			IPC_BASE_DIR: testIpcDir,
-			IPC_DATA_DIR: testDataDir,
 			REQUEST_ID: "test-timestamps-001",
 			CHAT_ID: "123456",
 			WORKSPACE_NAME: "cc-bridge",
