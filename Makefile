@@ -1,6 +1,6 @@
 .PHONY: help all dev test test-quick lint format check status clean \
 	gateway-start gateway-stop gateway-restart gateway-install gateway-uninstall logs-monitor \
-	docker-restart docker-stop docker-logs docker-status \
+	docker-restart docker-stop docker-logs docker-logs-cmd docker-status \
 	talk talk-response msg-sessions msg-health msg-create-session msg-kill-session msg-help
 
 # Default target
@@ -174,6 +174,10 @@ docker-stop:
 ## docker-logs: Monitor Docker container logs in real-time
 docker-logs:
 	@cd src/dockers && docker-compose logs -f claude-agent
+
+## docker-logs-cmd: Monitor container_cmd.sh logs in real-time
+docker-logs-cmd:
+	@cd src/dockers && docker-compose logs -f claude-agent 2>&1 | grep --line-buffered '\[container_cmd.sh\]'
 
 ## docker-status: Show Docker container status and running processes
 docker-status:
