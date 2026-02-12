@@ -286,7 +286,11 @@ export async function handleClaudeCallback(c: Context, context: CallbackContext)
 				}
 			}
 
-			if (context.responseFileReader) {
+			const useInlinePayload =
+				process.env.IPC_MODE === "hybrid" || process.env.AGENT_MODE === "hybrid";
+
+			// In hybrid mode, if payload exists, skip file reads entirely
+			if (context.responseFileReader && !(useInlinePayload && payloadResponse)) {
 				const fileResponse = await context.responseFileReader.readResponseFile(workspace, requestId);
 
 				if (payloadResponse) {
