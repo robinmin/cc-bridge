@@ -159,10 +159,10 @@ logs-monitor:
 ## docker-restart: Rebuild Docker image and restart container
 docker-restart:
 	@echo "Rebuilding Docker image..."
-	@cd src/dockers && docker-compose build --no-cache
+	@export USER_NAME=$$(whoami) USER_ID=$$(id -u) GROUP_ID=$$(id -g) && cd src/dockers && docker-compose build --no-cache
 	@echo "Restarting Docker container..."
-	@cd src/dockers && docker-compose down
-	@cd src/dockers && docker-compose up -d
+	@export USER_NAME=$$(whoami) USER_ID=$$(id -u) GROUP_ID=$$(id -g) && cd src/dockers && docker-compose down
+	@export USER_NAME=$$(whoami) USER_ID=$$(id -u) GROUP_ID=$$(id -g) && cd src/dockers && docker-compose up -d
 	@echo "✅ Docker image rebuilt and container restarted"
 
 ## docker-stop: Stop Docker container
