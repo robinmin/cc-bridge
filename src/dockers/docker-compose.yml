@@ -59,7 +59,7 @@ services:
       - AGENT_TCP_PORT=3001
       - CLAUDE_AGENT_SKILLS=1
       # IPC callback payload mode (avoid NFS cache race)
-      # - IPC_MODE=${IPC_MODE:-callback_payload}
+      - IPC_MODE=${IPC_MODE:-callback_payload}
 
       # Claude CLI expects ANTHROPIC_BASE_URL/ANTHROPIC_API_KEY/ANTHROPIC_AUTH_TOKEN for authentication
       - ANTHROPIC_BASE_URL=${ANTHROPIC_BASE_URL:-}
@@ -76,7 +76,6 @@ services:
       # IPC directories for filesystem communication
       - IPC_BASE_DIR=/ipc
       - IPC_DATA_DIR=/ipc/data
-
       # HTTP API Server Configuration
       - HTTP_PORT=${HTTP_PORT:-3000}
       - HTTP_HOST=${HTTP_HOST:-0.0.0.0}
@@ -109,7 +108,7 @@ services:
     command:
       - sh
       - -c
-      - tmux start-server && bun run src/agent/index.ts
+      - /app/scripts/container_cmd.sh init
 
     # Health check
     healthcheck:
