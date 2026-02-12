@@ -38,6 +38,7 @@ This project uses environment variables for configuration. The `.env` file is gi
 
 - `PROJECTS_ROOT` - Root directory for projects (default: ~/xprojects)
 - `WORKSPACE_NAME` - Current workspace name (default: cc-bridge)
+- `IPC_MODE` - IPC mode (`callback_payload` or `filesystem`)
 
 ### MCP Servers (for Claude Code)
 
@@ -49,12 +50,6 @@ See `src/dockers/.env.example` for the complete list of MCP server configuration
 - `JUPYTER_URL` - Jupyter server URL
 - `JUPYTER_TOKEN` - Jupyter authentication token
 - `WANDB_API_KEY` - Weights & Biases API key
-
-### Docker User Mapping
-
-- `USER_NAME` - Container username (default: bun)
-- `USER_ID` - Container user ID (default: 1000)
-- `GROUP_ID` - Container group ID (default: 1000)
 
 ## Security Notes
 
@@ -70,9 +65,7 @@ The `src/dockers/docker-compose.yml` file uses these variables with defaults:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `WORKSPACE_NAME` | cc-bridge | Current workspace name |
-| `USER_NAME` | bun | Container username |
-| `USER_ID` | 1000 | Container user ID |
-| `GROUP_ID` | 1000 | Container group ID |
+| `IPC_MODE` | filesystem | IPC mode (`callback_payload` or `filesystem`) |
 | `BRAVE_API_KEY` | *(required)* | Brave Search API key |
 
 ## See Also
