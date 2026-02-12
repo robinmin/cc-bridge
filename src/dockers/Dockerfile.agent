@@ -29,7 +29,6 @@ RUN apt-get update && apt-get install -y \
     # Cleanup
     && rm -rf /var/lib/apt/lists/*
 
-# ARG for dynamic user creation
 ARG USER_NAME=robin
 ARG USER_ID=1000
 ARG GROUP_ID=1000
@@ -68,6 +67,14 @@ ENV PATH="/app/node_modules/.bin:/usr/local/bun/bin:/usr/local/bin:/usr/bin:/bin
 
 # Set working directory to workspace (dynamic based on build arg)
 WORKDIR /workspaces/${WORKSPACE_NAME}
+
+# Bake Claude settings without Stop hook to avoid duplicate/early callbacks
+USER root
+COPY src/dockers/.claude/settings.json /tmp/claude-settings.json
+RUN jq 'del(.hooks)' /tmp/claude-settings.json > /Users/${USER_NAME}/.claude/settings.json && \
+    chown ${USER_ID}:${GROUP_ID} /Users/${USER_NAME}/.claude/settings.json && \
+    rm -f /tmp/claude-settings.json
+USER ${USER_ID}:${GROUP_ID}
 
 # Copy dependency definitions
 COPY --chown=${USER_NAME}:${USER_NAME} package.json bun.lock ./
