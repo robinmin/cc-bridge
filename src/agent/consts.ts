@@ -9,8 +9,8 @@ export const AGENT_CONSTANTS = {
 		MAX_OUTPUT_SIZE_BYTES: 10 * 1024 * 1024, // 10MB
 		TIMEOUT_EXIT_CODE: 124,
 		ERROR_EXIT_CODE: -1,
-		IPC_DIR: "data/ipc",
-		AGENT_SOCKET: "data/ipc/agent.sock",
+		IPC_DIR: process.env.IPC_BASE_DIR || "data/ipc",
+		AGENT_SOCKET: `${process.env.IPC_BASE_DIR || "data/ipc"}/agent.sock`,
 		CONFIG_FILE: "data/config/agent.jsonc",
 	},
 
