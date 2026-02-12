@@ -76,6 +76,10 @@ export const GATEWAY_CONSTANTS = {
 		DEFAULT_FILE_TTL_MS: 3600000, // 1 hour
 		RETRY_DELAY_MS: 100,
 		MAX_FILE_SIZE_MB: 100, // 100MB max file size
+		// Prefer callback payload output over filesystem when enabled
+		USE_CALLBACK_PAYLOAD:
+			process.env.IPC_MODE === "callback_payload" ||
+			process.env.AGENT_MODE === "callback_payload",
 	},
 	TMUX: {
 		SESSION_PREFIX: "claude",
