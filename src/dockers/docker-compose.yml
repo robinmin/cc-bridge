@@ -25,6 +25,7 @@ services:
       # USER_NAME is passed from Makefile (defaults to current user)
       - ./.claude/settings.json:/Users/${USER_NAME}/.claude/settings.json:rw
       - ./.claude/CLAUDE.md:/Users/${USER_NAME}/.claude/CLAUDE.md:rw
+      - ./.claude/memories/${WORKSPACE_NAME:-cc-bridge}:/Users/${USER_NAME}/.claude/projects/-workspaces-${WORKSPACE_NAME:-cc-bridge}/memory:rw
 
       # Persistent state and authentication from host
       - ~/.claude/plugins:/Users/${USER_NAME}/.claude/plugins:rw
@@ -57,6 +58,8 @@ services:
       - AGENT_MODE=tcp
       - AGENT_TCP_PORT=3001
       - CLAUDE_AGENT_SKILLS=1
+      # IPC callback payload mode (avoid NFS cache race)
+      # - IPC_MODE=${IPC_MODE:-callback_payload}
 
       # Claude CLI expects ANTHROPIC_BASE_URL/ANTHROPIC_API_KEY/ANTHROPIC_AUTH_TOKEN for authentication
       - ANTHROPIC_BASE_URL=${ANTHROPIC_BASE_URL:-}
