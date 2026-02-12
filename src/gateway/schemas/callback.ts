@@ -1,9 +1,14 @@
 import { z } from "zod";
 
-/**
- * Callback request schema for Stop Hook callback
- * Validates requestId, chatId, and workspace format
- */
+export const CallbackMetadataSchema = z.object({
+	success: z.boolean(),
+	attempts: z.number().nonnegative(),
+	error: z.string().optional(),
+	retryTimestamps: z.array(z.string()),
+});
+
+export type CallbackMetadata = z.infer<typeof CallbackMetadataSchema>;
+
 export const CallbackRequestSchema = z.object({
 	requestId: z
 		.string({
@@ -27,21 +32,14 @@ export const CallbackRequestSchema = z.object({
 		.min(1, "workspace cannot be empty")
 		.max(64, "workspace name too long")
 		.regex(/^[a-zA-Z0-9_-]+$/, "workspace must contain only alphanumeric characters, underscores, and hyphens"),
+	output: z.string().optional(),
+	exitCode: z.number().optional(),
+	error: z.string().optional(),
+	timestamp: z.string().datetime({ message: "Invalid ISO 8601 timestamp" }).optional(),
+	callback: CallbackMetadataSchema.optional(),
 });
 
 export type CallbackRequest = z.infer<typeof CallbackRequestSchema>;
-
-/**
- * Callback metadata from Stop Hook retry logic
- */
-export const CallbackMetadataSchema = z.object({
-	success: z.boolean(),
-	attempts: z.number().nonnegative(),
-	error: z.string().optional(),
-	retryTimestamps: z.array(z.string()),
-});
-
-export type CallbackMetadata = z.infer<typeof CallbackMetadataSchema>;
 
 /**
  * Response file structure written by Agent, read by Gateway
