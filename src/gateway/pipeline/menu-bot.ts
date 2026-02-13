@@ -23,6 +23,7 @@ export class MenuBot implements Bot {
 		{ command: "schedulers", description: "List scheduled tasks" },
 		{ command: "scheduler_add", description: "Add scheduled task" },
 		{ command: "scheduler_del", description: "Delete scheduled task by id" },
+		{ command: "clear", description: "Clear current workspace session context" },
 		{ command: "status", description: "System infrastructure health" },
 		{ command: "help", description: "Show available commands" },
 	];
