@@ -25,14 +25,19 @@ export class TelegramClient {
 
 	async sendMessage(chatId: string | number, text: string, options?: { parse_mode?: string }): Promise<void> {
 		const url = `${GATEWAY_CONSTANTS.DIAGNOSTICS.URLS.TELEGRAM_API_BASE}/bot${this.botToken}/sendMessage`;
+		const payload: { chat_id: string | number; text: string; parse_mode?: string } = {
+			chat_id: chatId,
+			text,
+		};
+
+		if (options?.parse_mode) {
+			payload.parse_mode = options.parse_mode;
+		}
+
 		const response = await fetch(url, {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({
-				chat_id: chatId,
-				text,
-				parse_mode: options?.parse_mode || "Markdown",
-			}),
+			body: JSON.stringify(payload),
 			signal: AbortSignal.timeout(TELEGRAM_API_TIMEOUT_MS),
 		});
 
