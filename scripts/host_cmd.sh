@@ -42,6 +42,15 @@ function cmd_host_help() {
     echo "Commands:"
     echo "  uptime - Show host uptime"
     echo "  ps     - Show top 5 processes by CPU"
+    echo "  agents - List available agents"
+    echo "  commands - List available slash commands"
+    echo "  skills - List available skills"
+    echo "  schedulers - List scheduled tasks"
+    echo "  ws_list - List workspaces"
+    echo "  ws_current - Show current workspace"
+    echo "  ws_switch <name> - Switch workspace"
+    echo "  ws_add <name> - Create workspace"
+    echo "  ws_del <name> - Delete workspace"
     echo "  help   - Show this help message"
 }
 
@@ -53,6 +62,12 @@ function host_main() {
             ;;
         "ps")
             cmd_host_ps
+            ;;
+        "agents"|"commands"|"skills"|"schedulers"|"ws_list"|"ws_current")
+            bun run scripts/host_cmd.ts "$1"
+            ;;
+        "ws_switch"|"ws_add"|"ws_del")
+            bun run scripts/host_cmd.ts "$1" "${2:-}"
             ;;
         "help"|"--help"|"-h")
             cmd_host_help
