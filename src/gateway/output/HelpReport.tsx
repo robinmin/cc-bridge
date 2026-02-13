@@ -1,6 +1,7 @@
 /** @jsxImportSource hono/jsx */
-import { Header } from "./common";
+
 import { renderTemplate } from "@/packages/template";
+import { Header } from "./common";
 
 export interface CommandInfo {
 	command: string;
@@ -17,6 +18,9 @@ export const HelpReport = ({ commands, format }: { commands: CommandInfo[]; form
 	);
 };
 
-const HELP_TEMPLATE = ["{{header}}", "", "{{#each commands}}/{{this.command}} - {{this.description}}", "{{/each}}"].join(
-	"\n",
-);
+const HELP_TEMPLATE = [
+	"{{header}}",
+	"",
+	"{{#each commands}}/{{this.command}} - {{this.description}}",
+	"{{/each}}",
+].join("\n");
