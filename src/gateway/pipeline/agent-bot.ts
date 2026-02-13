@@ -5,6 +5,7 @@ import { discoveryCache } from "@/gateway/services/discovery-cache";
 import { SessionPoolService } from "@/gateway/services/SessionPoolService";
 import { TmuxManager } from "@/gateway/services/tmux-manager";
 import { logger } from "@/packages/logger";
+import { renderTemplate } from "@/packages/template";
 import {
 	type ClaudeExecutionConfigExtended,
 	type ClaudeExecutionResultOrAsync,
@@ -35,10 +36,10 @@ export class AgentBot implements Bot {
 			{ command: "ws_current", description: "Show current workspace" },
 			{ command: "ws_switch", description: "Switch to different workspace" },
 			{
-				command: "ws_create",
+				command: "ws_add",
 				description: "Explicitly create workspace session",
 			},
-			{ command: "ws_delete", description: "Delete workspace session" },
+			{ command: "ws_del", description: "Delete workspace session" },
 		];
 	}
 
@@ -107,6 +108,31 @@ export class AgentBot implements Bot {
 			await this.handleListSkills(message);
 			return true;
 		}
+		if (text.startsWith("/schedulers")) {
+			await this.handleSchedulers(message);
+			return true;
+		}
+		if (text.startsWith("/scheduler_add ")) {
+			const match = text.match(/^\/scheduler_add\s+(\S+)\s+(once|recurring)\s+(\S+)\s+(.+)$/);
+			if (match) {
+				await this.handleSchedulerAdd(message, match[1], match[2], match[3], match[4]);
+			} else {
+				await this.channel.sendMessage(
+					message.chatId,
+					"Usage: /scheduler_add <instance> <once|recurring> <schedule> <prompt>\nExample: /scheduler_add cc-bridge recurring 1h \"Daily summary\"",
+				);
+			}
+			return true;
+		}
+		if (text.startsWith("/scheduler_del ")) {
+			const match = text.match(/^\/scheduler_del\s+(\S+)$/);
+			if (match) {
+				await this.handleSchedulerDel(message, match[1]);
+			} else {
+				await this.channel.sendMessage(message.chatId, "Usage: /scheduler_del <task_id>");
+			}
+			return true;
+		}
 
 		// Handle workspace commands
 		if (text.startsWith("/ws_list")) {
@@ -124,15 +150,15 @@ export class AgentBot implements Bot {
 			}
 			return true;
 		}
-		if (text.startsWith("/ws_create ")) {
-			const match = text.match(/^\/ws_create\s+(.+)$/);
+		if (text.startsWith("/ws_add ")) {
+			const match = text.match(/^\/ws_add\s+(.+)$/);
 			if (match) {
 				await this.handleWorkspaceCreate(message, instance, match[1].trim());
 			}
 			return true;
 		}
-		if (text.startsWith("/ws_delete ")) {
-			const match = text.match(/^\/ws_delete\s+(.+)$/);
+		if (text.startsWith("/ws_del ")) {
+			const match = text.match(/^\/ws_del\s+(.+)$/);
 			if (match) {
 				await this.handleWorkspaceDelete(message, instance, match[1].trim());
 			}
@@ -181,6 +207,115 @@ export class AgentBot implements Bot {
 		await this.channel.sendMessage(message.chatId, `❌ Error: ${errorMsg}`);
 
 		return true;
+	}
+
+	/**
+	 * Handle /schedulers command - list all scheduled tasks
+	 */
+	private async handleSchedulers(message: Message): Promise<void> {
+		try {
+			const tasks = (await this.persistenceManager.getAllTasks()) as Array<{
+				id: string;
+				instance_name: string;
+				chat_id: string;
+				prompt: string;
+				schedule_type: string;
+				schedule_value: string;
+				next_run: string;
+				status: string;
+			}>;
+
+			if (!tasks || tasks.length === 0) {
+				const output = renderTemplate(SCHEDULERS_TEMPLATE, {
+					systemTasks: [
+						{
+							id: "uploads_cleanup",
+							schedule: "every 1m",
+							source: "TaskScheduler",
+						},
+					],
+					userTasks: [],
+					userTaskCount: 0,
+					noUserTasks: true,
+				});
+				await this.channel.sendMessage(message.chatId, sanitizeForTelegramMarkdown(output), { parse_mode: "Markdown" });
+				return;
+			}
+
+			const userTasks = tasks.map((task) => ({
+				id: task.id,
+				instance: task.instance_name,
+				schedule: `${task.schedule_type}:${task.schedule_value}`,
+				next: task.next_run || "n/a",
+				status: task.status,
+				prompt:
+					task.prompt && task.prompt.length > 80 ? `${task.prompt.substring(0, 80)}...` : task.prompt || "",
+			}));
+
+			const output = renderTemplate(SCHEDULERS_TEMPLATE, {
+				systemTasks: [
+					{
+						id: "uploads_cleanup",
+						schedule: "every 1m",
+						source: "TaskScheduler",
+					},
+				],
+				userTasks,
+				userTaskCount: userTasks.length,
+				noUserTasks: userTasks.length === 0,
+			});
+
+			await this.channel.sendMessage(message.chatId, sanitizeForTelegramMarkdown(output), { parse_mode: "Markdown" });
+		} catch (error) {
+			logger.error({ error: error instanceof Error ? error.message : String(error) }, "Failed to list schedulers");
+			await this.channel.sendMessage(message.chatId, "⚠️ Failed to list scheduled tasks.");
+		}
+	}
+
+	private async handleSchedulerAdd(
+		message: Message,
+		instanceName: string,
+		scheduleType: string,
+		scheduleValue: string,
+		prompt: string,
+	): Promise<void> {
+		try {
+			const id = `task-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+			const nextRun = new Date().toISOString().replace("T", " ").substring(0, 19);
+
+			await this.persistenceManager.saveTask({
+				id,
+				instance_name: instanceName,
+				chat_id: String(message.chatId),
+				prompt,
+				schedule_type: scheduleType as "once" | "recurring",
+				schedule_value: scheduleValue,
+				next_run: nextRun,
+				status: "active",
+			});
+
+			await this.channel.sendMessage(
+				message.chatId,
+				`✅ Scheduled task created.\nID: ${id}\nInstance: ${instanceName}\nSchedule: ${scheduleType}:${scheduleValue}`,
+			);
+		} catch (error) {
+			logger.error({ error: error instanceof Error ? error.message : String(error) }, "Failed to add scheduler");
+			await this.channel.sendMessage(message.chatId, "⚠️ Failed to create scheduled task.");
+		}
+	}
+
+	private async handleSchedulerDel(message: Message, taskId: string): Promise<void> {
+		try {
+			await this.persistenceManager.deleteTask(taskId);
+			await this.channel.sendMessage(message.chatId, `✅ Scheduled task deleted: ${taskId}`);
+		} catch (error) {
+			logger.error({ error: error instanceof Error ? error.message : String(error) }, "Failed to delete scheduler");
+			await this.channel.sendMessage(message.chatId, "⚠️ Failed to delete scheduled task.");
+		}
+	}
+
+	private sanitizeForTelegramMarkdown(input: string): string {
+		return sanitizeForTelegramMarkdown(input);
 	}
 
 	/**
@@ -247,7 +382,6 @@ export class AgentBot implements Bot {
 				return;
 			}
 
-			// Group agents by plugin
 			const byPlugin: Record<string, typeof cache.agents> = {};
 			for (const agent of cache.agents) {
 				if (!byPlugin[agent.plugin]) {
@@ -256,24 +390,23 @@ export class AgentBot implements Bot {
 				byPlugin[agent.plugin].push(agent);
 			}
 
-			let output = `🤖 **Available Claude Code Agents** (${cache.agents.length} total)\n\n`;
-
-			for (const [plugin, agents] of Object.entries(byPlugin)) {
-				output += `📦 *${plugin}*\n`;
-				for (const agent of agents) {
-					const toolList = agent.tools
+			const plugins = Object.entries(byPlugin).map(([plugin, agents]) => ({
+				name: plugin,
+				items: agents.map((agent) => ({
+					name: agent.name,
+					description:
+						agent.description.length > 80 ? `${agent.description.substring(0, 80)}...` : agent.description,
+					tools: agent.tools
 						? agent.tools.slice(0, 3).join(", ") + (agent.tools.length > 3 ? "..." : "")
-						: "";
-					output += `\n  \`/${agent.name}\` - ${agent.description.substring(0, 80)}${agent.description.length > 80 ? "..." : ""}`;
-					if (toolList) {
-						output += `\n  🔧 Tools: ${toolList}`;
-					}
-					output += "\n";
-				}
-				output += "\n";
-			}
+						: "",
+				})),
+			}));
 
-			output += `_Last updated: ${new Date(cache.lastUpdated).toLocaleDateString()}_`;
+			const output = renderTemplate(AGENTS_TEMPLATE, {
+				total: cache.agents.length,
+				lastUpdated: new Date(cache.lastUpdated).toLocaleDateString(),
+				plugins,
+			});
 
 			await this.channel.sendMessage(message.chatId, output);
 		} catch (error) {
@@ -294,7 +427,6 @@ export class AgentBot implements Bot {
 				return;
 			}
 
-			// Group commands by plugin
 			const byPlugin: Record<string, typeof cache.commands> = {};
 			for (const command of cache.commands) {
 				if (!byPlugin[command.plugin]) {
@@ -303,18 +435,23 @@ export class AgentBot implements Bot {
 				byPlugin[command.plugin].push(command);
 			}
 
-			let output = `⚡ **Available Slash Commands** (${cache.commands.length} total)\n\n`;
+			const plugins = Object.entries(byPlugin).map(([plugin, commands]) => ({
+				name: plugin,
+				items: commands.map((command) => ({
+					name: command.name,
+					hint: command.argumentHint ? ` ${command.argumentHint}` : "",
+					description:
+						command.description.length > 100
+							? `${command.description.substring(0, 100)}...`
+							: command.description,
+				})),
+			}));
 
-			for (const [plugin, commands] of Object.entries(byPlugin)) {
-				output += `📦 *${plugin}*\n`;
-				for (const command of commands) {
-					const hint = command.argumentHint ? ` ${command.argumentHint}` : "";
-					output += `\n  \`/${command.name}${hint}\`\n  ${command.description.substring(0, 100)}${command.description.length > 100 ? "..." : ""}\n`;
-				}
-				output += "\n";
-			}
-
-			output += `_Last updated: ${new Date(cache.lastUpdated).toLocaleDateString()}_`;
+			const output = renderTemplate(COMMANDS_TEMPLATE, {
+				total: cache.commands.length,
+				lastUpdated: new Date(cache.lastUpdated).toLocaleDateString(),
+				plugins,
+			});
 
 			// Split message if it exceeds Telegram's 4096 character limit
 			const MAX_LENGTH = 4000;
@@ -351,7 +488,6 @@ export class AgentBot implements Bot {
 				return;
 			}
 
-			// Group skills by plugin
 			const byPlugin: Record<string, typeof cache.skills> = {};
 			for (const skill of cache.skills) {
 				if (!byPlugin[skill.plugin]) {
@@ -360,17 +496,20 @@ export class AgentBot implements Bot {
 				byPlugin[skill.plugin].push(skill);
 			}
 
-			let output = `🎯 **Available Agent Skills** (${cache.skills.length} total)\n\n`;
+			const plugins = Object.entries(byPlugin).map(([plugin, skills]) => ({
+				name: plugin,
+				items: skills.map((skill) => ({
+					name: skill.name,
+					description:
+						skill.description.length > 100 ? `${skill.description.substring(0, 100)}...` : skill.description,
+				})),
+			}));
 
-			for (const [plugin, skills] of Object.entries(byPlugin)) {
-				output += `📦 *${plugin}*\n`;
-				for (const skill of skills) {
-					output += `\n  \`rd2:${skill.name}\`\n  ${skill.description.substring(0, 100)}${skill.description.length > 100 ? "..." : ""}\n`;
-				}
-				output += "\n";
-			}
-
-			output += `_Last updated: ${new Date(cache.lastUpdated).toLocaleDateString()}_`;
+			const output = renderTemplate(SKILLS_TEMPLATE, {
+				total: cache.skills.length,
+				lastUpdated: new Date(cache.lastUpdated).toLocaleDateString(),
+				plugins,
+			});
 
 			// Split message if it exceeds Telegram's 4096 character limit
 			const MAX_LENGTH = 4000;
@@ -458,7 +597,7 @@ export class AgentBot implements Bot {
 				output += `🕐 Last active: ${lastActive} minutes ago`;
 			} else {
 				output += `\nℹ️ No active session for this workspace.\n`;
-				output += `Use \`/ws_create ${workspace}\` to create one.`;
+				output += `Use \`/ws_add ${workspace}\` to create one.`;
 			}
 
 			await this.channel.sendMessage(message.chatId, output);
@@ -520,7 +659,7 @@ export class AgentBot implements Bot {
 	}
 
 	/**
-	 * Handle /ws_create command - explicitly create workspace session
+	 * Handle /ws_add command - explicitly create workspace session
 	 */
 	async handleWorkspaceCreate(
 		message: Message,
@@ -560,7 +699,7 @@ export class AgentBot implements Bot {
 	}
 
 	/**
-	 * Handle /ws_delete command - delete workspace session
+	 * Handle /ws_del command - delete workspace session
 	 */
 	async handleWorkspaceDelete(
 		message: Message,
@@ -628,3 +767,82 @@ export class AgentBot implements Bot {
 		return pool;
 	}
 }
+
+function sanitizeForTelegramMarkdown(input: string): string {
+	return input.replace(/_/g, "\\_").replace(/\*/g, "").replace(/`/g, "");
+}
+
+const AGENTS_TEMPLATE = [
+	"🤖 **Available Claude Code Agents** ({{total}} total)",
+	"",
+	"{{#each plugins}}",
+	"📦 *{{this.name}}*",
+	"{{#each this.items}}",
+	"",
+	"  `\/{{this.name}}` - {{this.description}}",
+	"{{#if this.tools}}",
+	"  🔧 Tools: {{this.tools}}",
+	"{{/if}}",
+	"{{/each}}",
+	"",
+	"{{/each}}",
+	"_Last updated: {{lastUpdated}}_",
+].join("\n");
+
+const COMMANDS_TEMPLATE = [
+	"⚡ **Available Slash Commands** ({{total}} total)",
+	"",
+	"{{#each plugins}}",
+	"📦 *{{this.name}}*",
+	"{{#each this.items}}",
+	"",
+	"  `\/{{this.name}}{{this.hint}}`",
+	"  {{this.description}}",
+	"{{/each}}",
+	"",
+	"{{/each}}",
+	"_Last updated: {{lastUpdated}}_",
+].join("\n");
+
+const SKILLS_TEMPLATE = [
+	"🎯 **Available Agent Skills** ({{total}} total)",
+	"",
+	"{{#each plugins}}",
+	"📦 *{{this.name}}*",
+	"{{#each this.items}}",
+	"",
+	"  `rd2:{{this.name}}`",
+	"  {{this.description}}",
+	"{{/each}}",
+	"",
+	"{{/each}}",
+	"_Last updated: {{lastUpdated}}_",
+].join("\n");
+
+const SCHEDULERS_TEMPLATE = [
+	"## System Tasks",
+	"",
+	"{{#each systemTasks}}",
+	"• {{this.id}}",
+	"  - Schedule: {{this.schedule}}",
+	"  - Source: {{this.source}}",
+	"",
+	"{{/each}}",
+	"## User Tasks ({{userTaskCount}})",
+	"",
+	"{{#if noUserTasks}}",
+	"No user-created scheduled tasks found.",
+	"{{/if}}",
+	"{{#each userTasks}}",
+	"• {{this.id}}",
+	"  - ID: {{this.id}}",
+	"  - Instance: {{this.instance}}",
+	"  - Schedule: {{this.schedule}}",
+	"  - Next: {{this.next}}",
+	"  - Status: {{this.status}}",
+	"{{#if this.prompt}}",
+	"  - Prompt: {{this.prompt}}",
+	"{{/if}}",
+	"",
+	"{{/each}}",
+].join("\n");
