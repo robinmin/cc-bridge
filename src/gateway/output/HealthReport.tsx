@@ -1,6 +1,7 @@
 /** @jsxImportSource hono/jsx */
-import { Header, Section, StatusIcon } from "./common";
+
 import { renderTemplate } from "@/packages/template";
+import { Header, Section, StatusIcon } from "./common";
 
 interface HealthData {
 	time: string;
