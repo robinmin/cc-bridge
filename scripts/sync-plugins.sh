@@ -54,10 +54,18 @@ add_mcp() {
 # Register requested MCPs
 add_mcp "shadcn" -- bunx shadcn@latest mcp
 add_mcp "ref" -- bunx ref-tools-mcp@latest
-add_mcp "auggie-mcp" -- bunx @aj47/auggie-mcp --mcp
 add_mcp "grep" --transport http https://mcp.grep.app
 add_mcp "brave-search" -- bunx @modelcontextprotocol/server-brave-search
 add_mcp "huggingface" --transport http https://huggingface.co/mcp
+
+# Optional MCP: auggie-mcp (can fail to connect when not configured)
+if [[ "${AUGGIE_MCP_ENABLED:-false}" == "true" ]]; then
+    add_mcp "auggie-mcp" -- bunx @aj47/auggie-mcp --mcp
+else
+    echo "   ⏭️ Skipping MCP auggie-mcp (set AUGGIE_MCP_ENABLED=true to enable)"
+    # Remove stale config to avoid failed health checks
+    claude mcp remove "auggie-mcp" 2>/dev/null || true
+fi
 
 echo "✅ MCP sync complete!"
 claude mcp list

@@ -85,9 +85,10 @@ COPY --chown=${USER_NAME}:${USER_NAME} src/packages ./src/packages
 COPY --chown=${USER_NAME}:${USER_NAME} src/agent ./src/agent
 
 # Copy automation scripts to /app (container_cmd.sh is mounted via docker-compose.yml)
+RUN mkdir -p /app/scripts
 COPY --chown=${USER_NAME}:${USER_NAME} --chmod=755 scripts/sync-plugins.sh /app/sync-plugins.sh
 COPY --chown=${USER_NAME}:${USER_NAME} --chmod=755 scripts/refresh-discovery-cache.sh /app/refresh-discovery-cache.sh
-RUN mkdir -p /app/scripts
+COPY --chown=${USER_NAME}:${USER_NAME} --chmod=755 scripts/resolve-llm-provider.sh /app/scripts/resolve-llm-provider.sh
 
 # Install dependencies
 RUN bun install

@@ -43,6 +43,23 @@ log_error() {
     echo "[$(date +"%Y-%m-%dT%H:%M:%S%z")] [container_cmd.sh] ERROR: $1" >&2
 }
 
+resolve_llm_provider_env() {
+    local resolver="/app/scripts/resolve-llm-provider.sh"
+    if [[ ! -x "$resolver" ]]; then
+        log_warn "LLM provider resolver not found at $resolver; using existing ANTHROPIC_* env"
+        return 0
+    fi
+
+    local resolved_exports
+    if ! resolved_exports="$("$resolver")"; then
+        log_error "Failed to resolve LLM provider environment"
+        return 1
+    fi
+
+    eval "$resolved_exports"
+    return 0
+}
+
 strip_claude_hooks() {
     # Default: strip hooks only in hybrid mode (can override with STRIP_STOP_HOOK=0/1)
     local strip="${STRIP_STOP_HOOK:-}"
@@ -157,6 +174,7 @@ Environment Variables (set by docker-compose.yml):
   GATEWAY_URL          Gateway URL (default: http://host.docker.internal:8080)
   IPC_BASE_DIR         IPC base directory (default: /ipc)
   WORKSPACE_NAME       Workspace name (default: cc-bridge)
+  LLM_PROVIDER         LLM provider selector (default: anthropic)
   CHAT_ID              Chat ID for the conversation
   IPC_MODE             IPC mode (callback_payload or hybrid)
   STRIP_STOP_HOOK      Force strip Stop hook (1/0). Default: auto in hybrid mode
@@ -179,6 +197,11 @@ EOF
 
 cmd_init() {
     log_info "Initializing container environment..."
+
+    if ! resolve_llm_provider_env; then
+        log_error "Container init aborted due to invalid LLM provider configuration"
+        exit 1
+    fi
 
     # Strip Stop hooks in inline mode to prevent duplicate callbacks
     strip_claude_hooks
@@ -259,6 +282,11 @@ cmd_request() {
     local workspace="${WORKSPACE_NAME:-cc-bridge}"
 
     [[ -n "$message" ]] || { echo "Error: Message required" >&2; exit 1; }
+
+    if ! resolve_llm_provider_env; then
+        log_error "Request aborted due to invalid LLM provider configuration"
+        exit 1
+    fi
 
     log_info "request_id=$request_id session=${SESSION_NAME:-default}"
 

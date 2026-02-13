@@ -254,6 +254,92 @@ describe("Agent API Routes", () => {
 		});
 	});
 
+	describe("POST /execute provider env mapping", () => {
+		const providerEnvKeys = [
+			"LLM_PROVIDER",
+			"LLM_ZAI_BASE_URL",
+			"LLM_ZAI_API_KEY",
+			"LLM_ZAI_AUTH_TOKEN",
+			"LLM_MINIMAX_BASE_URL",
+			"LLM_MINIMAX_API_KEY",
+			"LLM_MINIMAX_AUTH_TOKEN",
+			"ANTHROPIC_BASE_URL",
+			"ANTHROPIC_API_KEY",
+			"ANTHROPIC_AUTH_TOKEN",
+		] as const;
+
+		const withEnv = async (env: Record<string, string>, run: () => Promise<void>) => {
+			const previous = new Map<string, string | undefined>();
+			for (const key of providerEnvKeys) {
+				previous.set(key, process.env[key]);
+				delete process.env[key];
+			}
+			for (const [key, value] of Object.entries(env)) {
+				process.env[key] = value;
+			}
+
+			try {
+				await run();
+			} finally {
+				for (const key of providerEnvKeys) {
+					const value = previous.get(key);
+					if (value === undefined) delete process.env[key];
+					else process.env[key] = value;
+				}
+			}
+		};
+
+		test("should map zai profile to ANTHROPIC_* env for child process", async () => {
+			await withEnv(
+				{
+					LLM_PROVIDER: "zai",
+					LLM_ZAI_BASE_URL: "https://zai.example/v1",
+					LLM_ZAI_API_KEY: "zai-key",
+					LLM_ZAI_AUTH_TOKEN: "zai-token",
+				},
+				async () => {
+					const res = await app.request("/execute", {
+						method: "POST",
+						headers: { "Content-Type": "application/json" },
+						body: JSON.stringify({
+							command: "sh",
+							args: ["-c", 'printf "%s|%s|%s" "$ANTHROPIC_BASE_URL" "$ANTHROPIC_API_KEY" "$ANTHROPIC_AUTH_TOKEN"'],
+						}),
+					});
+
+					expect(res.status).toBe(200);
+					const data = (await res.json()) as ExecuteCommandResponse;
+					expect(data.stdout).toBe("https://zai.example/v1|zai-key|zai-token");
+				},
+			);
+		});
+
+		test("should map minimax profile to ANTHROPIC_* env for child process", async () => {
+			await withEnv(
+				{
+					LLM_PROVIDER: "minimax",
+					LLM_MINIMAX_BASE_URL: "https://minimax.example/v1",
+					LLM_MINIMAX_API_KEY: "mm-key",
+					LLM_MINIMAX_AUTH_TOKEN: "mm-token",
+				},
+				async () => {
+					const res = await app.request("/execute", {
+						method: "POST",
+						headers: { "Content-Type": "application/json" },
+						body: JSON.stringify({
+							command: "sh",
+							args: ["-c", 'printf "%s|%s|%s" "$ANTHROPIC_BASE_URL" "$ANTHROPIC_API_KEY" "$ANTHROPIC_AUTH_TOKEN"'],
+						}),
+					});
+
+					expect(res.status).toBe(200);
+					const data = (await res.json()) as ExecuteCommandResponse;
+					expect(data.stdout).toBe("https://minimax.example/v1|mm-key|mm-token");
+				},
+			);
+		});
+	});
+
 	describe("POST /fs/list", () => {
 		test("should list directory", async () => {
 			const res = await app.request("/fs/list", {

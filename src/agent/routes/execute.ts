@@ -7,6 +7,53 @@ import { ExecuteCommandSchema } from "@/agent/types";
 
 const app = new Hono();
 
+function applyLlmProviderEnv(env: Record<string, string>): Record<string, string> {
+	const provider = (process.env.LLM_PROVIDER || "anthropic").toLowerCase();
+	const next = { ...env };
+
+	switch (provider) {
+		case "anthropic": {
+			next.ANTHROPIC_BASE_URL = process.env.LLM_ANTHROPIC_BASE_URL || process.env.ANTHROPIC_BASE_URL || "";
+			next.ANTHROPIC_API_KEY = process.env.LLM_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY || "";
+			next.ANTHROPIC_AUTH_TOKEN = process.env.LLM_ANTHROPIC_AUTH_TOKEN || process.env.ANTHROPIC_AUTH_TOKEN || "";
+			break;
+		}
+		case "openrouter": {
+			next.ANTHROPIC_BASE_URL = process.env.LLM_OPENROUTER_BASE_URL || "https://openrouter.ai/api/v1";
+			next.ANTHROPIC_API_KEY = process.env.LLM_OPENROUTER_API_KEY || "";
+			next.ANTHROPIC_AUTH_TOKEN = "";
+			break;
+		}
+		case "proxy": {
+			next.ANTHROPIC_BASE_URL = process.env.LLM_PROXY_BASE_URL || "";
+			next.ANTHROPIC_API_KEY = process.env.LLM_PROXY_API_KEY || "";
+			next.ANTHROPIC_AUTH_TOKEN = process.env.LLM_PROXY_AUTH_TOKEN || "";
+			break;
+		}
+		case "zai": {
+			next.ANTHROPIC_BASE_URL = process.env.LLM_ZAI_BASE_URL || "";
+			next.ANTHROPIC_API_KEY = process.env.LLM_ZAI_API_KEY || "";
+			next.ANTHROPIC_AUTH_TOKEN = process.env.LLM_ZAI_AUTH_TOKEN || "";
+			break;
+		}
+		case "minimax": {
+			next.ANTHROPIC_BASE_URL = process.env.LLM_MINIMAX_BASE_URL || "";
+			next.ANTHROPIC_API_KEY = process.env.LLM_MINIMAX_API_KEY || "";
+			next.ANTHROPIC_AUTH_TOKEN = process.env.LLM_MINIMAX_AUTH_TOKEN || "";
+			break;
+		}
+		default: {
+			// Safe fallback
+			next.ANTHROPIC_BASE_URL = process.env.LLM_ANTHROPIC_BASE_URL || process.env.ANTHROPIC_BASE_URL || "";
+			next.ANTHROPIC_API_KEY = process.env.LLM_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY || "";
+			next.ANTHROPIC_AUTH_TOKEN = process.env.LLM_ANTHROPIC_AUTH_TOKEN || process.env.ANTHROPIC_AUTH_TOKEN || "";
+			break;
+		}
+	}
+
+	return next;
+}
+
 app.post("/", zValidator("json", ExecuteCommandSchema), async (c) => {
 	const { command, args, cwd, timeout } = c.req.valid("json");
 
@@ -21,13 +68,7 @@ app.post("/", zValidator("json", ExecuteCommandSchema), async (c) => {
 		console.info(`Executing command: ${cmdList.join(" ")} in ${workingDir || "current directory"}`);
 
 		// Prefer ANTHROPIC_API_KEY when provided; otherwise use ANTHROPIC_AUTH_TOKEN
-		const childEnv = { ...process.env } as Record<string, string>;
-		if (process.env.ANTHROPIC_API_KEY) {
-			childEnv.ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
-		} else if (process.env.ANTHROPIC_AUTH_TOKEN) {
-			childEnv.ANTHROPIC_AUTH_TOKEN = process.env.ANTHROPIC_AUTH_TOKEN;
-			delete childEnv.ANTHROPIC_API_KEY;
-		}
+		const childEnv = applyLlmProviderEnv({ ...process.env } as Record<string, string>);
 
 		const proc = Bun.spawn(cmdList, {
 			cwd: workingDir,

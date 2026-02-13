@@ -30,9 +30,15 @@ This project uses environment variables for configuration. The `.env` file is gi
 
 - `TELEGRAM_BOT_TOKEN` - Your Telegram bot token from @BotFather
 
-### Claude / Anthropic
+### LLM Provider
 
-- `ANTHROPIC_API_KEY` - Your Anthropic API key for Claude
+- `LLM_PROVIDER` - Provider selector (`anthropic` default, `openrouter`, `proxy`, `zai`, `minimax`)
+- `LLM_ANTHROPIC_*` - Anthropic profile values
+- `LLM_OPENROUTER_*` - OpenRouter profile values
+- `LLM_PROXY_*` - Custom Anthropic-compatible proxy profile values
+- `LLM_ZAI_*` - ZAI profile values
+- `LLM_MINIMAX_*` - MiniMax profile values
+- `ANTHROPIC_*` - Legacy fallback variables (still supported)
 
 ### Workspace
 
@@ -50,6 +56,7 @@ See `src/dockers/.env.example` for the complete list of MCP server configuration
 - `JUPYTER_URL` - Jupyter server URL
 - `JUPYTER_TOKEN` - Jupyter authentication token
 - `WANDB_API_KEY` - Weights & Biases API key
+- `AUGGIE_MCP_ENABLED` - Optional toggle to register `auggie-mcp` (default: `false`)
 
 ## Security Notes
 

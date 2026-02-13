@@ -61,7 +61,24 @@ services:
       # IPC callback payload mode (avoid NFS cache race)
       - IPC_MODE=${IPC_MODE:-callback_payload}
 
-      # Claude CLI expects ANTHROPIC_BASE_URL/ANTHROPIC_API_KEY/ANTHROPIC_AUTH_TOKEN for authentication
+      # LLM provider selection (resolved to Claude CLI ANTHROPIC_* env vars at runtime)
+      - LLM_PROVIDER=${LLM_PROVIDER:-anthropic}
+      - LLM_ANTHROPIC_BASE_URL=${LLM_ANTHROPIC_BASE_URL:-}
+      - LLM_ANTHROPIC_API_KEY=${LLM_ANTHROPIC_API_KEY:-}
+      - LLM_ANTHROPIC_AUTH_TOKEN=${LLM_ANTHROPIC_AUTH_TOKEN:-}
+      - LLM_OPENROUTER_BASE_URL=${LLM_OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
+      - LLM_OPENROUTER_API_KEY=${LLM_OPENROUTER_API_KEY:-}
+      - LLM_PROXY_BASE_URL=${LLM_PROXY_BASE_URL:-}
+      - LLM_PROXY_API_KEY=${LLM_PROXY_API_KEY:-}
+      - LLM_PROXY_AUTH_TOKEN=${LLM_PROXY_AUTH_TOKEN:-}
+      - LLM_ZAI_BASE_URL=${LLM_ZAI_BASE_URL:-}
+      - LLM_ZAI_API_KEY=${LLM_ZAI_API_KEY:-}
+      - LLM_ZAI_AUTH_TOKEN=${LLM_ZAI_AUTH_TOKEN:-}
+      - LLM_MINIMAX_BASE_URL=${LLM_MINIMAX_BASE_URL:-}
+      - LLM_MINIMAX_API_KEY=${LLM_MINIMAX_API_KEY:-}
+      - LLM_MINIMAX_AUTH_TOKEN=${LLM_MINIMAX_AUTH_TOKEN:-}
+
+      # Legacy direct Claude CLI auth env (kept for backward compatibility/fallback)
       - ANTHROPIC_BASE_URL=${ANTHROPIC_BASE_URL:-}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - ANTHROPIC_AUTH_TOKEN=${ANTHROPIC_AUTH_TOKEN:-}
