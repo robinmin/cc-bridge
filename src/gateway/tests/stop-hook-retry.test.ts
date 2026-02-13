@@ -135,8 +135,8 @@ describe("Stop Hook Retry Logic", () => {
 	let testDataDir: string;
 
 	beforeEach(async () => {
-	testIpcDir = process.env.TEST_IPC_DIR || "./data/test-ipc";
-	testDataDir = path.join(testIpcDir, "data");
+		testIpcDir = process.env.TEST_IPC_DIR || "./data/test-ipc";
+		testDataDir = path.join(testIpcDir, "data");
 
 		// Clean up test directory
 		if (existsSync(testIpcDir)) {
