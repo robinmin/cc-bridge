@@ -2,6 +2,7 @@ import { createDecipheriv, createHash } from "node:crypto";
 import { GATEWAY_CONSTANTS } from "@/gateway/consts";
 import type { Message } from "@/gateway/pipeline";
 import { logger } from "@/packages/logger";
+import { consumeChatElapsed } from "@/gateway/channels/telegram";
 import type { Channel, ChannelAdapter } from "./index";
 
 // Default timeout for Feishu API calls (30 seconds)
@@ -309,12 +310,14 @@ export class FeishuChannel implements Channel, ChannelAdapter {
 	}
 
 	async sendMessage(chatId: string | number, text: string, _options?: unknown): Promise<void> {
-		// Log outgoing message with truncated content
+		await this.client.sendMessage(String(chatId), text);
+
+		// Log outgoing message with truncated content (after send completes)
 		const maxLength = 256;
 		const truncatedText = text.length > maxLength ? `${text.substring(0, maxLength)}...` : text;
-		logger.info(`[Feishu:${chatId}] <== ${truncatedText.replace(/\n/g, "\\n")}`);
-
-		await this.client.sendMessage(String(chatId), text);
+		const elapsedSec = consumeChatElapsed(chatId);
+		const elapsedSuffix = elapsedSec !== null ? ` (${elapsedSec.toFixed(2)}s)` : "";
+		logger.info(`[Feishu:${chatId}] <== ${truncatedText.replace(/\n/g, "\\n")}${elapsedSuffix}`);
 	}
 
 	async showTyping(chatId: string | number): Promise<void> {
