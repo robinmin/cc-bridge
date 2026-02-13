@@ -102,7 +102,7 @@ const mailboxWatcher = new MailboxWatcher(telegram, GATEWAY_CONSTANTS.CONFIG.IPC
 mailboxWatcher.start();
 
 // Start Task Scheduler for proactive prompts
-taskScheduler.start();
+taskScheduler.start(config);
 
 // Initialize FileSystemIpc for Stop Hook callbacks
 const _fileSystemIpc = new FileSystemIpc({
@@ -153,11 +153,11 @@ const errorRecoveryService = new ErrorRecoveryService();
 app.get("/health", authMiddleware, handleHealth);
 
 // Channel-specific webhook routes
-app.post("/webhook/telegram", (c) => handleTelegramWebhook(c, { telegram, bots }));
-app.post("/webhook/feishu", (c) => handleFeishuWebhook(c, { telegram, feishu, bots, feishuBots }));
+app.post("/webhook/telegram", (c) => handleTelegramWebhook(c, { telegram, bots, config }));
+app.post("/webhook/feishu", (c) => handleFeishuWebhook(c, { telegram, feishu, bots, feishuBots, config }));
 
 // Legacy unified webhook route for backward compatibility
-app.post("/webhook", (c) => handleWebhook(c, { telegram, feishu, bots, feishuBots }));
+app.post("/webhook", (c) => handleWebhook(c, { telegram, feishu, bots, feishuBots, config }));
 
 app.post("/claude-callback", (c) =>
 	handleClaudeCallback(c, {
