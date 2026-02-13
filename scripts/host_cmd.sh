@@ -51,6 +51,7 @@ function cmd_host_help() {
     echo "  ws_switch <name> - Switch workspace"
     echo "  ws_add <name> - Create workspace"
     echo "  ws_del <name> - Delete workspace"
+    echo "  clear - Clear current workspace session context"
     echo "  help   - Show this help message"
 }
 
@@ -63,7 +64,7 @@ function host_main() {
         "ps")
             cmd_host_ps
             ;;
-        "agents"|"commands"|"skills"|"schedulers"|"ws_list"|"ws_current")
+        "agents"|"commands"|"skills"|"schedulers"|"ws_list"|"ws_current"|"clear")
             bun run scripts/host_cmd.ts "$1"
             ;;
         "ws_switch"|"ws_add"|"ws_del")
