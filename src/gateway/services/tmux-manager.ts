@@ -620,7 +620,7 @@ export class TmuxManager {
 	 */
 	async listSessions(containerId: string): Promise<string[]> {
 		try {
-			const { stdout, exitCode } = await this.execInContainer(containerId, [
+			const { stdout, stderr, exitCode } = await this.execInContainer(containerId, [
 				"tmux",
 				"list-sessions",
 				"-F",
@@ -628,15 +628,17 @@ export class TmuxManager {
 			]);
 
 			if (exitCode !== 0) {
-				// No sessions is not an error - just return empty list
-				if (stdout.includes("no server running")) {
+				const output = `${stdout}\n${stderr}`.toLowerCase();
+				// No sessions/server is not an error - just return empty list
+				if (output.includes("no server running") || (exitCode === 1 && output.trim().length === 0)) {
 					return [];
 				}
 				logger.warn(
 					{
 						containerId,
 						exitCode,
-						stderr: stdout,
+						stderr,
+						stdout,
 					},
 					"Failed to list tmux sessions",
 				);
@@ -852,7 +854,7 @@ export class TmuxManager {
 	 */
 	async listAllSessions(containerId: string): Promise<string[]> {
 		try {
-			const { stdout, exitCode } = await this.execInContainer(containerId, [
+			const { stdout, stderr, exitCode } = await this.execInContainer(containerId, [
 				"tmux",
 				"list-sessions",
 				"-F",
@@ -860,15 +862,17 @@ export class TmuxManager {
 			]);
 
 			if (exitCode !== 0) {
-				// No sessions is not an error - just return empty list
-				if (stdout.includes("no server running")) {
+				const output = `${stdout}\n${stderr}`.toLowerCase();
+				// No sessions/server is not an error - just return empty list
+				if (output.includes("no server running") || (exitCode === 1 && output.trim().length === 0)) {
 					return [];
 				}
 				logger.warn(
 					{
 						containerId,
 						exitCode,
-						stderr: stdout,
+						stderr,
+						stdout,
 					},
 					"Failed to list tmux sessions",
 				);
