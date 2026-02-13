@@ -3,10 +3,10 @@
     {
       "name": "code-reviewer",
       "plugin": "superpowers@claude-plugins-official",
-      "version": "4.2.0",
+      "version": "4.3.0",
       "description": "|",
       "model": "inherit",
-      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/superpowers/4.2.0/agents/code-reviewer.md"
+      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/superpowers/4.3.0/agents/code-reviewer.md"
     },
     {
       "name": "code-simplifier",
@@ -309,7 +309,7 @@
     {
       "name": "command-doctor",
       "plugin": "rd2@cc-agents",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "description": "|",
       "model": "inherit",
       "color": "lavender",
@@ -318,12 +318,12 @@
         "Grep",
         "Glob"
       ],
-      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.0/agents/command-doctor.md"
+      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.1/agents/command-doctor.md"
     },
     {
       "name": "skill-doctor",
       "plugin": "rd2@cc-agents",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "description": "|",
       "model": "inherit",
       "color": "lavender",
@@ -332,12 +332,12 @@
         "Grep",
         "Glob"
       ],
-      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.0/agents/skill-doctor.md"
+      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.1/agents/skill-doctor.md"
     },
     {
       "name": "agent-doctor",
       "plugin": "rd2@cc-agents",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "description": "|",
       "model": "inherit",
       "color": "crimson",
@@ -346,12 +346,12 @@
         "Grep",
         "Glob"
       ],
-      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.0/agents/agent-doctor.md"
+      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.1/agents/agent-doctor.md"
     },
     {
       "name": "super-code-reviewer",
       "plugin": "rd2@cc-agents",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "description": "|",
       "model": "inherit",
       "color": "crimson",
@@ -364,12 +364,12 @@
         "Skill",
         "Bash"
       ],
-      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.0/agents/super-code-reviewer.md"
+      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.1/agents/super-code-reviewer.md"
     },
     {
       "name": "hook-doctor",
       "plugin": "rd2@cc-agents",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "description": "|",
       "model": "inherit",
       "color": "coral",
@@ -378,22 +378,22 @@
         "Grep",
         "Glob"
       ],
-      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.0/agents/hook-doctor.md"
+      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.1/agents/hook-doctor.md"
     },
     {
       "name": "super-planner",
       "plugin": "rd2@cc-agents",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "description": "|",
       "model": "inherit",
       "color": "purple",
       "tools": "",
-      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.0/agents/super-planner.md"
+      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.1/agents/super-planner.md"
     },
     {
       "name": "super-designer",
       "plugin": "rd2@cc-agents",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "description": "|",
       "model": "inherit",
       "color": "pink",
@@ -406,12 +406,12 @@
         "Skill",
         "Bash"
       ],
-      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.0/agents/super-designer.md"
+      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.1/agents/super-designer.md"
     },
     {
       "name": "super-brain",
       "plugin": "rd2@cc-agents",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "description": "|",
       "model": "inherit",
       "color": "gold",
@@ -422,22 +422,22 @@
         "Skill",
         "Write"
       ],
-      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.0/agents/super-brain.md"
+      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.1/agents/super-brain.md"
     },
     {
       "name": "super-reve",
       "plugin": "rd2@cc-agents",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "description": "|",
       "model": "inherit",
       "color": "aquamarine",
       "tools": "",
-      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.0/agents/super-reve.md"
+      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.1/agents/super-reve.md"
     },
     {
       "name": "super-coder",
       "plugin": "rd2@cc-agents",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "description": "|",
       "model": "inherit",
       "color": "teal",
@@ -450,12 +450,12 @@
         "Skill",
         "Bash"
       ],
-      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.0/agents/super-coder.md"
+      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.1/agents/super-coder.md"
     },
     {
       "name": "hook-expert",
       "plugin": "rd2@cc-agents",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "description": "|",
       "model": "inherit",
       "color": "orange",
@@ -464,12 +464,12 @@
         "Write",
         "Edit"
       ],
-      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.0/agents/hook-expert.md"
+      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.1/agents/hook-expert.md"
     },
     {
       "name": "command-expert",
       "plugin": "rd2@cc-agents",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "description": "|",
       "model": "inherit",
       "color": "teal",
@@ -478,12 +478,12 @@
         "Write",
         "Edit"
       ],
-      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.0/agents/command-expert.md"
+      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.1/agents/command-expert.md"
     },
     {
       "name": "super-architect",
       "plugin": "rd2@cc-agents",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "description": "|",
       "model": "inherit",
       "color": "blue",
@@ -496,22 +496,22 @@
         "Skill",
         "Bash"
       ],
-      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.0/agents/super-architect.md"
+      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.1/agents/super-architect.md"
     },
     {
       "name": "knowledge-seeker",
       "plugin": "rd2@cc-agents",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "description": "|",
       "model": "inherit",
       "color": "cyan",
       "tools": "",
-      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.0/agents/knowledge-seeker.md"
+      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.1/agents/knowledge-seeker.md"
     },
     {
       "name": "skill-expert",
       "plugin": "rd2@cc-agents",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "description": "|",
       "model": "inherit",
       "color": "teal",
@@ -522,12 +522,12 @@
         "Grep",
         "Glob"
       ],
-      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.0/agents/skill-expert.md"
+      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.1/agents/skill-expert.md"
     },
     {
       "name": "agent-expert",
       "plugin": "rd2@cc-agents",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "description": "|",
       "model": "inherit",
       "color": "azure",
@@ -536,30 +536,30 @@
         "Write",
         "Edit"
       ],
-      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.0/agents/agent-expert.md"
+      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.1/agents/agent-expert.md"
     }
   ],
   "commands": [
     {
       "name": "execute-plan",
       "plugin": "superpowers@claude-plugins-official",
-      "version": "4.2.0",
+      "version": "4.3.0",
       "description": "Execute plan in batches with review checkpoints",
-      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/superpowers/4.2.0/commands/execute-plan.md"
+      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/superpowers/4.3.0/commands/execute-plan.md"
     },
     {
       "name": "write-plan",
       "plugin": "superpowers@claude-plugins-official",
-      "version": "4.2.0",
+      "version": "4.3.0",
       "description": "Create detailed implementation plan with bite-sized tasks",
-      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/superpowers/4.2.0/commands/write-plan.md"
+      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/superpowers/4.3.0/commands/write-plan.md"
     },
     {
       "name": "brainstorm",
       "plugin": "superpowers@claude-plugins-official",
-      "version": "4.2.0",
+      "version": "4.3.0",
       "description": "You MUST use this before any creative work - creating features, building components, adding functionality, or modifying behavior. Explores requirements and design before implementation.",
-      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/superpowers/4.2.0/commands/brainstorm.md"
+      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/superpowers/4.3.0/commands/brainstorm.md"
     },
     {
       "name": "help",
@@ -886,281 +886,281 @@
     {
       "name": "skill-evaluate",
       "plugin": "rd2@cc-agents",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "description": "Evaluate skill quality across 7 dimensions with actionable recommendations",
       "argumentHint": "<skill-folder>",
-      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.0/commands/skill-evaluate.md"
+      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.1/commands/skill-evaluate.md"
     },
     {
       "name": "tasks-plan",
       "plugin": "rd2@cc-agents",
-      "version": "0.7.0",
-      "description": "Full workflow orchestration with planning, design, and execution",
-      "argumentHint": "<task> [--execute] [--auto|--semi|--step] [--with-architect] [--with-designer] [--skip-design] [--skip-refinement]",
-      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.0/commands/tasks-plan.md"
+      "version": "0.7.1",
+      "description": "Workflow-aware orchestration with planning, design, and execution",
+      "argumentHint": "<task> [--execute] [--auto|--semi|--step] [--workflow <name>] [--list-workflows] [--with-architect] [--with-designer] [--with-researcher] [--skip-design] [--skip-review] [--skip-refinement]",
+      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.1/commands/tasks-plan.md"
     },
     {
       "name": "agent-add",
       "plugin": "rd2@cc-agents",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "description": "Create a new Claude Code Agent subagent with 8-section anatomy and best practices",
       "argumentHint": "<plugin-name> <agent-name>",
-      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.0/commands/agent-add.md"
+      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.1/commands/agent-add.md"
     },
     {
       "name": "command-evaluate",
       "plugin": "rd2@cc-agents",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "description": "Evaluate command quality across 6 dimensions",
       "argumentHint": "<command-file>",
-      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.0/commands/command-evaluate.md"
+      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.1/commands/command-evaluate.md"
     },
     {
       "name": "tasks-brainstorm",
       "plugin": "rd2@cc-agents",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "description": "This command should be used when the user asks to \"brainstorm ideas\", \"explore solutions\", \"consider options\", \"research approaches\", or mentions needing multiple solution options with trade-offs. Integrates research, ideation, and task CLI for automatic task file creation.",
       "argumentHint": "<issue-description | task-file-path>",
-      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.0/commands/tasks-brainstorm.md"
+      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.1/commands/tasks-brainstorm.md"
     },
     {
       "name": "tasks-run",
       "plugin": "rd2@cc-agents",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "description": "Single task implementation via super-coder",
       "argumentHint": "<task> [--tool auto|gemini|claude|auggie|opencode] [--no-tdd]",
-      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.0/commands/tasks-run.md"
+      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.1/commands/tasks-run.md"
     },
     {
       "name": "tasks-changelog",
       "plugin": "rd2@cc-agents",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "description": "This command should be used when the user asks to \"generate changelog\", \"create release notes\", or \"write changelog from git commits\". Analyzes git history, categorizes changes by type, and translates technical commits into user-friendly release notes.",
       "argumentHint": [
         "output-file] [--since <tag|commit>] [--until <tag|commit>] [--version <version>"
       ],
       "allowedTools": "",
-      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.0/commands/tasks-changelog.md"
+      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.1/commands/tasks-changelog.md"
     },
     {
       "name": "command-refine",
       "plugin": "rd2@cc-agents",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "description": "Refine commands to fix quality issues",
       "argumentHint": "<command-file>",
-      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.0/commands/command-refine.md"
+      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.1/commands/command-refine.md"
     },
     {
       "name": "agent-refine",
       "plugin": "rd2@cc-agents",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "description": "Refine and improve an existing Claude Code Agent subagent",
       "argumentHint": "<agent-file>",
-      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.0/commands/agent-refine.md"
+      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.1/commands/agent-refine.md"
     },
     {
       "name": "skill-refine",
       "plugin": "rd2@cc-agents",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "description": "Refine existing skills with evaluation-first development and progressive disclosure",
       "argumentHint": "<skill-folder>",
-      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.0/commands/skill-refine.md"
+      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.1/commands/skill-refine.md"
     },
     {
       "name": "tasks-fixall",
       "plugin": "rd2@cc-agents",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "description": "Fix all lint, type, and test errors using deterministic single-pass workflow with sys-debugging methodology",
       "argumentHint": "[<validation-command>] [--max-retry=5]",
-      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.0/commands/tasks-fixall.md"
+      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.1/commands/tasks-fixall.md"
     },
     {
       "name": "code-review",
       "plugin": "rd2@cc-agents",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "description": "Find bugs with severity-driven fix workflow",
       "argumentHint": [
         "path] [--tool auto|gemini|claude|auggie|opencode] [--focus security|performance|testing|quality|architecture"
       ],
       "allowedTools": "Read, Grep, Glob, Write, Edit, Task, Skill, AskUserQuestion",
-      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.0/commands/code-review.md"
+      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.1/commands/code-review.md"
     },
     {
       "name": "tasks-unit",
       "plugin": "rd2@cc-agents",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "description": "This command should be used when the user asks to \"generate unit tests\", \"add unit tests\", \"achieve test coverage\", \"reach coverage target\", \"get 85% coverage\", \"run test generation\", or mentions \"coverage ratio\", \"AI-generated tests\", \"pytest coverage\", or \"test coverage threshold\". Thin wrapper delegating to rd2:unit-tests-generation skill for comprehensive test generation.",
       "argumentHint": "<verification-command> [<testee>] [threshold=85]",
       "allowedTools": "Skill, Read, Write, Edit, Grep, Glob, Bash, AskUserQuestion",
-      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.0/commands/tasks-unit.md"
+      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.1/commands/tasks-unit.md"
     },
     {
       "name": "tasks-review",
       "plugin": "rd2@cc-agents",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "description": "Single task code review",
       "argumentHint": "<task> [--tool auto|gemini|claude|auggie|opencode] [--focus security|performance|testing|quality|architecture]",
-      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.0/commands/tasks-review.md"
+      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.1/commands/tasks-review.md"
     },
     {
       "name": "tasks-gitmsg",
       "plugin": "rd2@cc-agents",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "description": "Generate conventional commit messages from staged changes. Read-only analysis of git context - does NOT execute commits.",
       "argumentHint": [
         "--amend] [--breaking"
       ],
       "allowedTools": "Bash(git status|git diff|git log|git branch --show-current)",
-      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.0/commands/tasks-gitmsg.md"
+      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.1/commands/tasks-gitmsg.md"
     },
     {
       "name": "command-add",
       "plugin": "rd2@cc-agents",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "description": "Create slash commands with proper frontmatter",
       "argumentHint": "<plugin-name> <command-name>",
-      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.0/commands/command-add.md"
+      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.1/commands/command-add.md"
     },
     {
       "name": "tasks-refine",
       "plugin": "rd2@cc-agents",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "description": "Task refinement via quality check and user interaction",
       "argumentHint": "<task> [--force]",
-      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.0/commands/tasks-refine.md"
+      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.1/commands/tasks-refine.md"
     },
     {
       "name": "agent-evaluate",
       "plugin": "rd2@cc-agents",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "description": "Evaluate a Claude Code Agent subagent for quality and production readiness",
       "argumentHint": "<agent-file>",
-      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.0/commands/agent-evaluate.md"
+      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.1/commands/agent-evaluate.md"
     },
     {
       "name": "tasks-design",
       "plugin": "rd2@cc-agents",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "description": "Design phase with specialist delegation",
       "argumentHint": "<task> [--with-architect] [--with-designer] [--skip-assessment]",
-      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.0/commands/tasks-design.md"
+      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.1/commands/tasks-design.md"
     },
     {
       "name": "tasks-cli",
       "plugin": "rd2@cc-agents",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "description": "Task management CLI with kanban board sync and multi-folder support",
       "argumentHint": "<create|list|update|batch-create|check|open|refresh|config|decompose|init|help> [args]",
       "allowedTools": "",
-      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.0/commands/tasks-cli.md"
+      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.1/commands/tasks-cli.md"
     },
     {
       "name": "skill-add",
       "plugin": "rd2@cc-agents",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "description": "Create a new Claude Code Agent Skill using the official 6-step skill creation process. Use PROACTIVELY when building new skills, writing SKILL.md files, designing skill workflows, or packaging skills for distribution.",
       "argumentHint": "<plugin-name> <skill-name> [--type technique|pattern|reference]",
-      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.0/commands/skill-add.md"
+      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.1/commands/skill-add.md"
     }
   ],
   "skills": [
     {
       "name": "using-git-worktrees",
       "plugin": "superpowers@claude-plugins-official",
-      "version": "4.2.0",
+      "version": "4.3.0",
       "description": "Use when starting feature work that needs isolation from current workspace or before executing implementation plans - creates isolated git worktrees with smart directory selection and safety verification",
-      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/superpowers/4.2.0/skills/using-git-worktrees/SKILL.md"
+      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/superpowers/4.3.0/skills/using-git-worktrees/SKILL.md"
     },
     {
       "name": "test-driven-development",
       "plugin": "superpowers@claude-plugins-official",
-      "version": "4.2.0",
+      "version": "4.3.0",
       "description": "Use when implementing any feature or bugfix, before writing implementation code",
-      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/superpowers/4.2.0/skills/test-driven-development/SKILL.md"
+      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/superpowers/4.3.0/skills/test-driven-development/SKILL.md"
     },
     {
       "name": "systematic-debugging",
       "plugin": "superpowers@claude-plugins-official",
-      "version": "4.2.0",
+      "version": "4.3.0",
       "description": "Use when encountering any bug, test failure, or unexpected behavior, before proposing fixes",
-      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/superpowers/4.2.0/skills/systematic-debugging/SKILL.md"
+      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/superpowers/4.3.0/skills/systematic-debugging/SKILL.md"
     },
     {
       "name": "using-superpowers",
       "plugin": "superpowers@claude-plugins-official",
-      "version": "4.2.0",
+      "version": "4.3.0",
       "description": "Use when starting any conversation - establishes how to find and use skills, requiring Skill tool invocation before ANY response including clarifying questions",
-      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/superpowers/4.2.0/skills/using-superpowers/SKILL.md"
+      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/superpowers/4.3.0/skills/using-superpowers/SKILL.md"
     },
     {
       "name": "dispatching-parallel-agents",
       "plugin": "superpowers@claude-plugins-official",
-      "version": "4.2.0",
+      "version": "4.3.0",
       "description": "Use when facing 2+ independent tasks that can be worked on without shared state or sequential dependencies",
-      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/superpowers/4.2.0/skills/dispatching-parallel-agents/SKILL.md"
+      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/superpowers/4.3.0/skills/dispatching-parallel-agents/SKILL.md"
     },
     {
       "name": "executing-plans",
       "plugin": "superpowers@claude-plugins-official",
-      "version": "4.2.0",
+      "version": "4.3.0",
       "description": "Use when you have a written implementation plan to execute in a separate session with review checkpoints",
-      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/superpowers/4.2.0/skills/executing-plans/SKILL.md"
+      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/superpowers/4.3.0/skills/executing-plans/SKILL.md"
     },
     {
       "name": "finishing-a-development-branch",
       "plugin": "superpowers@claude-plugins-official",
-      "version": "4.2.0",
+      "version": "4.3.0",
       "description": "Use when implementation is complete, all tests pass, and you need to decide how to integrate the work - guides completion of development work by presenting structured options for merge, PR, or cleanup",
-      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/superpowers/4.2.0/skills/finishing-a-development-branch/SKILL.md"
+      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/superpowers/4.3.0/skills/finishing-a-development-branch/SKILL.md"
     },
     {
       "name": "brainstorming",
       "plugin": "superpowers@claude-plugins-official",
-      "version": "4.2.0",
+      "version": "4.3.0",
       "description": "You MUST use this before any creative work - creating features, building components, adding functionality, or modifying behavior. Explores user intent, requirements and design before implementation.",
-      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/superpowers/4.2.0/skills/brainstorming/SKILL.md"
+      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/superpowers/4.3.0/skills/brainstorming/SKILL.md"
     },
     {
       "name": "writing-plans",
       "plugin": "superpowers@claude-plugins-official",
-      "version": "4.2.0",
+      "version": "4.3.0",
       "description": "Use when you have a spec or requirements for a multi-step task, before touching code",
-      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/superpowers/4.2.0/skills/writing-plans/SKILL.md"
+      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/superpowers/4.3.0/skills/writing-plans/SKILL.md"
     },
     {
       "name": "requesting-code-review",
       "plugin": "superpowers@claude-plugins-official",
-      "version": "4.2.0",
+      "version": "4.3.0",
       "description": "Use when completing tasks, implementing major features, or before merging to verify work meets requirements",
-      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/superpowers/4.2.0/skills/requesting-code-review/SKILL.md"
+      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/superpowers/4.3.0/skills/requesting-code-review/SKILL.md"
     },
     {
       "name": "receiving-code-review",
       "plugin": "superpowers@claude-plugins-official",
-      "version": "4.2.0",
+      "version": "4.3.0",
       "description": "Use when receiving code review feedback, before implementing suggestions, especially if feedback seems unclear or technically questionable - requires technical rigor and verification, not performative agreement or blind implementation",
-      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/superpowers/4.2.0/skills/receiving-code-review/SKILL.md"
+      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/superpowers/4.3.0/skills/receiving-code-review/SKILL.md"
     },
     {
       "name": "writing-skills",
       "plugin": "superpowers@claude-plugins-official",
-      "version": "4.2.0",
+      "version": "4.3.0",
       "description": "Use when creating new skills, editing existing skills, or verifying skills work before deployment",
-      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/superpowers/4.2.0/skills/writing-skills/SKILL.md"
+      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/superpowers/4.3.0/skills/writing-skills/SKILL.md"
     },
     {
       "name": "verification-before-completion",
       "plugin": "superpowers@claude-plugins-official",
-      "version": "4.2.0",
+      "version": "4.3.0",
       "description": "Use when about to claim work is complete, fixed, or passing, before committing or creating PRs - requires running verification commands and confirming output before making any success claims; evidence before assertions always",
-      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/superpowers/4.2.0/skills/verification-before-completion/SKILL.md"
+      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/superpowers/4.3.0/skills/verification-before-completion/SKILL.md"
     },
     {
       "name": "subagent-driven-development",
       "plugin": "superpowers@claude-plugins-official",
-      "version": "4.2.0",
+      "version": "4.3.0",
       "description": "Use when executing implementation plans with independent tasks in the current session",
-      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/superpowers/4.2.0/skills/subagent-driven-development/SKILL.md"
+      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/superpowers/4.3.0/skills/subagent-driven-development/SKILL.md"
     },
     {
       "name": "frontend-design",
@@ -1522,270 +1522,277 @@
     {
       "name": "pl-javascript",
       "plugin": "rd2@cc-agents",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "description": "This skill should be used when the user asks to \"plan a JavaScript project\", \"design JavaScript architecture\", \"plan async JavaScript workflow\", \"JavaScript project structure\", \"JavaScript best practices\", \"JavaScript testing strategy\", \"async/await patterns\", \"DOM manipulation planning\", or mentions JavaScript project planning. Provides architectural guidance, structure selection, pattern selection, and best practices for modern JavaScript (ES6+). Covers project structures, async patterns, DOM manipulation, event handling, testing, modules, and performance optimization.",
-      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.0/skills/pl-javascript/SKILL.md"
+      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.1/skills/pl-javascript/SKILL.md"
     },
     {
       "name": "ast-grep",
       "plugin": "rd2@cc-agents",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "description": "This skill should be used when the user asks to \"find async functions without error handling\", \"search for code patterns using AST\", \"structural code search\", \"find all classes that inherit from X\", \"find function calls with specific parameters\", or mentions searching codebases using Abstract Syntax Tree (AST) patterns. Helps write ast-grep rules for structural code search and analysis beyond simple text search.",
-      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.0/skills/ast-grep/SKILL.md"
+      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.1/skills/ast-grep/SKILL.md"
     },
     {
       "name": "task-workflow",
       "plugin": "rd2@cc-agents",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "description": "13-step implementation workflow for rd2 agents. Workflow orchestration that delegates all task mechanics to rd2:tasks.",
-      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.0/skills/task-workflow/SKILL.md"
+      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.1/skills/task-workflow/SKILL.md"
     },
     {
       "name": "tasks",
       "plugin": "rd2@cc-agents",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "description": "This skill should be used when managing markdown-based task files with WBS numbers, multi-folder storage, centralized metadata, or kanban board sync. Triggers on \"create task\", \"tasks create\", \"list tasks\", \"update status\", \"update section\", \"tasks config\", \"tasks init\", \"add folder\", \"set active folder\", WBS references (0047, task 47), and multi-folder configuration.",
-      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.0/skills/tasks/SKILL.md"
+      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.1/skills/tasks/SKILL.md"
     },
     {
       "name": "test-cycle",
       "plugin": "rd2@cc-agents",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "description": "Universal test execution, verification, and fix iteration workflow with 3-iteration limit, escalation protocol, and comprehensive verification checklists.",
-      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.0/skills/test-cycle/SKILL.md"
+      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.1/skills/test-cycle/SKILL.md"
     },
     {
       "name": "coder-gemini",
       "plugin": "rd2@cc-agents",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "description": "Use Google Gemini CLI for AI-assisted code generation. Trigger when user mentions \"Gemini code\", \"ask Gemini to implement\", \"Gemini generate\". NOT for code review.",
-      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.0/skills/coder-gemini/SKILL.md"
+      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.1/skills/coder-gemini/SKILL.md"
     },
     {
       "name": "ui-ux-design",
       "plugin": "rd2@cc-agents",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "description": "This skill should be used when the user asks to \"design a UI component\", \"create a login screen\", \"review accessibility\", \"generate a dashboard layout\", \"set up design tokens\", \"design a form\", \"create a navigation pattern\", or mentions UI/UX patterns, WCAG compliance, responsive design, Google Stitch AI, or design system principles.",
-      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.0/skills/ui-ux-design/SKILL.md"
+      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.1/skills/ui-ux-design/SKILL.md"
     },
     {
       "name": "coder-agy",
       "plugin": "rd2@cc-agents",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "description": "This skill should be used when the user asks to \"generate code with Antigravity\", \"use agy for code generation\", \"use Google AI for coding\", or mentions \"Antigravity\", \"agy\", or wants Google-based code generation. This skill provides Google Antigravity CLI integration for AI code generation. NOT for code review (use code-review-agy instead).",
-      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.0/skills/coder-agy/SKILL.md"
+      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.1/skills/coder-agy/SKILL.md"
     },
     {
       "name": "brainstorm",
       "plugin": "rd2@cc-agents",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "description": "This skill should be used when the user asks to \"brainstorm ideas\", \"explore solutions\", \"consider options\", \"research approaches\", or mentions needing multiple solution options with trade-offs. Integrates research, ideation, and rd2 tasks CLI for automatic task file creation.",
-      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.0/skills/brainstorm/SKILL.md"
+      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.1/skills/brainstorm/SKILL.md"
     },
     {
       "name": "code-review-gemini",
       "plugin": "rd2@cc-agents",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "description": "Use Google Gemini CLI for code review and architecture planning. Trigger when user mentions \"Gemini\", \"ask Gemini\", \"second opinion\". NOT for implementation.",
-      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.0/skills/code-review-gemini/SKILL.md"
+      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.1/skills/code-review-gemini/SKILL.md"
     },
     {
       "name": "pl-python",
       "plugin": "rd2@cc-agents",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "description": "This skill should be used when the user asks to \"plan a Python project\", \"design Python architecture\", \"plan async pipeline\", \"Python project structure\", \"Python best practices\", \"asyncio design\", \"FastAPI planning\", or mentions Python project planning. Provides architectural guidance, structure selection, version planning, and best practices for Python 3.11-3.13.",
-      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.0/skills/pl-python/SKILL.md"
+      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.1/skills/pl-python/SKILL.md"
     },
     {
       "name": "pl-golang",
       "plugin": "rd2@cc-agents",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "description": "This skill should be used when the user asks to \"plan a Go project\", \"design Go architecture\", \"plan concurrent Go service\", \"Go project structure\", \"Go best practices\", \"goroutines and channels\", \"Go generics\", \"Go testing strategy\", or mentions Go project planning. Provides architectural guidance, structure selection, version planning, and best practices for Go 1.21-1.23+. Covers project structures, concurrency patterns, interfaces, error handling, testing, modules, and standard library usage.",
-      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.0/skills/pl-golang/SKILL.md"
+      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.1/skills/pl-golang/SKILL.md"
     },
     {
       "name": "code-review-claude",
       "plugin": "rd2@cc-agents",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "description": "Use Claude's native capabilities (Read, Grep, Glob) for code review. Trigger when user mentions \"Claude review\", \"native review\", \"internal review\". NOT for implementation.",
-      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.0/skills/code-review-claude/SKILL.md"
+      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.1/skills/code-review-claude/SKILL.md"
     },
     {
       "name": "tool-selection",
       "plugin": "rd2@cc-agents",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "description": "General-purpose tool/skill selection framework with heuristics, availability checking, fallback strategies, and confidence scoring. Applicable to any agent choosing between multiple implementation options.",
-      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.0/skills/tool-selection/SKILL.md"
+      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.1/skills/tool-selection/SKILL.md"
     },
     {
       "name": "coder-claude",
       "plugin": "rd2@cc-agents",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "description": "Use Claude's native capabilities for AI-assisted code generation. Trigger when user mentions \"Claude code\", \"native generate\", \"quick implementation\". NOT for code review.",
-      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.0/skills/coder-claude/SKILL.md"
+      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.1/skills/coder-claude/SKILL.md"
     },
     {
       "name": "backend-architect",
       "plugin": "rd2@cc-agents",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "description": "Backend architecture patterns and systems design guidance for 2024-2025. Use when designing APIs, database schemas, microservices, scalability patterns, distributed systems, event-driven architecture, observability, or cloud-native architecture. Use when backend architecture decisions are needed.",
-      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.0/skills/backend-architect/SKILL.md"
+      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.1/skills/backend-architect/SKILL.md"
     },
     {
       "name": "cc-agents",
       "plugin": "rd2@cc-agents",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "description": "Meta-skill for creating, evaluating, and refining Claude Code Agent subagents. Use when: building new subagents, writing agent definition files, evaluating agent quality, or refining existing agents. Follows 8-section anatomy, verification-first development, and agent-specific quality assessment.",
-      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.0/skills/cc-agents/SKILL.md"
+      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.1/skills/cc-agents/SKILL.md"
     },
     {
       "name": "sys-debugging",
       "plugin": "rd2@cc-agents",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "description": "Four-phase debugging methodology with root cause analysis. Use when investigating bugs, fixing test failures, or troubleshooting unexpected behavior. Emphasizes NO FIXES WITHOUT ROOT CAUSE FIRST.",
-      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.0/skills/sys-debugging/SKILL.md"
+      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.1/skills/sys-debugging/SKILL.md"
     },
     {
       "name": "coder-opencode",
       "plugin": "rd2@cc-agents",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "description": "Use OpenCode CLI for multi-model AI code generation with external AI perspective. Trigger when user mentions \"OpenCode\", \"multi-model generate\", \"external AI perspective\". NOT for code review.",
-      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.0/skills/coder-opencode/SKILL.md"
+      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.1/skills/coder-opencode/SKILL.md"
     },
     {
       "name": "cc-commands",
       "plugin": "rd2@cc-agents",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "description": "Meta-skill for creating, evaluating, and refining Claude Code slash commands. Use when: building new slash commands, writing command frontmatter, designing command workflows, or packaging commands for plugins. Follows progressive disclosure, evaluation-first development, and plugin-based quality assessment.",
-      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.0/skills/cc-commands/SKILL.md"
+      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.1/skills/cc-commands/SKILL.md"
     },
     {
       "name": "unit-tests-generation",
       "plugin": "rd2@cc-agents",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "description": "This skill should be used when the user asks to \"generate unit tests\", \"add unit tests\", \"achieve test coverage\", \"reach coverage target\", \"get 85% coverage\", \"run test generation\", or mentions \"AI-generated tests\", \"pytest coverage\", or \"test coverage ratio\". Implements iterative 8-phase workflow for AI-assisted test generation with coverage validation. Supports Python, TypeScript, Go, and Rust with research-based best practices (70-95% coverage range, 85% default).",
-      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.0/skills/unit-tests-generation/SKILL.md"
+      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.1/skills/unit-tests-generation/SKILL.md"
     },
     {
       "name": "knowledge-extraction",
       "plugin": "rd2@cc-agents",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "description": "Extract, synthesize, and validate information from multiple sources with cross-verification, deduplication, and proper source attribution. Use when researching APIs, libraries, frameworks, verifying facts, or consolidating information from PDFs, web pages, and code files.",
-      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.0/skills/knowledge-extraction/SKILL.md"
+      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.1/skills/knowledge-extraction/SKILL.md"
     },
     {
       "name": "code-review-common",
       "plugin": "rd2@cc-agents",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "description": "|",
-      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.0/skills/code-review-common/SKILL.md"
+      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.1/skills/code-review-common/SKILL.md"
     },
     {
       "name": "pl-typescript",
       "plugin": "rd2@cc-agents",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "description": "This skill should be used when the user asks to \"plan a TypeScript project\", \"design TypeScript architecture\", \"plan TypeScript type system\", \"TypeScript project structure\", \"TypeScript configuration strategy\", \"plan TypeScript API design\", \"TypeScript best practices\", or mentions TypeScript project planning. Provides architectural guidance, structure selection, type system planning, and best practices for TypeScript 5.x. Covers project structures, generics, utility types, discriminated unions, tsconfig configuration, module systems, build tools, and type-safe API design.",
-      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.0/skills/pl-typescript/SKILL.md"
+      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.1/skills/pl-typescript/SKILL.md"
     },
     {
       "name": "code-patterns",
       "plugin": "rd2@cc-agents",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "description": "This skill should be used when the user asks to \"design a REST API\", \"add pagination to endpoints\", \"set up Docker\", \"write database migrations\", \"implement unit tests\", \"containerize an application\", \"optimize database queries\", \"add error handling to API\", \"create multi-stage Docker build\", \"write integration tests\", or mentions API design, testing patterns, Docker configuration, or database patterns. Provides verified production-ready patterns and best practices.",
-      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.0/skills/code-patterns/SKILL.md"
+      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.1/skills/code-patterns/SKILL.md"
     },
     {
       "name": "anti-hallucination",
       "plugin": "rd2@cc-agents",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "description": "Use for ANY task requiring external information (APIs, libraries, frameworks, facts, recent events). Zero-trust verification-before-generation with MCP tool priority.",
-      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.0/skills/anti-hallucination/SKILL.md"
+      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.1/skills/anti-hallucination/SKILL.md"
     },
     {
       "name": "frontend-architect",
       "plugin": "rd2@cc-agents",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "description": "Frontend system architecture and scalability patterns for 2024-2025. Use when making high-level frontend architecture decisions: SPA vs SSR vs SSG vs ISR, monolith vs microfrontends, build/deployment architecture, CDN/edge strategies, frontend security, monitoring/observability, performance at scale, multi-team coordination, or technology selection. Use when frontend architecture decisions are needed.",
-      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.0/skills/frontend-architect/SKILL.md"
+      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.1/skills/frontend-architect/SKILL.md"
     },
     {
       "name": "tdd-workflow",
       "plugin": "rd2@cc-agents",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "description": "Use when writing features, fixing bugs, refactoring, or generating tests. Enforces strict TDD with red-green-refactor cycle, test generation strategies, and testing patterns.",
-      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.0/skills/tdd-workflow/SKILL.md"
+      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.1/skills/tdd-workflow/SKILL.md"
     },
     {
       "name": "cc-hooks",
       "plugin": "rd2@cc-agents",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "description": "Meta-skill for creating Claude Code plugin hooks. Use when: implementing PreToolUse/PostToolUse/Stop/SubagentStop hooks, creating event-driven automation, validating tool usage, blocking dangerous commands, loading project context, or integrating external tools. Follows prompt-based hooks API with progressive disclosure and evaluation-first development.",
-      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.0/skills/cc-hooks/SKILL.md"
+      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.1/skills/cc-hooks/SKILL.md"
     },
     {
       "name": "cc-skills",
       "plugin": "rd2@cc-agents",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "description": "This skill should be used when the user asks to 'create a skill', 'write SKILL.md', 'evaluate skill quality', 'package a skill', 'initialize a new skill', or mentions skill development, skill creation, or SKILL.md workflows. Provides comprehensive meta-skill guidance including progressive disclosure patterns, evaluation-first development, and plugin-based quality assessment.",
-      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.0/skills/cc-skills/SKILL.md"
+      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.1/skills/cc-skills/SKILL.md"
     },
     {
       "name": "frontend-design",
       "plugin": "rd2@cc-agents",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "description": "This skill should be used when the user asks to \"design component architecture\", \"plan state management\", \"optimize Core Web Vitals\", \"implement Server Components\", \"configure data fetching\", \"design routing structure\", \"plan testing strategy\", \"choose component library\", or mentions React Query, Zustand, Next.js App Router, Server Actions, shadcn/ui, or frontend performance optimization.",
-      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.0/skills/frontend-design/SKILL.md"
+      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.1/skills/frontend-design/SKILL.md"
     },
     {
       "name": "advanced-testing",
       "plugin": "rd2@cc-agents",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "description": "Use when implementing mutation testing, property-based testing, accessibility testing, or code permutation testing. Covers advanced techniques for validating test quality beyond coverage.",
-      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.0/skills/advanced-testing/SKILL.md"
+      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.1/skills/advanced-testing/SKILL.md"
     },
     {
       "name": "code-review-auggie",
       "plugin": "rd2@cc-agents",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "description": "Use Augment Context Engine (Auggie) MCP for code review and architecture planning. Trigger when user mentions \"Auggie\", \"codebase retrieval\", \"augmented review\". NOT for implementation.",
-      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.0/skills/code-review-auggie/SKILL.md"
+      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.1/skills/code-review-auggie/SKILL.md"
     },
     {
       "name": "task-decomposition",
       "plugin": "rd2@cc-agents",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "description": "Domain-specific task decomposition patterns, heuristics, and breakdown strategies for breaking down complex requirements into structured, actionable tasks. Outputs structured task definitions compatible with batch creation. Knowledge-only skill (no scripts). Provides decomposition methodology while rd2:tasks handles file operations. Use when planning, breaking down features, estimating work, or creating WBS-structured task breakdowns. Triggers: \"break down task\", \"decompose requirements\", \"task breakdown\", \"work breakdown structure\", \"create subtasks\", \"plan implementation\".",
-      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.0/skills/task-decomposition/SKILL.md"
+      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.1/skills/task-decomposition/SKILL.md"
+    },
+    {
+      "name": "workflow-orchestration",
+      "plugin": "rd2@cc-agents",
+      "version": "0.7.1",
+      "description": ">",
+      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.1/skills/workflow-orchestration/SKILL.md"
     },
     {
       "name": "cloud-architect",
       "plugin": "rd2@cc-agents",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "description": "Cloud architecture patterns and infrastructure design for 2024-2025. Use when making cloud architecture decisions: cloud provider selection (AWS vs Azure vs GCP), multi-cloud strategies, serverless vs container vs VM architecture, Kubernetes and cloud-native design, edge computing, cost optimization (FinOps), cloud security architecture, disaster recovery, Infrastructure as Code, or cloud migration strategies. Use when cloud architecture decisions are needed.",
-      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.0/skills/cloud-architect/SKILL.md"
+      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.1/skills/cloud-architect/SKILL.md"
     },
     {
       "name": "test-coverage",
       "plugin": "rd2@cc-agents",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "description": "Use when measuring test coverage, setting coverage targets, or optimizing coverage strategy. Covers industry standards, coverage analysis, and module-specific targets.",
-      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.0/skills/test-coverage/SKILL.md"
+      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.1/skills/test-coverage/SKILL.md"
     },
     {
       "name": "coder-auggie",
       "plugin": "rd2@cc-agents",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "description": "Use Auggie MCP for codebase-aware AI code generation with semantic understanding. Trigger when user mentions \"Auggie code\", \"semantic generate\", \"codebase-aware implementation\". NOT for code review.",
-      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.0/skills/coder-auggie/SKILL.md"
+      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.1/skills/coder-auggie/SKILL.md"
     },
     {
       "name": "code-review-opencode",
       "plugin": "rd2@cc-agents",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "description": "Use OpenCode CLI for code review. Trigger when user mentions \"opencode review\", \"AI-assisted review\", \"external AI review\". NOT for implementation.",
-      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.0/skills/code-review-opencode/SKILL.md"
+      "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.1/skills/code-review-opencode/SKILL.md"
     }
   ],
-  "lastUpdated": "2026-02-11T22:22:42.712Z",
+  "lastUpdated": "2026-02-13T01:31:07.751Z",
   "version": "1.0"
 }
