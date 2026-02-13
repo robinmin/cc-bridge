@@ -24,6 +24,8 @@ export class RequestTracker {
 	private cache: Map<string, RequestState> = new Map();
 	private config: Required<RequestTrackerConfig>;
 	private started = false;
+	private static readonly REQUEST_ID_PATTERN = /^[a-zA-Z0-9_-]{1,128}$/;
+	private static readonly WORKSPACE_PATTERN = /^[a-zA-Z0-9_-]{1,64}$/;
 
 	constructor(config: RequestTrackerConfig) {
 		this.config = {
@@ -79,6 +81,9 @@ export class RequestTracker {
 	async createRequest(
 		request: Omit<RequestState, "state" | "createdAt" | "lastUpdatedAt" | "timedOut">,
 	): Promise<RequestState> {
+		this.assertValidRequestId(request.requestId);
+		this.assertValidWorkspace(request.workspace);
+
 		const state: RequestState = {
 			...request,
 			state: "created",
@@ -131,6 +136,11 @@ export class RequestTracker {
 	 * Get request state
 	 */
 	async getRequest(requestId: string): Promise<RequestState | null> {
+		if (!this.isValidRequestId(requestId)) {
+			logger.warn({ requestId }, "Invalid requestId for getRequest");
+			return null;
+		}
+
 		// Check cache first
 		if (this.config.enableCache) {
 			const cached = this.cache.get(requestId);
@@ -140,7 +150,7 @@ export class RequestTracker {
 		}
 
 		// Read from filesystem
-		const statePath = path.join(this.stateDir, `${requestId}.json`);
+		const statePath = this.getStateFilePath(requestId);
 		try {
 			const content = await fs.readFile(statePath, "utf-8");
 			const state: RequestState = JSON.parse(content);
@@ -160,7 +170,12 @@ export class RequestTracker {
 	 * List requests by workspace with optional filters
 	 */
 	async listRequests(workspace: string, options?: RequestQueryOptions): Promise<RequestState[]> {
-		const wsDir = path.join(this.workspaceDir, workspace);
+		if (!this.isValidWorkspace(workspace)) {
+			logger.warn({ workspace }, "Invalid workspace for listRequests");
+			return [];
+		}
+
+		const wsDir = this.getWorkspaceDirPath(workspace);
 		try {
 			const files = await fs.readdir(wsDir);
 			const requests: RequestState[] = [];
@@ -203,6 +218,11 @@ export class RequestTracker {
 	 * Delete request state
 	 */
 	async deleteRequest(requestId: string): Promise<void> {
+		if (!this.isValidRequestId(requestId)) {
+			logger.warn({ requestId }, "Invalid requestId for deleteRequest");
+			return;
+		}
+
 		// Get state to find workspace
 		const state = await this.getRequest(requestId);
 		if (!state) {
@@ -210,11 +230,16 @@ export class RequestTracker {
 		}
 
 		// Remove main file
-		const mainPath = path.join(this.stateDir, `${requestId}.json`);
+		const mainPath = this.getStateFilePath(requestId);
 		await fs.unlink(mainPath).catch(() => {});
 
 		// Remove workspace-indexed file
-		const wsPath = path.join(this.workspaceDir, state.workspace, `${requestId}.json`);
+		if (!this.isValidWorkspace(state.workspace)) {
+			logger.warn({ requestId, workspace: state.workspace }, "Invalid workspace in stored state during delete");
+			this.cache.delete(requestId);
+			return;
+		}
+		const wsPath = this.getWorkspaceRequestFilePath(state.workspace, requestId);
 		await fs.unlink(wsPath).catch(() => {});
 
 		// Remove from cache
@@ -227,21 +252,60 @@ export class RequestTracker {
 	 * Write state to filesystem (atomic)
 	 */
 	private async writeState(state: RequestState): Promise<void> {
+		this.assertValidRequestId(state.requestId);
+		this.assertValidWorkspace(state.workspace);
+
 		const json = JSON.stringify(state, null, 2);
 
 		// Write to main location (atomic write with temp file)
-		const mainPath = path.join(this.stateDir, `${state.requestId}.json`);
+		const mainPath = this.getStateFilePath(state.requestId);
 		const tmpPath = `${mainPath}.tmp`;
 		await fs.writeFile(tmpPath, json);
 		await fs.rename(tmpPath, mainPath);
 
 		// Write to workspace-indexed location
-		const wsDir = path.join(this.workspaceDir, state.workspace);
+		const wsDir = this.getWorkspaceDirPath(state.workspace);
 		await fs.mkdir(wsDir, { recursive: true });
-		const wsPath = path.join(wsDir, `${state.requestId}.json`);
+		const wsPath = this.getWorkspaceRequestFilePath(state.workspace, state.requestId);
 		const wsTmpPath = `${wsPath}.tmp`;
 		await fs.writeFile(wsTmpPath, json);
 		await fs.rename(wsTmpPath, wsPath);
+	}
+
+	private isValidRequestId(requestId: string): boolean {
+		return RequestTracker.REQUEST_ID_PATTERN.test(requestId);
+	}
+
+	private assertValidRequestId(requestId: string): void {
+		if (!this.isValidRequestId(requestId)) {
+			throw new Error(`Invalid requestId: ${requestId}`);
+		}
+	}
+
+	private isValidWorkspace(workspace: string): boolean {
+		return RequestTracker.WORKSPACE_PATTERN.test(workspace);
+	}
+
+	private assertValidWorkspace(workspace: string): void {
+		if (!this.isValidWorkspace(workspace)) {
+			throw new Error(`Invalid workspace: ${workspace}`);
+		}
+	}
+
+	private getStateFilePath(requestId: string): string {
+		this.assertValidRequestId(requestId);
+		return path.join(this.stateDir, `${requestId}.json`);
+	}
+
+	private getWorkspaceDirPath(workspace: string): string {
+		this.assertValidWorkspace(workspace);
+		return path.join(this.workspaceDir, workspace);
+	}
+
+	private getWorkspaceRequestFilePath(workspace: string, requestId: string): string {
+		this.assertValidWorkspace(workspace);
+		this.assertValidRequestId(requestId);
+		return path.join(this.workspaceDir, workspace, `${requestId}.json`);
 	}
 
 	/**
