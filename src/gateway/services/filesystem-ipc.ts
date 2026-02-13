@@ -322,10 +322,7 @@ export class FileSystemIpc {
 			return; // Don't start if destroyed or already started
 		}
 		if (this.config.cleanupInterval <= 0) {
-			logger.debug(
-				{ intervalMs: this.config.cleanupInterval },
-				"Skipping periodic file cleanup (interval <= 0)",
-			);
+			logger.debug({ intervalMs: this.config.cleanupInterval }, "Skipping periodic file cleanup (interval <= 0)");
 			return;
 		}
 
