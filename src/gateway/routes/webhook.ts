@@ -11,6 +11,7 @@ import { BotRouter } from "@/gateway/pipeline/bot-router";
 import { rateLimiter } from "@/gateway/rate-limiter";
 import { updateTracker } from "@/gateway/tracker";
 import { logger } from "@/packages/logger";
+import { acceptAttachments } from "@/gateway/services/file-acceptor";
 
 // Webhook processing timeout (120 seconds) - allows for complex operations like web search
 // Telegram webhook timeout is ~30s, but we respond immediately and process async
@@ -21,6 +22,7 @@ export interface WebhookContext {
 	feishu?: FeishuChannel;
 	bots: Bot[];
 	feishuBots?: Bot[];
+	config?: { uploads?: { enabled: boolean } };
 }
 
 /**
@@ -95,6 +97,7 @@ async function processWebhookMessage(
 	message: Message,
 	channel: Channel,
 	channelBots: Bot[],
+	config?: { uploads?: unknown },
 ): Promise<Response> {
 	// Deduplication
 	if (message.updateId && (await updateTracker.isProcessed(message.updateId))) {
@@ -124,6 +127,27 @@ async function processWebhookMessage(
 	markChatStart(message.chatId);
 	setChannelForChat(message.chatId, channel.name);
 	logger.info(`[${message.chatId}] ==> ${message.text}`);
+
+	// Handle attachments (download + validation)
+	if (message.attachments && message.attachments.length > 0) {
+		const cfg = config?.uploads as {
+			enabled: boolean;
+			allowedMimeTypes: string[];
+			maxTextBytes: number;
+			maxImageBytes: number;
+			retentionHours: number;
+			storageDir: string;
+		};
+		if (cfg?.enabled) {
+			const { attachments, textAppend } = await acceptAttachments(message, channel, cfg);
+			message.attachments = attachments;
+			if (textAppend) {
+				message.text = `${message.text || ""}${textAppend}`;
+			} else if (!message.text) {
+				message.text = "[User sent attachments]";
+			}
+		}
+	}
 
 	let handled = false;
 	let lastError: unknown = null;
@@ -167,7 +191,7 @@ async function processWebhookMessage(
  * Handle Telegram webhook
  * Route: POST /webhook/telegram
  */
-export async function handleTelegramWebhook(c: Context, { telegram, bots }: WebhookContext): Promise<Response> {
+export async function handleTelegramWebhook(c: Context, { telegram, bots, config }: WebhookContext): Promise<Response> {
 	const body = await c.req.json();
 
 	// Parse webhook using the Telegram channel adapter
@@ -179,14 +203,17 @@ export async function handleTelegramWebhook(c: Context, { telegram, bots }: Webh
 	}
 
 	// Process the message through common logic
-	return processWebhookMessage(c, message, telegram, bots);
+	return processWebhookMessage(c, message, telegram, bots, config);
 }
 
 /**
  * Handle Feishu/Lark webhook
  * Route: POST /webhook/feishu
  */
-export async function handleFeishuWebhook(c: Context, { feishu, feishuBots }: WebhookContext): Promise<Response> {
+export async function handleFeishuWebhook(
+	c: Context,
+	{ feishu, feishuBots, config }: WebhookContext,
+): Promise<Response> {
 	// Check if Feishu channel is configured
 	if (!feishu || !feishuBots) {
 		logger.debug("Received Feishu webhook but Feishu channel is not configured");
@@ -239,7 +266,7 @@ export async function handleFeishuWebhook(c: Context, { feishu, feishuBots }: We
 	}
 
 	// Process the message through common logic
-	return processWebhookMessage(c, message, feishu, feishuBots);
+	return processWebhookMessage(c, message, feishu, feishuBots, config);
 }
 
 /**
