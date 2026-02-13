@@ -150,6 +150,9 @@ describe("Webhook Routing - handleWebhook", () => {
 
 			// Should return 200 even if no bot handles it
 			expect(response.status).toBe(200);
+			expect(sendMessageSpy).toHaveBeenCalled();
+			const firstMessage = sendMessageSpy.mock.calls[0]?.[1];
+			expect(String(firstMessage)).toContain("No available handler");
 		});
 	});
 
