@@ -1,5 +1,7 @@
 import type { Context } from "hono";
 import type { TelegramChannel } from "@/gateway/channels/telegram";
+import type { FeishuChannel } from "@/gateway/channels/feishu";
+import { getChannelForChat } from "@/gateway/channels/chat-channel-map";
 import {
 	type CallbackErrorResponse,
 	CallbackErrorResponseSchema,
@@ -57,6 +59,7 @@ async function withRetry<T>(
  */
 export interface CallbackContext {
 	telegram: TelegramChannel;
+	feishu?: FeishuChannel;
 	idempotencyService?: IdempotencyService;
 	rateLimitService?: RateLimitService;
 	responseFileReader?: ResponseFileReader;
@@ -429,10 +432,18 @@ export async function handleClaudeCallback(c: Context, context: CallbackContext)
 			// Attempt to notify user via Telegram (best effort)
 			try {
 				const errorMsg = sanitizeErrorMessage(error.message);
-				await context.telegram.sendMessage(
-					chatId,
-					`Failed to deliver Claude response after ${attemptCount} attempts: ${errorMsg}. The request has been queued for recovery.`,
-				);
+				const { channel, isFeishu } = getCallbackChannel(chatId, context);
+				if (isFeishu) {
+					await channel.sendMessage(
+						chatId,
+						`Failed to deliver Claude response after ${attemptCount} attempts: ${errorMsg}. The request has been queued for recovery.`,
+					);
+				} else {
+					await channel.sendMessage(
+						chatId,
+						`Failed to deliver Claude response after ${attemptCount} attempts: ${errorMsg}. The request has been queued for recovery.`,
+					);
+				}
 			} catch (telegramErr) {
 				logger.error({ error: telegramErr, requestId, chatId }, "Failed to send failure notification to user");
 			}
@@ -501,13 +512,18 @@ async function processCallbackAsync(
 			"Processing response asynchronously",
 		);
 
-		// 1. Format output for Telegram
-		const formattedOutput = formatOutputForTelegram(response);
+		// 1. Format output for channel
+		const { channel, isFeishu } = getCallbackChannel(chatId, context);
+		const formattedOutput = isFeishu ? formatOutputForFeishu(response) : formatOutputForTelegram(response);
 
-		// 2. Send to Telegram
-		await context.telegram.sendMessage(chatId, formattedOutput, {
-			parseMode: "Markdown",
-		});
+		// 2. Send to channel
+		if (isFeishu) {
+			await channel.sendMessage(chatId, formattedOutput);
+		} else {
+			await channel.sendMessage(chatId, formattedOutput, {
+				parseMode: "Markdown",
+			});
+		}
 
 		// 3. Store agent response to persistence (critical for conversation history)
 		const { persistence } = await import("@/gateway/persistence");
@@ -528,7 +544,7 @@ async function processCallbackAsync(
 				duration,
 				callbackAttempts: response.callback?.attempts || 1,
 			},
-			"Response delivered to Telegram and stored to history",
+			`Response delivered to ${isFeishu ? "Feishu" : "Telegram"} and stored to history`,
 		);
 
 		// Note: Response file cleanup is handled by FileCleanupService
@@ -549,11 +565,51 @@ async function processCallbackAsync(
 		const userErrorMsg = sanitizeErrorMessage(errorMsg);
 
 		try {
-			await context.telegram.sendMessage(chatId, `❌ Failed to retrieve Claude response: ${userErrorMsg}`);
+			const { channel } = getCallbackChannel(chatId, context);
+			await channel.sendMessage(chatId, `❌ Failed to retrieve Claude response: ${userErrorMsg}`);
 		} catch (telegramError) {
 			logger.error({ error: telegramError }, "Failed to send error message to Telegram");
 		}
 	}
+}
+
+function getCallbackChannel(
+	chatId: string | number,
+	context: CallbackContext,
+): { channel: TelegramChannel | FeishuChannel; isFeishu: boolean } {
+	const chatIdStr = String(chatId);
+	const mapped = getChannelForChat(chatId);
+	if (mapped && mapped === "feishu" && context.feishu) {
+		return { channel: context.feishu, isFeishu: true };
+	}
+	if (mapped && mapped === "telegram") {
+		return { channel: context.telegram, isFeishu: false };
+	}
+
+	const isFeishu = (chatIdStr.startsWith("oc_") || chatIdStr.startsWith("ou_")) && !!context.feishu;
+	return {
+		channel: isFeishu ? (context.feishu as FeishuChannel) : context.telegram,
+		isFeishu,
+	};
+}
+
+function formatOutputForFeishu(response: {
+	output: string;
+	exitCode: number;
+	error?: string;
+	callback?: { success: boolean; attempts: number; error?: string };
+}): string {
+	let output = response.output || "";
+	if (response.exitCode !== 0) {
+		output = `⚠️ Claude exited with code ${response.exitCode}\n\n${output}`;
+	}
+	if (response.callback && !response.callback.success) {
+		output += `\n\n📡 Callback failed after ${response.callback.attempts} attempts`;
+		if (response.callback.error) {
+			output += `\nReason: ${response.callback.error}`;
+		}
+	}
+	return output;
 }
 
 /**
