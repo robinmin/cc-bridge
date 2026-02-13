@@ -74,6 +74,7 @@ export class BotRouter {
 	private isMenuBotCommand(command: string): boolean {
 		const menuCommands = [
 			"/start",
+			"/menu",
 			"/help",
 			"/status",
 			"/bridge_status",
@@ -89,8 +90,8 @@ export class BotRouter {
 	 * Check if command belongs to HostBot
 	 */
 	private isHostBotCommand(command: string): boolean {
-		// HostBot handles all /host_* commands
-		return command.startsWith("/host_");
+		// HostBot handles /host and all /host_* commands
+		return command === "/host" || command.startsWith("/host_");
 	}
 
 	/**

@@ -44,4 +44,16 @@ describe("MenuBot", () => {
 		expect(handled).toBe(true);
 		expect(spy).toHaveBeenCalled();
 	});
+
+	test("should handle /menu and include cross-bot commands", async () => {
+		const bot = new MenuBot(mockChannel);
+		const msg: Message = { channelId: "test", chatId: "123", text: "/menu" };
+
+		const handled = await bot.handle(msg);
+
+		expect(handled).toBe(true);
+		expect(spy).toHaveBeenCalledWith("123", expect.stringContaining("Available Commands"));
+		expect(spy).toHaveBeenCalledWith("123", expect.stringContaining("/host_uptime"));
+		expect(spy).toHaveBeenCalledWith("123", expect.stringContaining("/agents"));
+	});
 });

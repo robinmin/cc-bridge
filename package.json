@@ -2,7 +2,7 @@
   "name": "cc-bridge-agent",
   "module": "src/agent/index.ts",
   "type": "module",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "scripts": {
     "start:agent": "bun run src/agent/index.ts",
     "start:gateway": "bun run src/gateway/index.ts",

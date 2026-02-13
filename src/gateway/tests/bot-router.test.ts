@@ -29,4 +29,28 @@ describe("BotRouter", () => {
 
 		expect(target?.name).toBe("AgentBot");
 	});
+
+	test("routes /menu to MenuBot", () => {
+		const router = new BotRouter([menuBot, hostBot, agentBot]);
+		const target = router.route({
+			channelId: "telegram",
+			chatId: "123",
+			text: "/menu",
+			user: { id: "u1" },
+		});
+
+		expect(target?.name).toBe("MenuBot");
+	});
+
+	test("routes /host to HostBot", () => {
+		const router = new BotRouter([menuBot, hostBot, agentBot]);
+		const target = router.route({
+			channelId: "telegram",
+			chatId: "123",
+			text: "/host whoami",
+			user: { id: "u1" },
+		});
+
+		expect(target?.name).toBe("HostBot");
+	});
 });

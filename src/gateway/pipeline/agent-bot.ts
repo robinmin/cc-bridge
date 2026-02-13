@@ -17,6 +17,19 @@ import type { Bot, Message } from "./index";
 
 export class AgentBot implements Bot {
 	name = "AgentBot";
+	static readonly MENU_COMMANDS = [
+		{ command: "agents", description: "List all Claude Code agents" },
+		{ command: "commands", description: "List all slash commands" },
+		{ command: "skills", description: "List all agent skills" },
+		{ command: "ws_list", description: "List all active workspaces" },
+		{ command: "ws_current", description: "Show current workspace" },
+		{ command: "ws_switch", description: "Switch to different workspace" },
+		{
+			command: "ws_add",
+			description: "Explicitly create workspace session",
+		},
+		{ command: "ws_del", description: "Delete workspace session" },
+	];
 
 	// Per-container session pools (key: containerId)
 	private sessionPools: Map<string, SessionPoolService> = new Map();
@@ -28,19 +41,7 @@ export class AgentBot implements Bot {
 	) {}
 
 	getMenus() {
-		return [
-			{ command: "agents", description: "List all Claude Code agents" },
-			{ command: "commands", description: "List all slash commands" },
-			{ command: "skills", description: "List all agent skills" },
-			{ command: "ws_list", description: "List all active workspaces" },
-			{ command: "ws_current", description: "Show current workspace" },
-			{ command: "ws_switch", description: "Switch to different workspace" },
-			{
-				command: "ws_add",
-				description: "Explicitly create workspace session",
-			},
-			{ command: "ws_del", description: "Delete workspace session" },
-		];
+		return AgentBot.MENU_COMMANDS;
 	}
 
 	async handle(message: Message): Promise<boolean> {
@@ -333,10 +334,6 @@ export class AgentBot implements Bot {
 			logger.error({ error: error instanceof Error ? error.message : String(error) }, "Failed to clear session");
 			await this.channel.sendMessage(message.chatId, "⚠️ Failed to clear session.");
 		}
-	}
-
-	private sanitizeForTelegramMarkdown(input: string): string {
-		return sanitizeForTelegramMarkdown(input);
 	}
 
 	/**

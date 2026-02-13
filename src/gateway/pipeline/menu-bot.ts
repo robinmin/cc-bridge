@@ -3,6 +3,8 @@ import { instanceManager } from "@/gateway/instance-manager";
 import { HelpReport } from "@/gateway/output/HelpReport";
 import { WorkspaceList, WorkspaceStatus } from "@/gateway/output/WorkspaceReport";
 import { persistence } from "@/gateway/persistence";
+import { AgentBot } from "@/gateway/pipeline/agent-bot";
+import { HostBot } from "@/gateway/pipeline/host-bot";
 import { logger } from "@/packages/logger";
 import type { Bot, Message } from "./index";
 
@@ -10,6 +12,7 @@ export class MenuBot implements Bot {
 	name = "MenuBot";
 
 	static readonly MENU_COMMANDS = [
+		{ command: "menu", description: "Show all available commands" },
 		{ command: "ws_list", description: "List all project workspaces" },
 		{ command: "ws_status", description: "Current workspace status" },
 		{
@@ -82,6 +85,22 @@ export class MenuBot implements Bot {
 				});
 
 				await this.channel.sendMessage(message.chatId, report);
+				return true;
+			}
+			case "/menu": {
+				const combined = [...MenuBot.MENU_COMMANDS, ...HostBot.MENU_COMMANDS, ...AgentBot.MENU_COMMANDS];
+				const uniqueMenus = new Map<string, { command: string; description: string }>();
+				for (const item of combined) {
+					if (!uniqueMenus.has(item.command)) {
+						uniqueMenus.set(item.command, item);
+					}
+				}
+				const lines = [
+					"📋 Available Commands",
+					"",
+					...Array.from(uniqueMenus.values()).map((m) => `/${m.command} - ${m.description}`),
+				];
+				await this.channel.sendMessage(message.chatId, lines.join("\n"));
 				return true;
 			}
 			case "/status":
