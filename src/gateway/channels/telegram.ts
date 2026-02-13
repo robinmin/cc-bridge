@@ -88,6 +88,33 @@ export class TelegramClient {
 		}
 		return response.json();
 	}
+
+	async getFile(fileId: string): Promise<{ file_path: string; file_size?: number }> {
+		const url = `${GATEWAY_CONSTANTS.DIAGNOSTICS.URLS.TELEGRAM_API_BASE}/bot${this.botToken}/getFile`;
+		const response = await fetch(url, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ file_id: fileId }),
+			signal: AbortSignal.timeout(TELEGRAM_API_TIMEOUT_MS),
+		});
+
+		if (!response.ok) {
+			const error = await response.text();
+			throw new Error(`Telegram API error (getFile): ${error}`);
+		}
+
+		const data = (await response.json()) as { ok: boolean; result?: { file_path: string; file_size?: number } };
+		if (!data.ok || !data.result?.file_path) {
+			throw new Error("Telegram API error (getFile): missing file_path");
+		}
+
+		return data.result;
+	}
+
+	async downloadFile(filePath: string): Promise<Response> {
+		const url = `${GATEWAY_CONSTANTS.DIAGNOSTICS.URLS.TELEGRAM_API_BASE}/file/bot${this.botToken}/${filePath}`;
+		return fetch(url, { signal: AbortSignal.timeout(TELEGRAM_API_TIMEOUT_MS) });
+	}
 }
 
 export class TelegramChannel implements Channel, ChannelAdapter {
@@ -96,6 +123,10 @@ export class TelegramChannel implements Channel, ChannelAdapter {
 
 	constructor(botToken: string) {
 		this.client = new TelegramClient(botToken);
+	}
+
+	getClient(): TelegramClient {
+		return this.client;
 	}
 
 	async sendMessage(chatId: string | number, text: string, options?: unknown): Promise<void> {
@@ -135,6 +166,49 @@ export class TelegramChannel implements Channel, ChannelAdapter {
 
 		const from = msg.from && typeof msg.from === "object" ? (msg.from as Record<string, unknown>) : undefined;
 
+		const attachments: Message["attachments"] = [];
+
+		if (msg.document && typeof msg.document === "object") {
+			const doc = msg.document as Record<string, unknown>;
+			const fileId = String(doc.file_id || "");
+			if (fileId) {
+				const mimeType = typeof doc.mime_type === "string" ? doc.mime_type : undefined;
+				const fileName = typeof doc.file_name === "string" ? doc.file_name : `document_${fileId}`;
+				const sizeBytes = typeof doc.file_size === "number" ? doc.file_size : undefined;
+				const kind = mimeType === "application/pdf" ? "other" : mimeType?.startsWith("image/") ? "image" : "text";
+				attachments.push({
+					source: "telegram",
+					fileId,
+					fileName,
+					mimeType,
+					sizeBytes,
+					kind: kind as "text" | "image" | "other",
+				});
+			}
+		}
+
+		if (Array.isArray(msg.photo) && msg.photo.length > 0) {
+			const photos = msg.photo as Array<Record<string, unknown>>;
+			const largest = photos.reduce((prev, curr) => {
+				const prevSize = typeof prev.file_size === "number" ? prev.file_size : 0;
+				const currSize = typeof curr.file_size === "number" ? curr.file_size : 0;
+				return currSize > prevSize ? curr : prev;
+			});
+			const fileId = String(largest.file_id || "");
+			if (fileId) {
+				const fileName = `photo_${String(largest.file_unique_id || fileId)}.jpg`;
+				const sizeBytes = typeof largest.file_size === "number" ? largest.file_size : undefined;
+				attachments.push({
+					source: "telegram",
+					fileId,
+					fileName,
+					mimeType: "image/jpeg",
+					sizeBytes,
+					kind: "image",
+				});
+			}
+		}
+
 		return {
 			channelId: "telegram",
 			chatId: chat.id as string | number,
@@ -145,6 +219,7 @@ export class TelegramChannel implements Channel, ChannelAdapter {
 				id: from?.id as string | number,
 				username: from?.username as string | undefined,
 			},
+			attachments,
 		};
 	}
 }
