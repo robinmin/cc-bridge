@@ -163,9 +163,19 @@ export class PersistenceManager {
                 schedule_type TEXT NOT NULL,
                 schedule_value TEXT NOT NULL,
                 next_run DATETIME,
-                status TEXT DEFAULT 'active'
+                status TEXT NOT NULL DEFAULT 'active'
             )
         `);
+
+		// Best-effort schema alignment (no migrations in early stage)
+		try {
+			this.db.run(`ALTER TABLE tasks ADD COLUMN status TEXT NOT NULL DEFAULT 'active'`);
+		} catch {
+			// Ignore if column already exists
+		}
+
+		// Normalize existing rows
+		this.db.run(`UPDATE tasks SET status = 'active' WHERE status IS NULL OR status = ''`);
 
 		this.db.run(`
             CREATE TABLE IF NOT EXISTS workspaces (
@@ -258,6 +268,18 @@ export class PersistenceManager {
 
 	async getActiveTasks() {
 		return this.db.query("SELECT * FROM tasks WHERE status = 'active' AND next_run <= datetime('now')").all();
+	}
+
+	async getAllTasks() {
+		try {
+			return this.db.query("SELECT * FROM tasks WHERE status != 'deleted' ORDER BY next_run ASC").all();
+		} catch {
+			return [];
+		}
+	}
+
+	async deleteTask(id: string) {
+		this.db.run("UPDATE tasks SET status = 'deleted' WHERE id = ?", [id]);
 	}
 
 	// --- Workspaces ---
