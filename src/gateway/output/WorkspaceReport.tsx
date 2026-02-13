@@ -1,5 +1,6 @@
 /** @jsxImportSource hono/jsx */
 import { Header } from "./common";
+import { renderTemplate } from "@/packages/template";
 
 interface WorkspaceInfo {
 	name: string;
@@ -20,17 +21,25 @@ export const WorkspaceList = ({
 		.map((ws) => {
 			const statusEmoji = ws.status === "running" && ws.isActive ? "🟢" : "⚪";
 			const activeMarker = ws.isActive ? " 📍" : "";
-			return `${statusEmoji} ${ws.name}${activeMarker}`;
+			return {
+				statusEmoji,
+				name: ws.name,
+				activeMarker,
+			};
 		})
-		.join("\n");
+		.sort((a, b) => a.name.localeCompare(b.name));
 
-	return `${[
-		Header({ title: "Available Workspaces", format }),
-		"",
-		list,
-		"",
-		format === "telegram" ? "Use `/ws_switch <name>` to change." : "Use 'make ws_switch target=<name>' to change.",
-	].join("\n")}\n`;
+	const header = Header({ title: "Available Workspaces", format });
+	const hint =
+		format === "telegram" ? "Use `/ws_switch <name>` to change." : "Use 'make ws_switch target=<name>' to change.";
+
+	return (
+		renderTemplate(WORKSPACE_LIST_TEMPLATE, {
+			header,
+			list,
+			hint,
+		}) + "\n"
+	);
 };
 
 export const WorkspaceStatus = ({
@@ -43,9 +52,24 @@ export const WorkspaceStatus = ({
 	format: "telegram" | "terminal";
 }) => {
 	if (!current) {
-		return "📍 **Current Workspace**: None selected.\nUse `/ws_list` to see available options.";
+		return renderTemplate(WORKSPACE_STATUS_EMPTY_TEMPLATE, {});
 	}
 
 	const statusText = status === "running" ? "🟢 Running" : "🔴 Stopped";
-	return `📍 **Current Workspace**: ${current}\nStatus: ${statusText}`;
+	return renderTemplate(WORKSPACE_STATUS_TEMPLATE, { current, statusText });
 };
+
+const WORKSPACE_LIST_TEMPLATE = [
+	"{{header}}",
+	"",
+	"{{#each list}}{{this.statusEmoji}} {{this.name}}{{this.activeMarker}}\n{{/each}}",
+	"",
+	"{{hint}}",
+].join("\n");
+
+const WORKSPACE_STATUS_TEMPLATE = ["📍 **Current Workspace**: {{current}}", "Status: {{statusText}}"].join("\n");
+
+const WORKSPACE_STATUS_EMPTY_TEMPLATE = [
+	"📍 **Current Workspace**: None selected.",
+	"Use `/ws_list` to see available options.",
+].join("\n");
