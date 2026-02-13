@@ -20,6 +20,9 @@ export class MenuBot implements Bot {
 			command: "ws_add",
 			description: "Add a new workspace (e.g. /ws_add my-project)",
 		},
+		{ command: "schedulers", description: "List scheduled tasks" },
+		{ command: "scheduler_add", description: "Add scheduled task" },
+		{ command: "scheduler_del", description: "Delete scheduled task by id" },
 		{ command: "status", description: "System infrastructure health" },
 		{ command: "help", description: "Show available commands" },
 	];
