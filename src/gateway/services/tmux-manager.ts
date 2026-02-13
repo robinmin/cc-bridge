@@ -317,6 +317,18 @@ export class TmuxManager {
 	}
 
 	/**
+	 * Clear a chat/workspace tmux session if it exists
+	 */
+	async clearSession(containerId: string, workspace: string, chatId: string | number): Promise<boolean> {
+		const sessionName = this.generateSessionName(workspace, chatId);
+		if (!(await this.sessionExists(containerId, sessionName))) {
+			return false;
+		}
+		await this.killSession(containerId, sessionName);
+		return true;
+	}
+
+	/**
 	 * Escape a string for safe use in single quotes in shell
 	 * - Replaces ' with '\'' (end quote, escaped quote, start quote)
 	 * - Removes or escapes control characters that break tmux/ssh
