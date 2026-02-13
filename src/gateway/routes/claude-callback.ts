@@ -1,7 +1,8 @@
 import type { Context } from "hono";
-import type { TelegramChannel } from "@/gateway/channels/telegram";
-import type { FeishuChannel } from "@/gateway/channels/feishu";
 import { getChannelForChat } from "@/gateway/channels/chat-channel-map";
+import type { FeishuChannel } from "@/gateway/channels/feishu";
+import type { TelegramChannel } from "@/gateway/channels/telegram";
+import { GATEWAY_CONSTANTS } from "@/gateway/consts";
 import {
 	type CallbackErrorResponse,
 	CallbackErrorResponseSchema,
@@ -17,7 +18,6 @@ import type { IdempotencyService } from "@/gateway/services/IdempotencyService";
 import type { RateLimitService } from "@/gateway/services/RateLimitService";
 import { FileReadError, FileReadErrorType, type ResponseFileReader } from "@/gateway/services/ResponseFileReader";
 import { logger } from "@/packages/logger";
-import { GATEWAY_CONSTANTS } from "@/gateway/consts";
 
 /**
  * Maximum number of retries for failed callback processing
@@ -270,8 +270,7 @@ export async function handleClaudeCallback(c: Context, context: CallbackContext)
 		try {
 			if (GATEWAY_CONSTANTS.FILESYSTEM_IPC.USE_CALLBACK_PAYLOAD) {
 				const payload = validationResult.data;
-				const payloadOutput =
-					typeof payload.output === "string" ? payload.output.trim() : payload.output;
+				const payloadOutput = typeof payload.output === "string" ? payload.output.trim() : payload.output;
 				const payloadHasOutput = typeof payloadOutput === "string" && payloadOutput.length > 0;
 				const payloadHasError = typeof payload.error === "string" && payload.error.trim().length > 0;
 				if ((payloadHasOutput || payloadHasError) && payload.exitCode !== undefined) {
@@ -289,8 +288,7 @@ export async function handleClaudeCallback(c: Context, context: CallbackContext)
 				}
 			}
 
-			const useInlinePayload =
-				process.env.IPC_MODE === "hybrid" || process.env.AGENT_MODE === "hybrid";
+			const useInlinePayload = process.env.IPC_MODE === "hybrid" || process.env.AGENT_MODE === "hybrid";
 
 			// In hybrid mode, if payload exists, skip file reads entirely
 			if (context.responseFileReader && !(useInlinePayload && payloadResponse)) {
@@ -317,10 +315,7 @@ export async function handleClaudeCallback(c: Context, context: CallbackContext)
 					if (parsed?.output && parsed.output.trim().length > 0) {
 						break;
 					}
-					logger.warn(
-						{ requestId, delayMs },
-						"Empty output detected after read; retrying response file read",
-					);
+					logger.warn({ requestId, delayMs }, "Empty output detected after read; retrying response file read");
 					await new Promise((resolve) => setTimeout(resolve, delayMs));
 					responseData = await context.responseFileReader.readResponseFile(workspace, requestId);
 				}
@@ -520,9 +515,7 @@ async function processCallbackAsync(
 		if (isFeishu) {
 			await channel.sendMessage(chatId, formattedOutput);
 		} else {
-			await channel.sendMessage(chatId, formattedOutput, {
-				parseMode: "Markdown",
-			});
+			await channel.sendMessage(chatId, formattedOutput);
 		}
 
 		// 3. Store agent response to persistence (critical for conversation history)
