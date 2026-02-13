@@ -247,7 +247,15 @@ export class AgentHttpServer {
 				this.sessionPool.trackRequestStart(workspace);
 
 				// Execute command asynchronously
-				this.executeCommand(requestId, workspace, command, session.sessionName, timeoutMs)
+				this.executeCommand(
+					requestId,
+					workspace,
+					String(chatId || "http-api"),
+					command,
+					session.containerId,
+					session.sessionName,
+					timeoutMs,
+				)
 					.then(async (result) => {
 						await this.requestTracker.updateState(requestId, {
 							state: result.success ? "completed" : "failed",
@@ -429,8 +437,10 @@ export class AgentHttpServer {
 	 */
 	private async executeCommand(
 		requestId: string,
-		_workspace: string,
+		workspace: string,
+		chatId: string,
 		command: string,
+		containerId: string,
 		sessionName: string,
 		timeoutMs?: number,
 	): Promise<{
@@ -447,12 +457,21 @@ export class AgentHttpServer {
 			});
 
 			// Send command to tmux session
-			const result = await this.tmuxManager.sendToSession(sessionName, command, {
-				requestId,
+			await this.tmuxManager.sendToSession(
+				containerId,
+				sessionName,
+				command,
+				{
+					requestId,
+					chatId,
+					workspace,
+				},
 				timeoutMs,
-			});
+			);
 
-			return result;
+			return {
+				success: true,
+			};
 		} catch (err) {
 			return {
 				success: false,
@@ -494,7 +513,7 @@ export class AgentHttpServer {
 		error?: string;
 	}> {
 		try {
-			const sessions = await this.tmuxManager.listAllSessions("claude-agent");
+			const sessions = await this.tmuxManager.listAllSessions(this.getTmuxHealthContainerId());
 			return {
 				healthy: true,
 				sessionsCount: sessions.length,
@@ -557,8 +576,10 @@ export class AgentHttpServer {
 	 */
 	private async checkGateway(): Promise<{ healthy: boolean; error?: string }> {
 		try {
+			const healthUrl = this.getGatewayHealthUrl();
+
 			// Try to reach the gateway health endpoint
-			const response = await fetch("http://gateway:8080/health", {
+			const response = await fetch(healthUrl, {
 				method: "GET",
 				signal: AbortSignal.timeout(5000),
 			}).catch(() => null);
@@ -569,13 +590,30 @@ export class AgentHttpServer {
 
 			return {
 				healthy: false,
-				error: "Gateway health check failed",
+				error: `Gateway health check failed (${healthUrl})`,
 			};
 		} catch (err) {
 			return {
 				healthy: false,
 				error: err instanceof Error ? err.message : String(err),
 			};
+		}
+	}
+
+	private getTmuxHealthContainerId(): string {
+		return process.env.AGENT_HEALTH_CONTAINER_ID || process.env.AGENT_CONTAINER_ID || "claude-agent";
+	}
+
+	private getGatewayHealthUrl(): string {
+		if (process.env.GATEWAY_HEALTH_URL) {
+			return process.env.GATEWAY_HEALTH_URL;
+		}
+
+		const gatewayBaseUrl = process.env.GATEWAY_URL || "http://gateway:8080";
+		try {
+			return new URL("/health", gatewayBaseUrl).toString();
+		} catch {
+			return "http://gateway:8080/health";
 		}
 	}
 
