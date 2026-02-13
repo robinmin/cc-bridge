@@ -1,17 +1,16 @@
 import type { Context } from "hono";
 import type { Channel, ChannelAdapter } from "@/gateway/channels";
+import { setChannelForChat } from "@/gateway/channels/chat-channel-map";
 import type { FeishuChannel } from "@/gateway/channels/feishu";
 import { decryptFeishuWebhook, isEncryptedFeishuWebhook } from "@/gateway/channels/feishu";
 import type { TelegramChannel } from "@/gateway/channels/telegram";
 import { markChatStart } from "@/gateway/channels/telegram";
-import { setChannelForChat } from "@/gateway/channels/chat-channel-map";
-import { persistence } from "@/gateway/persistence";
 import type { Bot, Message } from "@/gateway/pipeline";
 import { BotRouter } from "@/gateway/pipeline/bot-router";
 import { rateLimiter } from "@/gateway/rate-limiter";
+import { acceptAttachments } from "@/gateway/services/file-acceptor";
 import { updateTracker } from "@/gateway/tracker";
 import { logger } from "@/packages/logger";
-import { acceptAttachments } from "@/gateway/services/file-acceptor";
 
 // Webhook processing timeout (120 seconds) - allows for complex operations like web search
 // Telegram webhook timeout is ~30s, but we respond immediately and process async
@@ -173,7 +172,10 @@ async function processWebhookMessage(
 			);
 		}
 	} else {
-		logger.warn({ chatId: message.chatId }, "BotRouter returned null - no bot available");
+		logger.error({ chatId: message.chatId, text: message.text }, "BotRouter returned null - no bot available");
+		await channel
+			.sendMessage(message.chatId, "❌ No available handler for this request. Please try again shortly.")
+			.catch((err) => logger.error({ err }, "Failed to send no-handler notification"));
 	}
 
 	// If no bot handled the message and there was an error, notify user
