@@ -89,6 +89,12 @@ describe("TelegramChannel", () => {
 
 			expect(mockCalls[0].body.parse_mode).toBe("HTML");
 		});
+
+		test("should not set parse_mode by default", async () => {
+			await telegram.sendMessage(12345, "plain text with *markdown-like* chars");
+
+			expect(mockCalls[0].body.parse_mode).toBeUndefined();
+		});
 	});
 
 	describe("showTyping", () => {
