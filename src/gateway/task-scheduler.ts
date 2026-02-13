@@ -2,6 +2,8 @@ import { instanceManager } from "@/gateway/instance-manager";
 import { persistence } from "@/gateway/persistence";
 import { IpcFactory } from "@/packages/ipc";
 import { logger } from "@/packages/logger";
+import fs from "node:fs/promises";
+import path from "node:path";
 
 // Task types for better type safety
 interface ScheduledTask {
@@ -17,23 +19,35 @@ interface ScheduledTask {
 
 type ScheduleUnit = "s" | "m" | "h" | "d";
 
+type UploadsConfig = {
+	enabled: boolean;
+	allowedMimeTypes: string[];
+	maxTextBytes: number;
+	maxImageBytes: number;
+	retentionHours: number;
+	storageDir: string;
+};
+
 export class TaskScheduler {
 	private timer: Timer | null = null;
 	private isRunning = false;
+	private uploadsConfig?: UploadsConfig;
 
 	constructor(
 		private persistenceManager = persistence,
 		private instManager = instanceManager,
 	) {}
 
-	async start() {
+	async start(config?: { uploads?: UploadsConfig }) {
 		if (this.isRunning) return;
 		this.isRunning = true;
+		this.uploadsConfig = config?.uploads;
 		logger.info("TaskScheduler started");
 
 		// Use a 1-minute interval for the scheduler
 		this.timer = setInterval(async () => {
 			await this.checkTasks();
+			await this.cleanupUploads();
 		}, 60000);
 	}
 
@@ -58,6 +72,46 @@ export class TaskScheduler {
 			}
 		} catch (error) {
 			logger.error({ error }, "Error checking tasks");
+		}
+	}
+
+	private async cleanupUploads() {
+		try {
+			const cfg = this.uploadsConfig;
+			if (!cfg || !cfg.enabled || !cfg.storageDir) return;
+
+			const ttlMs = (cfg.retentionHours || 24) * 60 * 60 * 1000;
+			const baseDir = path.resolve(cfg.storageDir);
+			await this.cleanupDir(baseDir, ttlMs);
+		} catch (error) {
+			logger.error({ error }, "Error cleaning up uploads");
+		}
+	}
+
+	private async cleanupDir(dir: string, ttlMs: number): Promise<void> {
+		let entries: Array<{ name: string; isDir: boolean }> = [];
+		try {
+			const dirents = await fs.readdir(dir, { withFileTypes: true });
+			entries = dirents.map((d) => ({ name: d.name, isDir: d.isDirectory() }));
+		} catch {
+			return;
+		}
+
+		const now = Date.now();
+		for (const entry of entries) {
+			const fullPath = path.join(dir, entry.name);
+			if (entry.isDir) {
+				await this.cleanupDir(fullPath, ttlMs);
+				continue;
+			}
+			try {
+				const stat = await fs.stat(fullPath);
+				if (now - stat.mtimeMs > ttlMs) {
+					await fs.unlink(fullPath);
+				}
+			} catch {
+				// ignore
+			}
 		}
 	}
 
