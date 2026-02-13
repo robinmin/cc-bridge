@@ -5,7 +5,7 @@ description: Use this skill when you need to trigger cc-bridge AgentBot slash co
 
 # Host Command Bridge
 
-This skill teaches how to invoke AgentBot slash commands from the host using `scripts/host_cmd.sh`. Use it to automate `/agents`, `/commands`, `/skills`, `/schedulers`, `/scheduler_add`, `/scheduler_del`, and workspace commands (`/ws_list`, `/ws_current`, `/ws_switch`, `/ws_add`, `/ws_del`) without going through chat.
+This skill teaches how to invoke AgentBot slash commands from the host using `scripts/host_cmd.sh`. Use it to automate `/agents`, `/commands`, `/skills`, `/schedulers`, `/scheduler_add`, `/scheduler_del`, `/clear`, and workspace commands (`/ws_list`, `/ws_current`, `/ws_switch`, `/ws_add`, `/ws_del`) without going through chat.
 
 ## Quick Use
 
@@ -18,6 +18,7 @@ scripts/host_cmd.sh skills
 scripts/host_cmd.sh schedulers
 scripts/host_cmd.sh scheduler_add cc-bridge recurring 1h "Daily summary"
 scripts/host_cmd.sh scheduler_del <task_id>
+scripts/host_cmd.sh clear
 scripts/host_cmd.sh ws_list
 scripts/host_cmd.sh ws_current
 scripts/host_cmd.sh ws_switch my-project
@@ -35,6 +36,7 @@ Each host command maps to the AgentBot slash command:
 - `schedulers` → `/schedulers`
 - `scheduler_add <instance> <once|recurring> <schedule> <prompt>` → `/scheduler_add ...`
 - `scheduler_del <task_id>` → `/scheduler_del ...`
+- `clear` → `/clear`
 - `ws_list` → `/ws_list`
 - `ws_current` → `/ws_current`
 - `ws_switch <name>` → `/ws_switch <name>`
