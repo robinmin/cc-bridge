@@ -22,9 +22,9 @@ export const CallbackRequestSchema = z.object({
 			errorMap: () => ({ message: "chatId must be a string or number" }),
 		})
 		.refine((val) => {
-			const numVal = typeof val === "string" ? parseInt(val, 10) : val;
-			return !Number.isNaN(numVal) && numVal !== 0;
-		}, "chatId must be a non-zero number"),
+			if (typeof val === "number") return val !== 0;
+			return typeof val === "string" && val.trim().length > 0;
+		}, "chatId must be non-empty"),
 	workspace: z
 		.string({
 			required_error: "workspace is required",
