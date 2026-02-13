@@ -1,9 +1,9 @@
+import fs from "node:fs/promises";
+import path from "node:path";
 import { instanceManager } from "@/gateway/instance-manager";
 import { persistence } from "@/gateway/persistence";
 import { IpcFactory } from "@/packages/ipc";
 import { logger } from "@/packages/logger";
-import fs from "node:fs/promises";
-import path from "node:path";
 
 // Task types for better type safety
 interface ScheduledTask {
