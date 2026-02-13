@@ -240,6 +240,18 @@ class FeishuClient {
 		}
 	}
 
+	async downloadResource(messageId: string, fileKey: string, type: "file" | "image"): Promise<Response> {
+		const token = await this.getTenantAccessToken();
+		const url = `${this.baseUrl}/open-apis/im/v1/messages/${messageId}/resources/${fileKey}?type=${type}`;
+		return fetch(url, {
+			method: "GET",
+			headers: {
+				Authorization: `Bearer ${token}`,
+			},
+			signal: AbortSignal.timeout(FEISHU_API_TIMEOUT_MS),
+		});
+	}
+
 	/**
 	 * Send a chat action (typing indicator) to a Feishu chat
 	 * Note: Feishu doesn't have a native typing indicator API
@@ -284,6 +296,10 @@ export class FeishuChannel implements Channel, ChannelAdapter {
 	constructor(appId: string, appSecret: string, domain?: FeishuDomain, encryptKey?: string) {
 		this.client = new FeishuClient(appId, appSecret, domain);
 		this.encryptKey = encryptKey;
+	}
+
+	getClient(): FeishuClient {
+		return this.client;
 	}
 
 	/**
@@ -348,6 +364,7 @@ export class FeishuChannel implements Channel, ChannelAdapter {
 			}
 
 			const { sender, message } = webhookBody.event;
+			const attachments: Message["attachments"] = [];
 
 			// Parse message content (it's a JSON string)
 			let messageText = "";
@@ -381,6 +398,41 @@ export class FeishuChannel implements Channel, ChannelAdapter {
 				messageText = message.content;
 			}
 
+			// Parse attachments (image / file)
+			try {
+				const content = JSON.parse(message.content);
+				if (message.message_type === "image" && content.image_key) {
+					attachments.push({
+						source: "feishu",
+						fileId: String(content.image_key),
+						fileName: `image_${String(content.image_key)}.jpg`,
+						mimeType: "image/jpeg",
+						kind: "image",
+						sizeBytes: typeof content.image_size === "number" ? content.image_size : undefined,
+						remoteType: "image",
+						messageId: message.message_id,
+					});
+				}
+				if (message.message_type === "file" && content.file_key) {
+					const fileName = content.file_name ? String(content.file_name) : `file_${String(content.file_key)}`;
+					const mimeType = content.mime_type ? String(content.mime_type) : undefined;
+					const sizeBytes = typeof content.file_size === "number" ? content.file_size : undefined;
+					const kind = mimeType === "application/pdf" ? "other" : mimeType?.startsWith("image/") ? "image" : "text";
+					attachments.push({
+						source: "feishu",
+						fileId: String(content.file_key),
+						fileName,
+						mimeType,
+						sizeBytes,
+						kind: kind as "text" | "image" | "other",
+						remoteType: "file",
+						messageId: message.message_id,
+					});
+				}
+			} catch {
+				// ignore attachment parsing errors
+			}
+
 			return {
 				channelId: "feishu",
 				chatId: message.chat_id,
@@ -390,6 +442,7 @@ export class FeishuChannel implements Channel, ChannelAdapter {
 					id: sender.sender_id.open_id,
 					username: undefined, // Feishu doesn't expose username by default
 				},
+				attachments,
 			};
 		} catch (error) {
 			logger.error({ error, body }, "Failed to parse Feishu webhook");
