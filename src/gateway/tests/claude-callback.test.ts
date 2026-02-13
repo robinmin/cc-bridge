@@ -15,7 +15,7 @@ class MockTelegramChannel extends TelegramChannel {
 	calls: Array<{
 		chatId: string | number;
 		text: string;
-		options?: { parseMode?: string };
+		options?: { parse_mode?: string };
 	}> = [];
 
 	constructor() {
@@ -23,7 +23,7 @@ class MockTelegramChannel extends TelegramChannel {
 	}
 
 	async sendMessage(chatId: string | number, text: string, options?: unknown): Promise<void> {
-		this.calls.push({ chatId, text, options: options as { parseMode?: string } | undefined });
+		this.calls.push({ chatId, text, options: options as { parse_mode?: string } | undefined });
 	}
 
 	async showTyping(): Promise<void> {
@@ -182,6 +182,7 @@ describe("handleClaudeCallback (Hardened)", () => {
 			expect(mockTelegram.calls.length).toBe(1);
 			expect(mockTelegram.calls[0].chatId).toBe("456");
 			expect(mockTelegram.calls[0].text).toBe("Async response!");
+			expect(mockTelegram.calls[0].options).toBeUndefined();
 		});
 	});
 
