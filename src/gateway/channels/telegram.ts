@@ -99,12 +99,14 @@ export class TelegramChannel implements Channel, ChannelAdapter {
 	}
 
 	async sendMessage(chatId: string | number, text: string, options?: unknown): Promise<void> {
-		// Log outgoing message with truncated content
+		await this.client.sendMessage(chatId, text, options as { parse_mode?: string });
+
+		// Log outgoing message with truncated content (after send completes)
 		const maxLength = 256;
 		const truncatedText = text.length > maxLength ? `${text.substring(0, maxLength)}...` : text;
-		logger.info(`[${chatId}] <== ${truncatedText.replace(/\n/g, "\\n")}`);
-
-		await this.client.sendMessage(chatId, text, options as { parse_mode?: string });
+		const elapsedSec = consumeChatElapsed(chatId);
+		const elapsedSuffix = elapsedSec !== null ? ` (${elapsedSec.toFixed(2)}s)` : "";
+		logger.info(`[${chatId}] <== ${truncatedText.replace(/\n/g, "\\n")}${elapsedSuffix}`);
 	}
 
 	async showTyping(chatId: string | number): Promise<void> {
@@ -146,3 +148,17 @@ export class TelegramChannel implements Channel, ChannelAdapter {
 		};
 	}
 }
+
+const chatTimers = new Map<string, number>();
+
+export const markChatStart = (chatId: string | number): void => {
+	chatTimers.set(String(chatId), Date.now());
+};
+
+export const consumeChatElapsed = (chatId: string | number): number | null => {
+	const key = String(chatId);
+	const start = chatTimers.get(key);
+	if (start === undefined) return null;
+	chatTimers.delete(key);
+	return (Date.now() - start) / 1000;
+};
