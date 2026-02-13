@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-02-12
+
+### ✨ New Features
+
+- **Plugin Discovery Commands**: New commands to explore Claude Code plugins from messaging platforms
+  - `/agents` - List all available Claude Code agents from installed plugins
+  - `/commands` - List all slash commands with argument hints
+  - `/skills` - List all agent skills grouped by plugin
+  - Discovery cache service for fast plugin metadata lookup
+- **Task Scheduler**: Built-in scheduler for automated Claude Code prompts
+  - `/schedulers` - View all scheduled tasks
+  - `/scheduler_add <instance> <once|recurring> <schedule> <prompt>` - Create scheduled tasks
+  - `/scheduler_del <task_id>` - Delete scheduled tasks
+  - Automatic uploads cleanup task
+
+### 🔧 Improvements
+
+- **Agent HTTP Server**: Enhanced container API with improved session management and request tracking
+- **Container Command Handler**: Extended script with additional commands for agent server management
+
+### 🐛 Fixes
+
+- **Communication Channel Reliability**: Multiple fixes for communication channel stability
+
+---
+
 ## [0.5.0] - 2026-02-11
 
 ### 🐛 Fixes
@@ -189,6 +215,8 @@ If upgrading from v0.2.0:
 - Fixed system daemon persistence issues on macOS by standardizing absolute paths in `.plist` configurations.
 
 ---
+[0.6.0]: https://github.com/hanxiao/claudecode-telegram/releases/tag/v0.6.0
+[0.5.0]: https://github.com/hanxiao/claudecode-telegram/releases/tag/v0.5.0
 [0.4.0]: https://github.com/hanxiao/claudecode-telegram/releases/tag/v0.4.0
 [0.3.0]: https://github.com/hanxiao/claudecode-telegram/releases/tag/v0.3.0
 [0.2.0]: https://github.com/hanxiao/claudecode-telegram/releases/tag/v0.2.0
