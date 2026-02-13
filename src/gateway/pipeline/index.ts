@@ -8,6 +8,23 @@ export interface Message {
 		id: string | number;
 		username?: string;
 	};
+	attachments?: Attachment[];
+}
+
+export interface Attachment {
+	source: "telegram" | "feishu";
+	fileId: string;
+	fileName: string;
+	mimeType?: string;
+	sizeBytes?: number;
+	kind: "text" | "image" | "other";
+	remoteType?: "file" | "image";
+	messageId?: string;
+	download?: {
+		relativePath: string;
+		workspacePath: string;
+		sizeBytes: number;
+	};
 }
 
 export interface Bot {
