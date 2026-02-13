@@ -293,6 +293,18 @@ describe("TmuxManager", () => {
 			expect(sessions).toEqual([]);
 		});
 
+		test("should treat exit code 1 with empty output as no sessions", async () => {
+			tmuxManager.mockExecInContainer.mockResolvedValue({
+				stdout: "",
+				stderr: "",
+				exitCode: 1,
+			});
+
+			const sessions = await tmuxManager.listSessions(TEST_CONTAINER_ID);
+
+			expect(sessions).toEqual([]);
+		});
+
 		test("should check if session exists", async () => {
 			tmuxManager.mockExecInContainer.mockResolvedValue({
 				stdout: "",
