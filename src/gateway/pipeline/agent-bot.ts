@@ -112,6 +112,10 @@ export class AgentBot implements Bot {
 			await this.handleSchedulers(message);
 			return true;
 		}
+		if (text === "/clear") {
+			await this.handleClear(message, instance, workspace);
+			return true;
+		}
 		if (text.startsWith("/scheduler_add ")) {
 			const match = text.match(/^\/scheduler_add\s+(\S+)\s+(once|recurring)\s+(\S+)\s+(.+)$/);
 			if (match) {
@@ -311,6 +315,24 @@ export class AgentBot implements Bot {
 		} catch (error) {
 			logger.error({ error: error instanceof Error ? error.message : String(error) }, "Failed to delete scheduler");
 			await this.channel.sendMessage(message.chatId, "⚠️ Failed to delete scheduled task.");
+		}
+	}
+
+	private async handleClear(
+		message: Message,
+		instance: { name: string; containerId: string; status: string },
+		workspace: string,
+	): Promise<void> {
+		try {
+			const cleared = await this.tmuxManager.clearSession(instance.containerId, workspace, message.chatId);
+			if (cleared) {
+				await this.channel.sendMessage(message.chatId, "✅ Cleared session context for this workspace.");
+			} else {
+				await this.channel.sendMessage(message.chatId, "ℹ️ No active session to clear.");
+			}
+		} catch (error) {
+			logger.error({ error: error instanceof Error ? error.message : String(error) }, "Failed to clear session");
+			await this.channel.sendMessage(message.chatId, "⚠️ Failed to clear session.");
 		}
 	}
 
