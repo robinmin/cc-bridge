@@ -3,6 +3,8 @@ import type { Channel, ChannelAdapter } from "@/gateway/channels";
 import type { FeishuChannel } from "@/gateway/channels/feishu";
 import { decryptFeishuWebhook, isEncryptedFeishuWebhook } from "@/gateway/channels/feishu";
 import type { TelegramChannel } from "@/gateway/channels/telegram";
+import { markChatStart } from "@/gateway/channels/telegram";
+import { setChannelForChat } from "@/gateway/channels/chat-channel-map";
 import { persistence } from "@/gateway/persistence";
 import type { Bot, Message } from "@/gateway/pipeline";
 import { BotRouter } from "@/gateway/pipeline/bot-router";
@@ -119,6 +121,8 @@ async function processWebhookMessage(
 	}
 
 	// Process through Bot Router (instant pattern-based routing)
+	markChatStart(message.chatId);
+	setChannelForChat(message.chatId, channel.name);
 	logger.info(`[${message.chatId}] ==> ${message.text}`);
 
 	let handled = false;
