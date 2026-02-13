@@ -1,5 +1,6 @@
 /** @jsxImportSource hono/jsx */
 import { Header, Section, StatusIcon } from "./common";
+import { renderTemplate } from "@/packages/template";
 
 interface HealthData {
 	time: string;
@@ -77,8 +78,9 @@ export const HealthReport = ({ data, format }: { data: HealthData; format: "tele
 		return `  ${name.padEnd(12)} ${icon} ${pathStr}`;
 	};
 
-	return `${[
-		Header({ title: "CC-Bridge System Health", format, subtitle }),
+	const header = Header({ title: "CC-Bridge System Health", format, subtitle });
+
+	const sections = [
 		Section({
 			title: "Connectivity",
 			format,
@@ -151,9 +153,15 @@ export const HealthReport = ({ data, format }: { data: HealthData; format: "tele
 					: `  Pending Msgs: \`${typeof stats === "object" ? stats.pending_proactive_messages : stats}\``,
 			],
 		}),
-		"",
-		summary,
-	]
-		.filter(Boolean)
-		.join("\n")}\n`;
+	].filter(Boolean) as string[];
+
+	return (
+		renderTemplate(HEALTH_TEMPLATE, {
+			header,
+			sections,
+			summary,
+		}) + "\n"
+	);
 };
+
+const HEALTH_TEMPLATE = ["{{header}}", "", "{{#each sections}}{{this}}\n{{/each}}", "{{summary}}"].join("\n");
