@@ -160,3 +160,4 @@ vite.config.ts.timestamp-*
 /data/gateway.db
 data/uploads/
 /data/config/gateway.jsonc
+data/config/discovery-cache.jsonc
