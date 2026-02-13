@@ -123,7 +123,7 @@ export class AgentBot implements Bot {
 			} else {
 				await this.channel.sendMessage(
 					message.chatId,
-					"Usage: /scheduler_add <instance> <once|recurring> <schedule> <prompt>\nExample: /scheduler_add cc-bridge recurring 1h \"Daily summary\"",
+					'Usage: /scheduler_add <instance> <once|recurring> <schedule> <prompt>\nExample: /scheduler_add cc-bridge recurring 1h "Daily summary"',
 				);
 			}
 			return true;
@@ -252,8 +252,7 @@ export class AgentBot implements Bot {
 				schedule: `${task.schedule_type}:${task.schedule_value}`,
 				next: task.next_run || "n/a",
 				status: task.status,
-				prompt:
-					task.prompt && task.prompt.length > 80 ? `${task.prompt.substring(0, 80)}...` : task.prompt || "",
+				prompt: task.prompt && task.prompt.length > 80 ? `${task.prompt.substring(0, 80)}...` : task.prompt || "",
 			}));
 
 			const output = renderTemplate(SCHEDULERS_TEMPLATE, {
@@ -416,11 +415,8 @@ export class AgentBot implements Bot {
 				name: plugin,
 				items: agents.map((agent) => ({
 					name: agent.name,
-					description:
-						agent.description.length > 80 ? `${agent.description.substring(0, 80)}...` : agent.description,
-					tools: agent.tools
-						? agent.tools.slice(0, 3).join(", ") + (agent.tools.length > 3 ? "..." : "")
-						: "",
+					description: agent.description.length > 80 ? `${agent.description.substring(0, 80)}...` : agent.description,
+					tools: agent.tools ? agent.tools.slice(0, 3).join(", ") + (agent.tools.length > 3 ? "..." : "") : "",
 				})),
 			}));
 
@@ -463,9 +459,7 @@ export class AgentBot implements Bot {
 					name: command.name,
 					hint: command.argumentHint ? ` ${command.argumentHint}` : "",
 					description:
-						command.description.length > 100
-							? `${command.description.substring(0, 100)}...`
-							: command.description,
+						command.description.length > 100 ? `${command.description.substring(0, 100)}...` : command.description,
 				})),
 			}));
 
@@ -522,8 +516,7 @@ export class AgentBot implements Bot {
 				name: plugin,
 				items: skills.map((skill) => ({
 					name: skill.name,
-					description:
-						skill.description.length > 100 ? `${skill.description.substring(0, 100)}...` : skill.description,
+					description: skill.description.length > 100 ? `${skill.description.substring(0, 100)}...` : skill.description,
 				})),
 			}));
 
@@ -801,7 +794,7 @@ const AGENTS_TEMPLATE = [
 	"📦 *{{this.name}}*",
 	"{{#each this.items}}",
 	"",
-	"  `\/{{this.name}}` - {{this.description}}",
+	"  `/{{this.name}}` - {{this.description}}",
 	"{{#if this.tools}}",
 	"  🔧 Tools: {{this.tools}}",
 	"{{/if}}",
@@ -818,7 +811,7 @@ const COMMANDS_TEMPLATE = [
 	"📦 *{{this.name}}*",
 	"{{#each this.items}}",
 	"",
-	"  `\/{{this.name}}{{this.hint}}`",
+	"  `/{{this.name}}{{this.hint}}`",
 	"  {{this.description}}",
 	"{{/each}}",
 	"",
