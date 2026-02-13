@@ -1,8 +1,8 @@
 import { createDecipheriv, createHash } from "node:crypto";
+import { consumeChatElapsed } from "@/gateway/channels/telegram";
 import { GATEWAY_CONSTANTS } from "@/gateway/consts";
 import type { Message } from "@/gateway/pipeline";
 import { logger } from "@/packages/logger";
-import { consumeChatElapsed } from "@/gateway/channels/telegram";
 import type { Channel, ChannelAdapter } from "./index";
 
 // Default timeout for Feishu API calls (30 seconds)
