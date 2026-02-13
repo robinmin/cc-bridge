@@ -76,6 +76,23 @@ export const GATEWAY_CONSTANTS = {
       domain: (process.env.FEISHU_DOMAIN as "feishu" | "lark") || "feishu",
       encryptKey: process.env.FEISHU_ENCRYPT_KEY || "",
     },
+    uploads: {
+      enabled: true,
+      allowedMimeTypes: [
+        "text/plain",
+        "text/markdown",
+        "text/csv",
+        "application/json",
+        "application/pdf",
+        "image/png",
+        "image/jpeg",
+        "image/webp",
+      ],
+      maxTextBytes: 5 * 1024 * 1024,
+      maxImageBytes: 20 * 1024 * 1024,
+      retentionHours: 24,
+      storageDir: "data/uploads",
+    },
   },
   FILESYSTEM_IPC: {
     BASE_DIR: process.env.IPC_BASE_DIR || "data/ipc",
