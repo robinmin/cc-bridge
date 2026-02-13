@@ -80,8 +80,6 @@ export class BotRouter {
 			"/ws_list",
 			"/list", // Alias for /ws_list
 			"/ws_status",
-			"/ws_switch",
-			"/ws_add",
 		];
 
 		return menuCommands.includes(command);
@@ -99,14 +97,7 @@ export class BotRouter {
 	 * Check if command belongs to AgentBot
 	 */
 	private isAgentBotCommand(command: string): boolean {
-		const agentCommands = [
-			"/agents",
-			"/commands",
-			"/skills",
-			"/ws_add", // AgentBot workspace commands
-			"/ws_current",
-			"/ws_del",
-		];
+		const agentCommands = ["/agents", "/commands", "/skills", "/ws_add", "/ws_switch", "/ws_current", "/ws_del"];
 
 		return agentCommands.includes(command);
 	}
