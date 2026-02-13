@@ -103,9 +103,9 @@ export class BotRouter {
 			"/agents",
 			"/commands",
 			"/skills",
-			"/ws_create", // AgentBot workspace commands
+			"/ws_add", // AgentBot workspace commands
 			"/ws_current",
-			"/ws_delete",
+			"/ws_del",
 		];
 
 		return agentCommands.includes(command);
