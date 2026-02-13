@@ -162,6 +162,7 @@ app.post("/webhook", (c) => handleWebhook(c, { telegram, feishu, bots, feishuBot
 app.post("/claude-callback", (c) =>
 	handleClaudeCallback(c, {
 		telegram,
+		feishu,
 		idempotencyService,
 		rateLimitService,
 		responseFileReader,
@@ -173,6 +174,7 @@ app.post("/claude-callback", (c) =>
 app.get("/callback-health", (c) =>
 	handleCallbackHealth(c, {
 		telegram,
+		feishu,
 		idempotencyService,
 		rateLimitService,
 		responseFileReader,
