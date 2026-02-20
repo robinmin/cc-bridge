@@ -372,6 +372,33 @@ export class TmuxManager {
 	}
 
 	/**
+	 * Execute a command inside a Docker container and pipe stdin content.
+	 * Useful for large payloads that should not be passed as argv.
+	 */
+	protected async execInContainerWithStdin(
+		containerId: string,
+		command: string[],
+		stdinContent: string,
+	): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+		const proc = Bun.spawn(["docker", "exec", "-i", containerId, ...command], {
+			stdin: "pipe",
+			stdout: "pipe",
+			stderr: "pipe",
+		});
+
+		if (proc.stdin) {
+			proc.stdin.write(new TextEncoder().encode(stdinContent));
+			proc.stdin.end();
+		}
+
+		const stdout = await new Response(proc.stdout).text();
+		const stderr = await new Response(proc.stderr).text();
+		const exitCode = await proc.exited;
+
+		return { stdout, stderr, exitCode };
+	}
+
+	/**
 	 * Get or create a tmux session for a specific chat and workspace
 	 * @returns Session name
 	 */
@@ -512,8 +539,31 @@ export class TmuxManager {
 			throw error;
 		}
 
-		// Escape prompt for shell
-		const escapedPrompt = this.escapeForShell(prompt);
+		// Stage prompt via stdin to avoid argv limits ("command too long") in tmux send-keys.
+		const promptFileSafeId = metadata.requestId.replace(/[^a-zA-Z0-9_-]/g, "_");
+		const promptFile = `/tmp/cc-bridge-prompt-${promptFileSafeId}.txt`;
+		const promptFileQuoted = this.quoteForShell(promptFile);
+		const { stderr: stageStderr, exitCode: stageExitCode } = await this.execInContainerWithStdin(
+			containerId,
+			["sh", "-lc", `cat > ${promptFileQuoted}`],
+			prompt,
+		);
+		if (stageExitCode !== 0) {
+			const error = new TmuxManagerError(`Failed to stage prompt file: ${stageStderr || "Unknown error"}`, {
+				...errorContext,
+				cause: stageStderr,
+			});
+			logger.error(
+				{
+					...errorContext,
+					requestId: metadata.requestId,
+					exitCode: stageExitCode,
+					stderr: stageStderr,
+				},
+				"Failed to stage prompt file in container",
+			);
+			throw error;
+		}
 
 		// Build command: export env vars, run container_cmd.sh request
 		// PATH is inherited from Dockerfile.agent ENV (no need to re-export)
@@ -525,7 +575,8 @@ export class TmuxManager {
 			`export REQUEST_ID=${safeRequestId}`,
 			`export CHAT_ID=${safeChatId}`,
 			`export WORKSPACE_NAME=${safeWorkspace}`,
-			`/app/scripts/container_cmd.sh request '${escapedPrompt}'`,
+			`/app/scripts/container_cmd.sh request "$(cat ${promptFileQuoted})"`,
+			`rm -f ${promptFileQuoted}`,
 		].join("; ");
 
 		logger.debug(
