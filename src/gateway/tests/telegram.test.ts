@@ -90,10 +90,11 @@ describe("TelegramChannel", () => {
 			expect(mockCalls[0].body.parse_mode).toBe("HTML");
 		});
 
-		test("should not set parse_mode by default", async () => {
-			await telegram.sendMessage(12345, "plain text with *markdown-like* chars");
+		test("should default to MarkdownV2 and escape text", async () => {
+			await telegram.sendMessage(12345, "plain text with *markdown-like* chars.");
 
-			expect(mockCalls[0].body.parse_mode).toBeUndefined();
+			expect(mockCalls[0].body.parse_mode).toBe("MarkdownV2");
+			expect(mockCalls[0].body.text).toBe("plain text with \\*markdown\\-like\\* chars\\.");
 		});
 	});
 
@@ -223,6 +224,30 @@ describe("TelegramChannel", () => {
 
 				expect(mockCalls.length).toBe(1);
 				expect(mockCalls[0].body.commands).toEqual(commands);
+			});
+
+			test("should sanitize network errors and avoid token leakage", async () => {
+				// @ts-expect-error - mock fetch
+				globalThis.fetch = async () => {
+					const err = new Error(`Unable to connect: /bot${testBotToken}/setMyCommands`);
+					(err as Error & { code?: string; path?: string }).code = "ConnectionRefused";
+					(err as Error & { code?: string; path?: string }).path =
+						`https://api.telegram.org/bot${testBotToken}/setMyCommands`;
+					throw err;
+				};
+
+				const commands = [{ command: "start", description: "Start command" }];
+
+				try {
+					await client.setCommands(commands);
+					throw new Error("Expected setCommands to throw");
+				} catch (error) {
+					const message = String(error);
+					expect(message).not.toContain(testBotToken);
+					expect(message).toContain("<redacted>");
+					expect((error as { path?: string }).path).toBeUndefined();
+					expect((error as { code?: string }).code).toBe("ConnectionRefused");
+				}
 			});
 		});
 
