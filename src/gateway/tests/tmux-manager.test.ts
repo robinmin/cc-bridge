@@ -19,6 +19,7 @@ class TestableTmuxManager extends TmuxManager {
 
 	// Store mock for execInContainer
 	public mockExecInContainer: ReturnType<typeof mock> | null = null;
+	public mockExecInContainerWithStdin: ReturnType<typeof mock> | null = null;
 
 	// Override execInContainer to use mock if available
 	protected async execInContainer(
@@ -29,6 +30,17 @@ class TestableTmuxManager extends TmuxManager {
 			return this.mockExecInContainer(containerId, command);
 		}
 		return super.execInContainer(containerId, command);
+	}
+
+	protected async execInContainerWithStdin(
+		containerId: string,
+		command: string[],
+		stdinContent: string,
+	): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+		if (this.mockExecInContainerWithStdin) {
+			return this.mockExecInContainerWithStdin(containerId, command, stdinContent);
+		}
+		return super.execInContainerWithStdin(containerId, command, stdinContent);
 	}
 }
 
@@ -43,10 +55,18 @@ describe("TmuxManager", () => {
 			stderr: "",
 			exitCode: 0,
 		}));
+		tmuxManager.mockExecInContainerWithStdin = mock(
+			async (_containerId: string, _command: string[], _stdinContent: string) => ({
+				stdout: "",
+				stderr: "",
+				exitCode: 0,
+			}),
+		);
 	});
 
 	afterEach(() => {
 		tmuxManager.mockExecInContainer = null;
+		tmuxManager.mockExecInContainerWithStdin = null;
 	});
 
 	describe("Session Naming", () => {
@@ -188,6 +208,11 @@ describe("TmuxManager", () => {
 			tmuxManager.mockExecInContainer
 				.mockResolvedValueOnce({ stdout: "", stderr: "", exitCode: 0 }) // has-session
 				.mockResolvedValueOnce({ stdout: "", stderr: "", exitCode: 0 }); // send-keys
+			tmuxManager.mockExecInContainerWithStdin?.mockResolvedValueOnce({
+				stdout: "",
+				stderr: "",
+				exitCode: 0,
+			});
 
 			await tmuxManager.sendToSession(TEST_CONTAINER_ID, sessionName, "Hello Claude!", {
 				requestId: "req-001",
@@ -201,6 +226,7 @@ describe("TmuxManager", () => {
 			expect(sendKeysCall[1]).toContain("send-keys");
 			expect(sendKeysCall[1]).toContain("-t");
 			expect(sendKeysCall[1]).toContain(sessionName);
+			expect(tmuxManager.mockExecInContainerWithStdin).toHaveBeenCalledTimes(1);
 		});
 
 		test("should escape prompts with special characters", async () => {
@@ -225,6 +251,11 @@ describe("TmuxManager", () => {
 				tmuxManager.mockExecInContainer
 					.mockResolvedValueOnce({ stdout: "", stderr: "", exitCode: 0 })
 					.mockResolvedValueOnce({ stdout: "", stderr: "", exitCode: 0 });
+				tmuxManager.mockExecInContainerWithStdin?.mockResolvedValueOnce({
+					stdout: "",
+					stderr: "",
+					exitCode: 0,
+				});
 
 				await tmuxManager.sendToSession(TEST_CONTAINER_ID, sessionName, prompt, {
 					requestId: `req-${Math.random()}`,
@@ -235,6 +266,39 @@ describe("TmuxManager", () => {
 				// Should not throw
 				expect(tmuxManager.mockExecInContainer).toHaveBeenCalled();
 			}
+		});
+
+		test("should avoid embedding full prompt in tmux send-keys command", async () => {
+			// Create session first
+			tmuxManager.mockExecInContainer
+				.mockResolvedValueOnce({ stdout: "", stderr: "", exitCode: 1 })
+				.mockResolvedValueOnce({ stdout: "", stderr: "", exitCode: 0 });
+			const sessionName = await tmuxManager.getOrCreateSession(TEST_CONTAINER_ID, TEST_WORKSPACE, TEST_CHAT_ID);
+
+			tmuxManager.mockExecInContainer.mockClear();
+			tmuxManager.mockExecInContainer
+				.mockResolvedValueOnce({ stdout: "", stderr: "", exitCode: 0 }) // has-session
+				.mockResolvedValueOnce({ stdout: "", stderr: "", exitCode: 0 }); // send-keys
+			tmuxManager.mockExecInContainerWithStdin?.mockResolvedValueOnce({
+				stdout: "",
+				stderr: "",
+				exitCode: 0,
+			});
+
+			const longPrompt = "A".repeat(20000);
+			await tmuxManager.sendToSession(TEST_CONTAINER_ID, sessionName, longPrompt, {
+				requestId: "req-very-long",
+				chatId: TEST_CHAT_ID,
+				workspace: TEST_WORKSPACE,
+			});
+
+			const stagedStdin = tmuxManager.mockExecInContainerWithStdin?.mock.calls[0]?.[2];
+			expect(stagedStdin).toBe(longPrompt);
+
+			const sendKeysCommand = tmuxManager.mockExecInContainer.mock.calls[1]?.[1]?.[4];
+			expect(typeof sendKeysCommand).toBe("string");
+			expect(sendKeysCommand).toContain("$(cat ");
+			expect(String(sendKeysCommand).length).toBeLessThan(500);
 		});
 
 		test("should throw error when session does not exist", async () => {
