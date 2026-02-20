@@ -92,10 +92,22 @@ function createBotsForChannel(channel: TelegramChannel | FeishuChannel) {
 }
 
 // Initialize Telegram Menu
-telegram
-	.setMenu(MenuBot.getAllMenus(bots))
-	.then(() => logger.info("Telegram bot menu updated"))
-	.catch((err) => logger.error({ err }, "Failed to update Telegram bot menu"));
+if (BOT_TOKEN) {
+	telegram
+		.setMenu(MenuBot.getAllMenus(bots))
+		.then(() => logger.info("Telegram bot menu updated"))
+		.catch((err) => {
+			const errorCode =
+				typeof err === "object" && err !== null && "code" in err ? String((err as { code?: unknown }).code) : "";
+			if (errorCode === "ConnectionRefused" || errorCode === "ECONNREFUSED") {
+				logger.warn({ err }, "Telegram bot menu update deferred: Telegram API is unreachable");
+				return;
+			}
+			logger.error({ err }, "Failed to update Telegram bot menu");
+		});
+} else {
+	logger.debug("Skipping Telegram menu initialization because TELEGRAM_BOT_TOKEN is not set");
+}
 
 // Start Mailbox Watcher for proactive messages
 const mailboxWatcher = new MailboxWatcher(telegram, GATEWAY_CONSTANTS.CONFIG.IPC_DIR, config.ipcPollInterval);
