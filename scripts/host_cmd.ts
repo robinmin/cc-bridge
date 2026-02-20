@@ -13,6 +13,7 @@ class StdoutChannel implements Channel {
 async function main(): Promise<void> {
 	const cmd = process.argv[2];
 	const arg = process.argv[3];
+	const customChatId = process.argv[4];
 
 	if (!cmd) {
 		process.stderr.write("Missing command\n");
@@ -25,11 +26,13 @@ async function main(): Promise<void> {
 	const channel = new StdoutChannel();
 	const bot = new AgentBot(channel);
 
+	const effectiveChatId = customChatId || "host-cli";
+
 	const message: Message = {
 		channelId: "host",
-		chatId: "host-cli",
+		chatId: effectiveChatId,
 		text: slash,
-		user: { id: "host-cli" },
+		user: { id: effectiveChatId },
 	};
 
 	const handled = await bot.handle(message);
