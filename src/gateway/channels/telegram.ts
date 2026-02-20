@@ -5,6 +5,8 @@ import type { Channel, ChannelAdapter } from "./index";
 
 // Default timeout for Telegram API calls (30 seconds)
 const TELEGRAM_API_TIMEOUT_MS = 30000;
+const REDACTED_TOKEN = "<redacted>";
+const DEFAULT_TELEGRAM_PARSE_MODE = "MarkdownV2";
 
 // Available chat actions for sendChatAction
 type ChatAction =
@@ -20,6 +22,30 @@ type ChatAction =
 	| "record_voice_note"
 	| "upload_voice_note";
 
+function redactToken(input: string, token: string): string {
+	if (!token || !input.includes(token)) return input;
+	return input.split(token).join(REDACTED_TOKEN);
+}
+
+function sanitizeTelegramNetworkError(error: unknown, token: string): Error {
+	if (error instanceof Error) {
+		const sanitized = new Error(redactToken(error.message, token));
+		sanitized.name = error.name;
+		// Preserve useful code (ConnectionRefused/ECONNREFUSED/etc.) without leaking URL/token fields.
+		if ("code" in error) {
+			(sanitized as Error & { code?: string }).code = String((error as { code?: unknown }).code);
+		}
+		return sanitized;
+	}
+	return new Error("Unknown network error");
+}
+
+function escapeMarkdownV2(text: string): string {
+	// Telegram MarkdownV2 reserved chars:
+	// _ * [ ] ( ) ~ ` > # + - = | { } . !
+	return text.replace(/([_*\[\]()~`>#+\-=|{}.!\\])/g, "\\$1");
+}
+
 export class TelegramClient {
 	constructor(private botToken: string) {}
 
@@ -27,11 +53,13 @@ export class TelegramClient {
 		const url = `${GATEWAY_CONSTANTS.DIAGNOSTICS.URLS.TELEGRAM_API_BASE}/bot${this.botToken}/sendMessage`;
 		const payload: { chat_id: string | number; text: string; parse_mode?: string } = {
 			chat_id: chatId,
-			text,
+			text: options?.parse_mode ? text : escapeMarkdownV2(text),
 		};
 
 		if (options?.parse_mode) {
 			payload.parse_mode = options.parse_mode;
+		} else {
+			payload.parse_mode = DEFAULT_TELEGRAM_PARSE_MODE;
 		}
 
 		const response = await fetch(url, {
@@ -69,12 +97,17 @@ export class TelegramClient {
 	async setCommands(commands: { command: string; description: string }[]): Promise<void> {
 		logger.debug({ count: commands.length, commands }, "Updating Telegram bot menu commands");
 		const url = `${GATEWAY_CONSTANTS.DIAGNOSTICS.URLS.TELEGRAM_API_BASE}/bot${this.botToken}/setMyCommands`;
-		const response = await fetch(url, {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ commands }),
-			signal: AbortSignal.timeout(TELEGRAM_API_TIMEOUT_MS),
-		});
+		let response: Response;
+		try {
+			response = await fetch(url, {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ commands }),
+				signal: AbortSignal.timeout(TELEGRAM_API_TIMEOUT_MS),
+			});
+		} catch (error) {
+			throw sanitizeTelegramNetworkError(error, this.botToken);
+		}
 
 		if (!response.ok) {
 			const error = await response.text();
