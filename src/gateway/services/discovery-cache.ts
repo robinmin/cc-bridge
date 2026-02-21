@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { logger } from "@/packages/logger";
+import { extractMarkdownDescription, parseMarkdownFrontmatter } from "@/packages/markdown";
 
 // Cache file location
 const CACHE_PATH = "data/config/discovery-cache.jsonc";
@@ -69,76 +70,6 @@ export class DiscoveryCacheService {
 	}
 
 	/**
-	 * Parse YAML frontmatter from markdown content
-	 * Simple parser that extracts the YAML block between --- markers
-	 */
-	private parseFrontmatter(content: string): Record<string, unknown> {
-		const frontmatterRegex = /^---\n([\s\S]*?)\n---/;
-		const match = content.match(frontmatterRegex);
-		if (!match) return {};
-
-		const yamlContent = match[1];
-		const result: Record<string, unknown> = {};
-
-		// Simple YAML parser for our specific use case
-		// Handles key: value and key: [list] formats
-		for (const line of yamlContent.split("\n")) {
-			const trimmed = line.trim();
-			if (!trimmed || trimmed.startsWith("#")) continue;
-
-			const colonIndex = trimmed.indexOf(":");
-			if (colonIndex === -1) continue;
-
-			const key = trimmed.slice(0, colonIndex).trim();
-			const valueStr = trimmed.slice(colonIndex + 1).trim();
-
-			// Handle array values
-			if (valueStr.startsWith("[") && valueStr.endsWith("]")) {
-				const arrayContent = valueStr.slice(1, -1);
-				const items = arrayContent
-					.split(",")
-					.map((s) => s.trim().replace(/^['"]|['"]$/g, ""))
-					.filter(Boolean);
-				result[key] = items;
-			}
-			// Handle string values (remove quotes if present)
-			else if (valueStr.startsWith('"') && valueStr.endsWith('"')) {
-				result[key] = valueStr.slice(1, -1);
-			} else if (valueStr.startsWith("'") && valueStr.endsWith("'")) {
-				result[key] = valueStr.slice(1, -1);
-			} else {
-				result[key] = valueStr;
-			}
-		}
-
-		return result;
-	}
-
-	/**
-	 * Extract description from markdown content
-	 * Gets the first paragraph after frontmatter
-	 */
-	private extractDescription(content: string): string {
-		// Skip frontmatter
-		const frontmatterEnd = content.indexOf("\n---", 4);
-		if (frontmatterEnd === -1) return "";
-
-		const afterFrontmatter = content.slice(frontmatterEnd + 5).trim();
-
-		// Get first paragraph or first line
-		const lines = afterFrontmatter.split("\n");
-		for (const line of lines) {
-			const trimmed = line.trim();
-			if (trimmed && !trimmed.startsWith("#") && !trimmed.startsWith("```")) {
-				// Remove markdown formatting
-				return trimmed.replace(/\*\*/g, "").replace(/\*/g, "").replace(/`/g, "").trim();
-			}
-		}
-
-		return afterFrontmatter.split("\n")[0]?.trim() || "";
-	}
-
-	/**
 	 * Scan plugins directory and parse all agents, commands, and skills
 	 */
 	async scanPlugins(): Promise<{
@@ -156,16 +87,39 @@ export class DiscoveryCacheService {
 			return { agents, commands, skills };
 		}
 
-		const pluginsData = JSON.parse(fs.readFileSync(this.pluginsCachePath, "utf-8"));
+		let pluginsData: { plugins?: Record<string, unknown> };
+		try {
+			pluginsData = JSON.parse(fs.readFileSync(this.pluginsCachePath, "utf-8")) as { plugins?: Record<string, unknown> };
+		} catch (error) {
+			logger.warn({ path: this.pluginsCachePath, error }, "Failed to parse installed plugins cache");
+			return { agents, commands, skills };
+		}
 
 		for (const [pluginName, pluginEntries] of Object.entries(pluginsData.plugins || {})) {
 			const entries = Array.isArray(pluginEntries) ? pluginEntries : [pluginEntries];
 
-			for (const entry of entries as Array<{
-				installPath: string;
-				version: string;
-			}>) {
-				const { installPath, version } = entry;
+			for (const entry of entries) {
+				if (!entry || typeof entry !== "object") {
+					logger.warn({ pluginName, entry }, "Skipping invalid plugin entry shape");
+					continue;
+				}
+				const rawInstallPath = (entry as { installPath?: unknown }).installPath;
+				const rawVersion = (entry as { version?: unknown }).version;
+				if (typeof rawInstallPath !== "string" || !rawInstallPath.trim()) {
+					logger.warn({ pluginName, entry }, "Skipping plugin entry with invalid installPath");
+					continue;
+				}
+				if (typeof rawVersion !== "string" || !rawVersion.trim()) {
+					logger.warn({ pluginName, entry }, "Skipping plugin entry with invalid version");
+					continue;
+				}
+
+				const installPath = rawInstallPath;
+				const version = rawVersion;
+				if (!fs.existsSync(installPath)) {
+					logger.warn({ pluginName, installPath }, "Skipping plugin entry because installPath does not exist");
+					continue;
+				}
 
 				// Scan agents
 				const agentsDir = path.join(installPath, "agents");
@@ -176,14 +130,14 @@ export class DiscoveryCacheService {
 						const filePath = path.join(agentsDir, file);
 						try {
 							const content = fs.readFileSync(filePath, "utf-8");
-							const frontmatter = this.parseFrontmatter(content);
+							const frontmatter = parseMarkdownFrontmatter(content);
 							const name = frontmatter.name as string;
 							if (name) {
 								agents.push({
 									name,
 									plugin: pluginName,
 									version,
-									description: (frontmatter.description as string) || this.extractDescription(content),
+									description: (frontmatter.description as string) || extractMarkdownDescription(content),
 									model: frontmatter.model as string | undefined,
 									color: frontmatter.color as string | undefined,
 									tools: frontmatter.tools as string[] | undefined,
@@ -205,13 +159,13 @@ export class DiscoveryCacheService {
 						const filePath = path.join(commandsDir, file);
 						try {
 							const content = fs.readFileSync(filePath, "utf-8");
-							const frontmatter = this.parseFrontmatter(content);
+							const frontmatter = parseMarkdownFrontmatter(content);
 							const name = file.replace(".md", "");
 							commands.push({
 								name,
 								plugin: pluginName,
 								version,
-								description: (frontmatter.description as string) || this.extractDescription(content),
+								description: (frontmatter.description as string) || extractMarkdownDescription(content),
 								argumentHint: frontmatter["argument-hint"] as string | undefined,
 								allowedTools: frontmatter["allowed-tools"] as string[] | undefined,
 								path: filePath,
@@ -236,14 +190,14 @@ export class DiscoveryCacheService {
 						if (fs.existsSync(skillFile)) {
 							try {
 								const content = fs.readFileSync(skillFile, "utf-8");
-								const frontmatter = this.parseFrontmatter(content);
+								const frontmatter = parseMarkdownFrontmatter(content);
 								const name = frontmatter.name as string;
 								if (name) {
 									skills.push({
 										name,
 										plugin: pluginName,
 										version,
-										description: (frontmatter.description as string) || this.extractDescription(content),
+										description: (frontmatter.description as string) || extractMarkdownDescription(content),
 										path: skillFile,
 									});
 								}
