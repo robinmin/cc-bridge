@@ -38,7 +38,7 @@ describe("Logger Initialization - detectLogFormat catch block (lines 21-22,25)",
 		delete process.env.LOG_LEVEL;
 
 		// Dynamic import AFTER mock is set up
-		const module = await import("@/packages/logger");
+		const module = await import("../logger/index.ts?case=logger-init-catch");
 		logger = module.logger;
 	});
 
