@@ -262,24 +262,27 @@ export async function executeClaudeRaw(
 			const requestId = crypto.randomUUID();
 			errorContext.requestId = requestId;
 
-			const response = await client.sendRequest({
-				id: requestId,
-				method: "POST",
-				path: "/execute",
-				body: {
-					command: config.command || "claude",
-					args:
-						config.args ||
-						[
-							"-p",
-							prompt,
-							config.allowDangerouslySkipPermissions ? "--dangerously-skip-permissions" : "",
-							config.allowedTools !== undefined ? `--allowedTools=${config.allowedTools}` : "",
-						].filter(Boolean),
-					cwd: `/workspaces/${workspace}`,
+			const response = await client.sendRequest(
+				{
+					id: requestId,
+					method: "POST",
+					path: "/execute",
+					body: {
+						command: config.command || "claude",
+						args:
+							config.args ||
+							[
+								"-p",
+								prompt,
+								config.allowDangerouslySkipPermissions ? "--dangerously-skip-permissions" : "",
+								config.allowedTools !== undefined ? `--allowedTools=${config.allowedTools}` : "",
+							].filter(Boolean),
+						cwd: `/workspaces/${workspace}`,
+						timeout: config.timeout,
+					},
 				},
-				timeout: config.timeout,
-			});
+				config.timeout,
+			);
 
 			// Explicit timeout detection - status 408 means request timeout
 			if (response.status === HTTP_STATUS_REQUEST_TIMEOUT) {
@@ -561,7 +564,6 @@ export async function executeClaudeViaTmux(
 
 		// 2. Build prompt with history if provided
 		const promptToSend = config.history ? buildClaudePrompt(prompt, config.history) : prompt;
-
 		if (config.history) {
 			logger.debug({ requestId, historyLength: config.history.length }, "Built prompt with conversation history");
 		}
@@ -617,11 +619,10 @@ export async function executeClaude(
 
 	// Build prompt with history if provided
 	const promptToSend = config.history ? buildClaudePrompt(prompt, config.history) : prompt;
-
 	if (config.history && !useTmux) {
 		logger.debug(
 			{ containerId, instanceName, historyLength: config.history.length },
-			"Built prompt with conversation history for sync mode",
+			"Built prompt with conversation history",
 		);
 	}
 
