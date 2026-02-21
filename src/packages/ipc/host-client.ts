@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import { logger } from "@/packages/logger";
 import type { HostBackend } from "./backends";
+import { parseFetchResponseBody, parseRawResponseBody, toIpcErrorPayload } from "./response-utils";
 import type { IIpcClient, IpcRequest, IpcResponse } from "./types";
 
 const DEFAULT_HOST_PORT = 3001;
@@ -13,8 +14,8 @@ const DEFAULT_SOCKET_PATH = "/tmp/cc-bridge-agent.sock";
  */
 export class HostIpcClient implements IIpcClient {
 	private readonly backend: HostBackend;
-	private readonly useTcp: boolean;
-	private readonly useUnix: boolean;
+	private useTcp: boolean;
+	private useUnix: boolean;
 
 	constructor(backend: HostBackend) {
 		this.backend = backend;
@@ -71,6 +72,8 @@ export class HostIpcClient implements IIpcClient {
 		const host = this.backend.host || DEFAULT_HOST;
 		const port = this.backend.port || DEFAULT_HOST_PORT;
 
+		const controller = new AbortController();
+		const timeoutId = setTimeout(() => controller.abort(), timeout);
 		try {
 			const url = `http://${host}:${port}${requestPath}`;
 			const headers: Record<string, string> = {
@@ -83,14 +86,8 @@ export class HostIpcClient implements IIpcClient {
 				body: payload,
 			});
 
-			// Add timeout
-			const controller = new AbortController();
-			const timeoutId = setTimeout(() => controller.abort(), timeout);
-
 			const response = await fetch(fetchRequest, { signal: controller.signal });
-			clearTimeout(timeoutId);
-
-			const responseBody = await response.json();
+			const responseBody = await parseFetchResponseBody(response);
 
 			logger.debug(
 				{ id: request.id, path: requestPath, status: response.status, backend: "host-tcp" },
@@ -101,7 +98,7 @@ export class HostIpcClient implements IIpcClient {
 				id: request.id,
 				status: response.status,
 				result: response.ok ? responseBody : undefined,
-				error: !response.ok ? responseBody : undefined,
+				error: !response.ok ? toIpcErrorPayload(responseBody, response.status) : undefined,
 			};
 		} catch (error) {
 			logger.warn(
@@ -113,6 +110,8 @@ export class HostIpcClient implements IIpcClient {
 				"Host TCP IPC failed",
 			);
 			throw error;
+		} finally {
+			clearTimeout(timeoutId);
 		}
 	}
 
@@ -145,7 +144,7 @@ export class HostIpcClient implements IIpcClient {
 			const httpRequest = [...headers.join("\r\n"), "\r\n", payload || ""].join("\r\n");
 
 			// Create socket connection
-			const _response = await new Promise<string>((resolve, reject) => {
+			const responseData = await new Promise<string>((resolve, reject) => {
 				const socket = net.default.createConnection({ path: socketPath });
 
 				let responseData = "";
@@ -182,7 +181,7 @@ export class HostIpcClient implements IIpcClient {
 			const statusMatch = statusLine.match(/HTTP\/1\.1 (\d+)/);
 			const status = statusMatch ? Number.parseInt(statusMatch[1], 10) : 500;
 
-			const responseBody = bodyPart ? JSON.parse(bodyPart) : {};
+			const responseBody = parseRawResponseBody(bodyPart);
 
 			logger.debug({ id: request.id, path: requestPath, status, backend: "host-unix" }, "Host IPC request processed");
 
@@ -190,7 +189,7 @@ export class HostIpcClient implements IIpcClient {
 				id: request.id,
 				status,
 				result: status >= 200 && status < 300 ? responseBody : undefined,
-				error: status >= 400 ? responseBody : undefined,
+				error: status >= 400 ? toIpcErrorPayload(responseBody, status) : undefined,
 			};
 		} catch (error) {
 			logger.warn(
