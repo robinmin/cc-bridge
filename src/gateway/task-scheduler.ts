@@ -1,9 +1,11 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { miniAppDriver } from "@/gateway/apps/driver";
 import { instanceManager } from "@/gateway/instance-manager";
 import { persistence } from "@/gateway/persistence";
 import { IpcFactory } from "@/packages/ipc";
 import { logger } from "@/packages/logger";
+import { calculateNextRun } from "@/packages/scheduler";
 
 // Task types for better type safety
 interface ScheduledTask {
@@ -11,13 +13,11 @@ interface ScheduledTask {
 	instance_name: string;
 	chat_id: string;
 	prompt: string;
-	schedule_type: "once" | "recurring";
+	schedule_type: "once" | "recurring" | "cron";
 	schedule_value: string;
 	next_run: string;
 	status: "active" | "completed";
 }
-
-type ScheduleUnit = "s" | "m" | "h" | "d";
 
 type UploadsConfig = {
 	enabled: boolean;
@@ -31,6 +31,7 @@ type UploadsConfig = {
 export class TaskScheduler {
 	private timer: Timer | null = null;
 	private isRunning = false;
+	private tickInProgress = false;
 	private uploadsConfig?: UploadsConfig;
 
 	constructor(
@@ -45,9 +46,8 @@ export class TaskScheduler {
 		logger.info("TaskScheduler started");
 
 		// Use a 1-minute interval for the scheduler
-		this.timer = setInterval(async () => {
-			await this.checkTasks();
-			await this.cleanupUploads();
+		this.timer = setInterval(() => {
+			void this.runTick();
 		}, 60000);
 	}
 
@@ -72,6 +72,20 @@ export class TaskScheduler {
 			}
 		} catch (error) {
 			logger.error({ error }, "Error checking tasks");
+		}
+	}
+
+	private async runTick(): Promise<void> {
+		if (this.tickInProgress) {
+			logger.warn("TaskScheduler tick skipped because previous tick is still running");
+			return;
+		}
+		this.tickInProgress = true;
+		try {
+			await this.checkTasks();
+			await this.cleanupUploads();
+		} finally {
+			this.tickInProgress = false;
 		}
 	}
 
@@ -117,6 +131,23 @@ export class TaskScheduler {
 
 	private async executeTask(task: ScheduledTask) {
 		try {
+			if (miniAppDriver.isMiniAppTaskPrompt(task.prompt)) {
+				const parsed = miniAppDriver.parseTaskPrompt(task.prompt);
+				if (!parsed) {
+					logger.warn({ taskId: task.id, prompt: task.prompt }, "Invalid mini-app task prompt");
+				} else {
+					const result = await miniAppDriver.runApp(parsed.appId, { input: parsed.input });
+					logger.info({ taskId: task.id, appId: parsed.appId, result }, "Mini-app task dispatched");
+				}
+
+				await this.persistenceManager.saveTask({
+					...task,
+					status: task.schedule_type === "once" ? "completed" : "active",
+					next_run: this.calculateNextRun(task),
+				});
+				return;
+			}
+
 			const instance = this.instManager.getInstance(task.instance_name);
 			if (!instance || instance.status !== "running") {
 				logger.warn(
@@ -157,33 +188,17 @@ export class TaskScheduler {
 	}
 
 	private calculateNextRun(task: ScheduledTask): string | null {
-		if (task.schedule_type === "once") return null;
+		const next = calculateNextRun({
+			schedule_type: task.schedule_type,
+			schedule_value: task.schedule_value || "",
+		});
+		if (next) return next;
 
-		let intervalMs = 3600 * 1000; // Default 1h
-		const value = task.schedule_value || "";
-
-		const match = value.match(/^(\d+)([smhd])$/);
-		if (match) {
-			const num = parseInt(match[1], 10);
-			const unit = match[2] as ScheduleUnit;
-			switch (unit) {
-				case "s":
-					intervalMs = num * 1000;
-					break;
-				case "m":
-					intervalMs = num * 60 * 1000;
-					break;
-				case "h":
-					intervalMs = num * 60 * 60 * 1000;
-					break;
-				case "d":
-					intervalMs = num * 24 * 60 * 60 * 1000;
-					break;
-			}
-		}
-
-		const next = new Date(Date.now() + intervalMs);
-		return next.toISOString().replace("T", " ").substring(0, 19);
+		logger.warn(
+			{ taskId: task.id, scheduleType: task.schedule_type, scheduleValue: task.schedule_value },
+			"Invalid schedule, falling back to 1h from now",
+		);
+		return new Date(Date.now() + 3600 * 1000).toISOString().replace("T", " ").substring(0, 19);
 	}
 }
 
