@@ -43,6 +43,27 @@ log_error() {
     echo "[$(date +"%Y-%m-%dT%H:%M:%S%z")] [container_cmd.sh] ERROR: $1" >&2
 }
 
+ensure_no_gateway_process() {
+    # Guardrail: this container should run agent service only, never gateway.
+    # A stray gateway process causes docker ENOENT discovery log spam.
+    local pids=""
+
+    if command -v pgrep &> /dev/null; then
+        pids="$(pgrep -f "bun run src/gateway/index.ts" || true)"
+    else
+        pids="$(ps -eo pid,args | grep -F "bun run src/gateway/index.ts" | grep -v grep | awk '{print $1}' || true)"
+    fi
+
+    if [[ -n "${pids}" ]]; then
+        log_warn "Detected unexpected gateway process in agent container. Terminating PIDs: ${pids//$'\n'/, }"
+        while IFS= read -r pid; do
+            [[ -n "$pid" ]] || continue
+            kill -TERM "$pid" 2>/dev/null || true
+        done <<< "$pids"
+        sleep 1
+    fi
+}
+
 resolve_llm_provider_env() {
     local resolver="/app/scripts/resolve-llm-provider.sh"
     if [[ ! -x "$resolver" ]]; then
@@ -258,6 +279,7 @@ cmd_init() {
 # =============================================================================
 
 cmd_start() {
+    ensure_no_gateway_process
     log_info "Starting agent server..."
     exec bun run src/agent/index.ts
 }
