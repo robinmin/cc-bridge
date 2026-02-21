@@ -1,6 +1,7 @@
 import { logger } from "@/packages/logger";
 import type { RemoteBackend } from "./backends";
 import type { IIpcClient, IpcRequest, IpcResponse } from "./types";
+import { parseFetchResponseBody, toIpcErrorPayload } from "./response-utils";
 
 const DEFAULT_TIMEOUT = 120000;
 
@@ -29,6 +30,8 @@ export class RemoteIpcClient implements IIpcClient {
 		const { method, path: requestPath, body } = request;
 		const payload = body ? JSON.stringify(body) : undefined;
 
+		const controller = new AbortController();
+		const timeoutId = setTimeout(() => controller.abort(), timeout);
 		try {
 			const url = `${this.backend.url}${requestPath}`;
 			const headers: Record<string, string> = {
@@ -46,14 +49,8 @@ export class RemoteIpcClient implements IIpcClient {
 				body: payload,
 			});
 
-			// Add timeout
-			const controller = new AbortController();
-			const timeoutId = setTimeout(() => controller.abort(), timeout);
-
 			const response = await fetch(fetchRequest, { signal: controller.signal });
-			clearTimeout(timeoutId);
-
-			const responseBody = await response.json();
+			const responseBody = await parseFetchResponseBody(response);
 
 			logger.debug(
 				{ id: request.id, path: requestPath, status: response.status, backend: "remote" },
@@ -64,7 +61,7 @@ export class RemoteIpcClient implements IIpcClient {
 				id: request.id,
 				status: response.status,
 				result: response.ok ? responseBody : undefined,
-				error: !response.ok ? responseBody : undefined,
+				error: !response.ok ? toIpcErrorPayload(responseBody, response.status) : undefined,
 			};
 		} catch (error) {
 			logger.warn(
@@ -75,6 +72,8 @@ export class RemoteIpcClient implements IIpcClient {
 				"Remote IPC failed",
 			);
 			throw error;
+		} finally {
+			clearTimeout(timeoutId);
 		}
 	}
 }
