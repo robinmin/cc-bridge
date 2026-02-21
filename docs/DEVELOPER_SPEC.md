@@ -1,7 +1,7 @@
 # CC-Bridge Developer Specification
 
-**Version**: 2.1.0
-**Last Updated**: 2026-02-08
+**Version**: 2.2.0
+**Last Updated**: 2026-02-21
 **Status**: Production Ready
 
 ---
@@ -118,7 +118,7 @@ src/
 │   │   ├── telegram.ts         # Telegram client
 │   │   └── feishu.ts           # Feishu/Lark client
 │   ├── routes/                 # HTTP routes
-│   │   ├── webhook.ts          # Unified/Channel webhooks
+│   │   ├── webhook.ts          # Channel webhooks + legacy unified
 │   │   ├── health.ts           # Health checks
 │   │   └── claude-callback.ts  # Agent callback endpoint
 │   ├── pipeline/               # Bot pipeline
@@ -127,12 +127,18 @@ src/
 │   │   └── menu-bot.ts         # Slash commands
 │   ├── services/               # Business services
 │   │   ├── claude-executor.ts  # Claude execution logic
+│   │   ├── discovery-cache.ts  # Plugin discovery cache
+│   │   ├── broadcast.ts        # Multi-channel target resolution
 │   │   ├── tmux-manager.ts     # Tmux session management
 │   │   ├── file-cleanup.ts     # File cleanup service
 │   │   ├── filesystem-ipc.ts   # IPC file handling
+│   │   ├── file-acceptor.ts    # Attachment download/validation
 │   │   ├── SessionPoolService.ts
 │   │   ├── IdempotencyService.ts
 │   │   └── RateLimitService.ts
+│   ├── apps/
+│   │   ├── driver.ts           # Mini-app runtime driver
+│   │   └── new_app_template.md # Mini-app template
 │   ├── consts.ts               # Constants
 │   ├── persistence.ts          # SQLite persistence
 │   ├── instance-manager.ts     # Docker discovery
@@ -146,8 +152,15 @@ src/
 │   ├── consts.ts               # Agent constants
 │   ├── app.ts                  # Hono app
 │   ├── index.ts                # Agent entry point
+│   ├── runtime/
+│   │   └── gateway-adapter.ts  # Gateway-backed runtime wiring (agent layer)
 │   └── tests/                  # Agent tests
 ├── packages/                   # Shared packages
+│   ├── agent-runtime/          # Contracts only (no gateway imports)
+│   │   ├── contracts.ts
+│   │   └── index.ts
+│   ├── async/                  # Concurrency utilities
+│   ├── markdown/               # Markdown/frontmatter helpers
 │   ├── ipc/                    # IPC transport layer
 │   │   ├── factory.ts          # IPC factory
 │   │   ├── tcp-client.ts       # TCP client
@@ -158,9 +171,15 @@ src/
 │   │   ├── circuit-breaker.ts  # Circuit breaker
 │   │   ├── stdio-adapter.ts    # Stdio adapter
 │   │   ├── backends.ts         # Backend types
+│   │   ├── response-utils.ts   # Robust HTTP/JSON parsing helpers
 │   │   └── types.ts            # Common types
 │   ├── logger/                 # Logging package
-│   └── config/                 # Configuration
+│   ├── config/                 # Configuration
+│   ├── scheduler/              # Schedule parsing/next-run logic
+│   ├── text/                   # Text chunking helpers
+│   └── validation/             # Reusable validation helpers
+├── apps/                       # Mini-app definitions (*.md)
+│   └── daily-news.md
 └── dockers/
     ├── Dockerfile.agent        # Agent container
     └── docker-compose.yml      # Container orchestration
@@ -190,7 +209,9 @@ app.use("*", async (c, next) => {
 
 // Routes
 app.get("/health", authMiddleware, handleHealth);
-app.post("/webhook", (c) => handleWebhook(c, { telegram, bots }));
+app.post("/webhook/telegram", (c) => handleTelegramWebhook(c, { telegram, bots, config }));
+app.post("/webhook/feishu", (c) => handleFeishuWebhook(c, { telegram, feishu, bots, feishuBots, config }));
+app.post("/webhook", (c) => handleWebhook(c, { telegram, feishu, bots, feishuBots, config })); // legacy
 app.post("/claude-callback", (c) => handleClaudeCallback(c, deps));
 ```
 
@@ -213,8 +234,8 @@ for (const bot of bots) {
 ```
 
 **Bot Types**:
-- `MenuBot`: Handles `/help`, `/status`, `/workspace` commands
-- `HostBot`: Manages host operations like `/list`, `/use`
+- `MenuBot`: Handles menu/workspace/status commands (`/menu`, `/ws_list`, `/ws_switch`, `/status`)
+- `HostBot`: Manages host operations (`/host`, `/host_uptime`, `/host_ps`)
 - `AgentBot`: Executes Claude Code commands
 
 ### 3.3 IPC Factory
@@ -280,6 +301,7 @@ export class CircuitBreakerIpcClient implements IIpcClient {
 ### 3.5 Persistence Layer
 
 **Location**: `src/gateway/persistence.ts`
+**Default DB File**: `data/gateway.db`
 
 ```typescript
 export class PersistenceManager {
@@ -341,6 +363,23 @@ export class TmuxManager {
     }
 }
 ```
+
+### 3.7 Mini-App Driver
+
+**Locations**:
+- Runtime driver: `src/gateway/apps/driver.ts`
+- App specs: `src/apps/*.md`
+- Scheduler integration: `src/gateway/task-scheduler.ts`
+
+Mini-apps are markdown-defined tasks rendered at runtime and dispatched to resolved targets.
+
+Key lifecycle operations are exposed via:
+- `make app-new`
+- `make app-list`
+- `make app-run`
+- `make app-schedule`
+- `make app-list-tasks`
+- `make app-unschedule`
 
 ---
 
@@ -493,7 +532,10 @@ Health check endpoint (requires authentication via `HEALTH_API_KEY`).
 Receive Telegram or Lark/Feishu webhook updates. `/webhook` is a legacy unified endpoint that auto-detects the channel.
 
 **Request Body**: Telegram update object or Lark/Feishu event object
-**Response**: `{ status: "ok" }` or `{ challenge: "..." }` (for Lark verification)
+**Response**:
+- `{ status: "ok" }` for accepted messages
+- `{ challenge: "..." }` for Lark/Feishu URL verification
+- `400` with `{ status: "ignored", reason: "invalid json" }` for malformed JSON on channel-specific routes
 
 #### POST `/claude-callback`
 
@@ -619,20 +661,20 @@ cp src/dockers/.env.example src/dockers/.env
 # Start gateway (host)
 make gateway-start
 
-# Start container agent
-make docker-start
+# Build/restart container agent
+make docker-restart
 
 # View logs
 make logs-monitor
 
 # Run tests
-bun test
+make test
 
 # Lint
-bun run lint
+make lint
 
 # Format
-bun run format
+make format
 ```
 
 ### 8.3 Makefile Targets
@@ -642,14 +684,19 @@ bun run format
 | `gateway-start` | Start gateway service |
 | `gateway-stop` | Stop gateway service |
 | `gateway-restart` | Restart gateway |
-| `docker-start` | Start container agent |
 | `docker-stop` | Stop container agent |
 | `docker-restart` | Restart container |
-| `docker-rebuild` | Rebuild container |
+| `docker-status` | Show container status/processes |
+| `docker-logs` | Follow container logs |
 | `logs-monitor` | Stream logs |
-| `logs-follow` | Follow gateway logs |
-| `docker-exec` | Exec into container |
-| `docker-talk` | Send test message |
+| `talk MSG="..."` | Send test message through container command flow |
+| `app-new APP_ID=...` | Create mini-app definition |
+| `app-list` | List mini-app definitions |
+| `app-run APP_ID=...` | Run mini-app once |
+| `app-schedule APP_ID=...` | Register scheduled mini-app task |
+| `app-list-tasks [APP_ID=...]` | List mini-app tasks |
+| `app-unschedule TASK_ID=...` | Unschedule by task id |
+| `app-unschedule APP_ID=...` | Unschedule by app id |
 | `test` | Run all tests |
 | `lint` | Run linter |
 | `format` | Format code |
@@ -681,7 +728,7 @@ make gateway-start
 
 **Check IPC connectivity**:
 ```bash
-make docker-talk msg="ping"
+make talk MSG="ping"
 ```
 
 **View container logs**:
@@ -807,6 +854,7 @@ export class MyService {
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 2.2.0 | 2026-02-21 | Updated architecture/module docs for mini-app driver, package refactors, webhook routing, and current make targets |
 | 2.0.0 | 2025-02-07 | Complete rewrite for Bun/Hono architecture, IPC factory, circuit breaker |
 | 1.0.0 | 2026-02-02 | Initial developer spec |
 

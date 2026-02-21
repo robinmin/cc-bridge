@@ -5,6 +5,47 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.3] - 2026-02-21
+
+### ✨ New Features
+
+- **Mini-App Lifecycle Tooling**:
+  - Added first-class mini-app workflow around `src/apps/*.md` and `src/gateway/apps/driver.ts`
+  - Added make/host commands for mini-app lifecycle management:
+    - `app-new`, `app-list`, `app-run`, `app-schedule`, `app-list-tasks`, `app-unschedule`
+  - Added scripts for mini-app scheduling operations:
+    - `scripts/schedule_miniapp.ts`, `scripts/list_miniapp_tasks.ts`, `scripts/unschedule_miniapp.ts`
+- **Reusable Packages Expansion**:
+  - Added reusable modules under `src/packages/` for async helpers, markdown/frontmatter parsing, scheduler logic, text chunking, and validation.
+
+### 🔧 Improvements
+
+- **Architecture Cleanup**:
+  - Strengthened package boundaries by keeping gateway concrete runtime wiring in `src/agent/runtime/gateway-adapter.ts`
+  - Reduced cross-layer coupling by keeping `src/packages/agent-runtime` as contracts-focused.
+- **Configuration Handling**:
+  - Upgraded config loading to deep merge nested objects so partial config blocks no longer drop defaults.
+- **Scheduler Robustness**:
+  - Added re-entrancy guard to task scheduler ticks to prevent overlapping executions.
+- **IPC Robustness**:
+  - Hardened TCP/Host/Remote/Unix IPC response parsing for non-JSON and empty responses.
+
+### 🐛 Fixes
+
+- Fixed Host IPC unix path handling bug in `HostIpcClient` (runtime/compile issue in unix flow).
+- Fixed missing IPC type imports in fallback factory path.
+- Added safer JSON handling for channel-specific webhook endpoints (`/webhook/telegram`, `/webhook/feishu`) to avoid malformed-body crashes.
+- Hardened plugin discovery entry parsing to tolerate malformed plugin cache rows.
+- Fixed history cache invalidation to clear all relevant limits instead of a fixed subset.
+- Stabilized logger init tests by isolating module imports to avoid test-order side effects.
+
+### 📝 Documentation
+
+- Updated `docs/USER_MANUAL.md` to align with current command set and mini-app lifecycle workflow.
+- Updated `docs/DEVELOPER_SPEC.md` to reflect current architecture, package layout, webhook routes, and make targets.
+
+---
+
 ## [0.6.0] - 2026-02-12
 
 ### ✨ New Features
@@ -215,6 +256,7 @@ If upgrading from v0.2.0:
 - Fixed system daemon persistence issues on macOS by standardizing absolute paths in `.plist` configurations.
 
 ---
+[0.6.3]: https://github.com/hanxiao/claudecode-telegram/releases/tag/v0.6.3
 [0.6.0]: https://github.com/hanxiao/claudecode-telegram/releases/tag/v0.6.0
 [0.5.0]: https://github.com/hanxiao/claudecode-telegram/releases/tag/v0.5.0
 [0.4.0]: https://github.com/hanxiao/claudecode-telegram/releases/tag/v0.4.0

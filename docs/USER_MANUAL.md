@@ -1,7 +1,7 @@
 # CC-Bridge User Manual
 
-**Version**: 2.1.0
-**Last Updated**: 2026-02-08
+**Version**: 2.2.0
+**Last Updated**: 2026-02-21
 **Status**: Production Ready
 
 ---
@@ -23,10 +23,10 @@
 
 ### 1.1 What is CC-Bridge?
 
-CC-Bridge is a **Telegram bot bridge** that enables you to interact with Claude Code (Anthropic's AI coding assistant) directly through Telegram. It acts as a two-way communication bridge:
+CC-Bridge is a **Telegram/Lark(Feishu) bot bridge** that enables you to interact with Claude Code (Anthropic's AI coding assistant) through chat channels. It acts as a two-way communication bridge:
 
-- **Incoming Messages**: Messages you send to the Telegram bot are forwarded to Claude Code
-- **Outgoing Responses**: Claude Code's responses are sent back to you via Telegram
+- **Incoming Messages**: Messages sent to supported channels are forwarded to Claude Code
+- **Outgoing Responses**: Claude Code's responses are sent back to the source chat channel
 
 ### 1.2 Key Features
 
@@ -88,8 +88,8 @@ TELEGRAM_BOT_TOKEN=123456:ABC-DEF
 **Step 2: Start Services**
 
 ```bash
-# Start container agent
-make docker-start
+# Build/restart container agent
+make docker-restart
 
 # Start gateway service
 make gateway-start
@@ -102,7 +102,7 @@ make logs-monitor
 
 ```bash
 # Send test message via Docker
-make docker-talk msg="Hello Claude!"
+make talk MSG="Hello Claude!"
 
 # Or send a message directly to your Telegram bot
 ```
@@ -117,7 +117,7 @@ docker ps | grep cc-bridge
 curl http://localhost:8080/health
 
 # View logs
-make logs-follow
+make logs-monitor
 ```
 
 ---
@@ -277,16 +277,23 @@ Create a file hello.py with a print statement and run it
 |---------|-------------|
 | `/help` | Show help message |
 | `/status` | Show system status |
-| `/workspace` | Switch workspace |
-| `/list` | List available workspaces |
-| `/use <name>` | Use specific workspace |
+| `/menu` | Show all available commands |
+| `/ws_list` | List available workspaces |
+| `/ws_status` | Show current workspace status |
+| `/ws_switch <name>` | Switch workspace |
+| `/ws_add <name>` | Create workspace |
+| `/ws_del <name>` | Delete workspace |
+| `/schedulers` | List scheduled tasks |
+| `/scheduler_add ...` | Add scheduled task |
+| `/scheduler_del <task_id>` | Delete scheduled task |
+| `/clear` | Clear current workspace session context |
 
 ### 4.3 Workspace Management
 
 **Switch Workspace:**
 
 ```
-/use another-project
+/ws_switch another-project
 ```
 
 **List Workspaces:**
@@ -298,7 +305,7 @@ Create a file hello.py with a print statement and run it
 **Current Workspace:**
 
 ```
-/workspace
+/ws_status
 ```
 
 ### 4.4 Conversation History
@@ -315,6 +322,34 @@ Claude: 5+5 equals 10.
 
 History is stored in SQLite and limited to 50 messages by default.
 
+### 4.5 Mini-App Lifecycle
+
+Mini-app specs live in `src/apps/*.md` and are executed by `src/gateway/apps/driver.ts`.
+
+Typical lifecycle:
+
+```bash
+# 1) Create a new mini-app spec
+make app-new APP_ID=my-report
+
+# 2) Edit src/apps/my-report.md
+
+# 3) Verify app is discoverable
+make app-list
+
+# 4) Run immediately
+make app-run APP_ID=my-report APP_INPUT="focus area"
+
+# 5) Schedule (UTC for cron)
+make app-schedule APP_ID=my-report APP_SCHEDULE_TYPE=cron APP_SCHEDULE_VALUE="0 8 * * *"
+
+# 6) Inspect tasks
+make app-list-tasks APP_ID=my-report
+
+# 7) Unschedule
+make app-unschedule APP_ID=my-report
+```
+
 ---
 
 ## 5. Commands Reference
@@ -326,14 +361,19 @@ History is stored in SQLite and limited to 50 messages by default.
 | `make gateway-start` | Start gateway service |
 | `make gateway-stop` | Stop gateway service |
 | `make gateway-restart` | Restart gateway |
-| `make docker-start` | Start container agent |
 | `make docker-stop` | Stop container agent |
 | `make docker-restart` | Restart container |
-| `make docker-rebuild` | Rebuild container image |
 | `make logs-monitor` | Stream all logs |
-| `make logs-follow` | Follow gateway logs |
-| `make docker-exec` | Exec into container shell |
-| `make docker-talk` | Send test message |
+| `make docker-status` | Show container status/processes |
+| `make docker-logs` | Follow container logs |
+| `make talk MSG="..."` | Send test message via container_cmd flow |
+| `make app-new APP_ID=...` | Create mini-app spec |
+| `make app-list` | List mini-apps |
+| `make app-run APP_ID=...` | Run mini-app |
+| `make app-schedule APP_ID=...` | Schedule mini-app task |
+| `make app-list-tasks [APP_ID=...]` | List mini-app tasks |
+| `make app-unschedule TASK_ID=...` | Unschedule by task id |
+| `make app-unschedule APP_ID=...` | Unschedule by app id |
 | `make test` | Run all tests |
 | `make lint` | Run linter |
 | `make format` | Format code |
@@ -344,9 +384,12 @@ History is stored in SQLite and limited to 50 messages by default.
 |---------|-------------|---------|
 | `/help` | Show help | `/help` |
 | `/status` | System status | `/status` |
-| `/workspace` | Show/switch workspace | `/workspace` |
-| `/list` | List workspaces | `/list` |
-| `/use <name>` | Use workspace | `/use my-project` |
+| `/menu` | Show all commands | `/menu` |
+| `/ws_list` | List workspaces | `/ws_list` |
+| `/ws_status` | Show current workspace status | `/ws_status` |
+| `/ws_switch <name>` | Use workspace | `/ws_switch my-project` |
+| `/schedulers` | List tasks | `/schedulers` |
+| `/clear` | Clear chat session context | `/clear` |
 
 ---
 
@@ -361,8 +404,8 @@ History is stored in SQLite and limited to 50 messages by default.
 # Check container status
 docker ps -a | grep cc-bridge
 
-# Start container
-make docker-start
+# Rebuild/restart container
+make docker-restart
 ```
 
 #### Issue: "IPC timeout"
@@ -381,7 +424,7 @@ make docker-restart
 **Solution**:
 ```bash
 # Check logs
-make logs-follow
+make logs-monitor
 
 # Verify ANTHROPIC_AUTH_TOKEN is set
 docker exec cc-bridge-agent env | grep ANTHROPIC
@@ -410,7 +453,7 @@ make gateway-start
 
 ```bash
 # Follow gateway logs
-make logs-follow
+make logs-monitor
 
 # View container logs
 docker logs -f cc-bridge-agent
@@ -459,7 +502,7 @@ mkdir -p workspaces/another-project
 **Switch to workspace:**
 
 ```
-/use another-project
+/ws_switch another-project
 ```
 
 ### 7.3 Direct Docker Execution
@@ -467,19 +510,17 @@ mkdir -p workspaces/another-project
 Test without Telegram:
 
 ```bash
-make docker-talk msg="Explain the IPC architecture"
+make talk MSG="Explain the IPC architecture"
 ```
 
 ### 7.4 Container Shell Access
 
 ```bash
-# Exec into container
-make docker-exec
+# Show container status and running processes
+make docker-status
 
-# Inside container
-bun run src/agent/index.ts
-ps aux | grep claude
-tmux ls
+# Follow container logs
+make docker-logs
 ```
 
 ### 7.5 Performance Tuning
@@ -577,13 +618,13 @@ services:
 
 ```bash
 # Start everything
-make docker-start && make gateway-start
+make docker-restart && make gateway-start
 
 # View logs
 make logs-monitor
 
 # Test connection
-make docker-talk msg="ping"
+make talk MSG="ping"
 
 # Restart everything
 make gateway-restart && make docker-restart
@@ -616,6 +657,7 @@ make lint
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 2.2.0 | 2026-02-21 | Updated make/command reference, added mini-app lifecycle workflow, aligned slash commands with current bot behavior |
 | 2.1.0 | 2026-02-08 | Added Lark/Feishu support, configuration guide, and environment reference |
 | 2.0.0 | 2025-02-07 | Complete rewrite for Docker-first workflow, TCP IPC, make commands |
 | 1.0.0 | 2026-02-02 | Initial user manual |
