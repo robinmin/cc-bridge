@@ -37,4 +37,18 @@ describe("InstanceManager", () => {
 		expect(instances[0].status).toBe("running");
 		spawnSpy.mockRestore();
 	});
+
+	test("should stop retrying discovery when docker cli is missing", async () => {
+		const spawnSpy = spyOn(Bun, "spawn").mockImplementation(() => {
+			throw Object.assign(new Error("docker not found"), { code: "ENOENT", path: "docker", errno: -2 });
+		});
+
+		const first = await manager.refresh();
+		const second = await manager.refresh();
+
+		expect(first).toEqual([]);
+		expect(second).toEqual([]);
+		expect(spawnSpy).toHaveBeenCalledTimes(1);
+		spawnSpy.mockRestore();
+	});
 });
