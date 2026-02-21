@@ -9,6 +9,7 @@ import { handleWebhook } from "@/gateway/routes/webhook";
 const mockPersistence = {
 	getWorkspace: mock(async () => "default-workspace"),
 	storeMessage: mock(async () => {}),
+	setChatChannel: mock(async () => {}),
 };
 
 const mockRateLimiter = {
