@@ -2,7 +2,7 @@
 	gateway-start gateway-stop gateway-restart gateway-install gateway-uninstall logs-monitor \
 	docker-restart docker-stop docker-logs docker-logs-cmd docker-status \
 	talk talk-response msg-sessions msg-health msg-create-session msg-kill-session msg-help \
-	app-new app-run app-schedule app-list-tasks app-unschedule
+	app-new app-list app-run app-schedule app-list-tasks app-unschedule
 
 # Default target
 .DEFAULT_GOAL := help
@@ -68,6 +68,10 @@ dev:
 app-new:
 	@if [ -z "$(APP_ID)" ]; then echo "Usage: make app-new APP_ID=<app-id>"; exit 1; fi
 	@./scripts/host_cmd.sh app-new "$(APP_ID)"
+
+## app-list: List all mini-apps
+app-list:
+	@./scripts/host_cmd.sh app-list
 
 ## app-run: Run a mini-app (usage: make app-run APP_ID=my-app [APP_INPUT='...'] [APP_CHAT_ID=123] [APP_TIMEOUT_MS=45000] [APP_CONCURRENCY=1])
 app-run:

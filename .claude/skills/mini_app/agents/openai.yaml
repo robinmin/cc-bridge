@@ -1,0 +1,4 @@
+interface:
+  display_name: "Mini-App Lifecycle"
+  short_description: "Operate mini-app lifecycle with make and host_cmd"
+  default_prompt: "Manage mini-app lifecycle using make targets and scripts/host_cmd.sh commands"

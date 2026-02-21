@@ -52,6 +52,7 @@ function cmd_host_help() {
     echo "  ws_add <name> - Create workspace"
     echo "  ws_del <name> - Delete workspace"
     echo "  app-new <app-id> - Create mini-app markdown from template"
+    echo "  app-list - List available mini-apps"
     echo "  app-run <app-id> [input] - Run mini-app by id (env: MINI_APP_CHAT_ID, MINI_APP_TIMEOUT_MS, MINI_APP_CONCURRENCY)"
     echo "  app-schedule <app-id> [once|recurring|cron] [schedule] [input] [instance] - Register mini-app task"
     echo "  app-list-tasks [app-id] - List scheduled mini-app tasks"
@@ -93,6 +94,11 @@ function cmd_host_app_new() {
     sed -i '' "s/^name: New Mini-App$/name: ${app_id}/" "$target_path"
 
     echo "✅ Created mini-app: $target_path"
+}
+
+## command : app-run
+function cmd_host_app_list() {
+    bun run src/gateway/apps/driver.ts list
 }
 
 ## command : app-run
@@ -179,6 +185,9 @@ function host_main() {
         "app-run")
             shift || true
             cmd_host_app_run "$@"
+            ;;
+        "app-list")
+            cmd_host_app_list
             ;;
         "app-schedule")
             shift || true
