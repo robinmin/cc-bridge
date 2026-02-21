@@ -341,7 +341,8 @@ export class TmuxManager {
 		// Remove carriage returns and newlines (they break tmux commands)
 		escaped = escaped.replace(/[\r\n]/g, "");
 		// Escape other control characters that might cause issues
-		escaped = escaped.replace(/[\x00-\x1f\x7f]/g, "");
+		// biome-ignore lint/suspicious/noControlCharactersInRegex: Intentional - stripping control chars for shell safety
+		escaped = escaped.replace(/[\u0000-\u001f\u007f]/g, "");
 		return escaped;
 	}
 
