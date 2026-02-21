@@ -1,13 +1,15 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdir, rm } from "node:fs/promises";
 import { AgentHttpServer } from "@/agent/api/server";
-import { RequestTracker } from "@/gateway/services/RequestTracker";
-import type { SessionMetadata, SessionPoolService } from "@/gateway/services/SessionPoolService";
-import type { TmuxManager } from "@/gateway/services/tmux-manager";
+import type {
+	RequestTrackerContract,
+	RequestTrackerState,
+	SessionMetadataContract,
+	SessionPoolContract,
+	TmuxManagerContract,
+} from "@/packages/agent-runtime";
 
-// Mock SessionPoolService - implements required methods
-class MockSessionPoolService implements Partial<SessionPoolService> {
-	public sessions: Map<string, SessionMetadata> = new Map();
+class MockSessionPoolService implements SessionPoolContract {
+	public sessions: Map<string, SessionMetadataContract> = new Map();
 	private started = false;
 
 	async start(): Promise<void> {
@@ -18,11 +20,7 @@ class MockSessionPoolService implements Partial<SessionPoolService> {
 		this.started = false;
 	}
 
-	isRunning(): boolean {
-		return this.started;
-	}
-
-	async getOrCreateSession(workspace: string): Promise<SessionMetadata> {
+	async getOrCreateSession(workspace: string): Promise<SessionMetadataContract> {
 		let session = this.sessions.get(workspace);
 		if (!session) {
 			session = {
@@ -40,7 +38,7 @@ class MockSessionPoolService implements Partial<SessionPoolService> {
 		return session;
 	}
 
-	getSession(workspace: string): SessionMetadata | undefined {
+	getSession(workspace: string): SessionMetadataContract | undefined {
 		return this.sessions.get(workspace);
 	}
 
@@ -48,18 +46,11 @@ class MockSessionPoolService implements Partial<SessionPoolService> {
 		this.sessions.delete(workspace);
 	}
 
-	listSessions(): SessionMetadata[] {
+	listSessions(): SessionMetadataContract[] {
 		return Array.from(this.sessions.values());
 	}
 
-	getStats(): {
-		totalSessions: number;
-		activeSessions: number;
-		idleSessions: number;
-		terminatingSessions: number;
-		destroyed: boolean;
-		started: boolean;
-	} {
+	getStats() {
 		return {
 			totalSessions: this.sessions.size,
 			activeSessions: this.sessions.size,
@@ -80,101 +71,60 @@ class MockSessionPoolService implements Partial<SessionPoolService> {
 
 	trackRequestComplete(workspace: string): void {
 		const session = this.sessions.get(workspace);
-		if (session && session.activeRequests > 0) {
-			session.activeRequests--;
-		}
-	}
-
-	// Additional required methods
-	async cleanup(): Promise<void> {
-		// No-op for mock
-	}
-
-	isDestroyed(): boolean {
-		return !this.started;
-	}
-
-	async switchWorkspace(_currentWorkspace: string, _targetWorkspace: string): Promise<SessionMetadata> {
-		throw new Error("switchWorkspace not implemented in mock");
+		if (session && session.activeRequests > 0) session.activeRequests--;
 	}
 }
 
-// Mock TmuxManager - implements required methods
-class MockTmuxManager implements Partial<TmuxManager> {
-	private started = false;
-
-	async start(): Promise<void> {
-		this.started = true;
-	}
-
-	async stop(): Promise<void> {
-		this.started = false;
-	}
-
-	isRunning(): boolean {
-		return this.started;
-	}
-
+class MockTmuxManager implements TmuxManagerContract {
+	async start(): Promise<void> {}
+	async stop(): Promise<void> {}
 	async listAllSessions(): Promise<string[]> {
 		return [];
 	}
+	async sendToSession(): Promise<void> {}
+}
 
-	// Additional required methods - no-op implementations
-	async getOrCreateSession(): Promise<string> {
-		return "mock-session";
+class MockRequestTracker implements RequestTrackerContract {
+	private states = new Map<string, RequestTrackerState>();
+
+	async start(): Promise<void> {}
+	async stop(): Promise<void> {}
+
+	async createRequest(input: { requestId: string; chatId: string; workspace: string; prompt: string }): Promise<void> {
+		this.states.set(input.requestId, {
+			requestId: input.requestId,
+			workspace: input.workspace,
+			state: "created",
+			createdAt: Date.now(),
+		});
 	}
 
-	async sendToSession(): Promise<{
-		success: boolean;
-		exitCode?: number;
-		output?: string;
-		error?: string;
-	}> {
-		return { success: true };
+	async updateState(
+		requestId: string,
+		updates: Partial<{
+			state: string;
+			queuedAt: number;
+			processingStartedAt: number;
+			completedAt: number;
+			exitCode: number;
+			output: string;
+			error: string;
+		}>,
+	): Promise<void> {
+		const current = this.states.get(requestId);
+		if (!current) return;
+		this.states.set(requestId, { ...current, ...updates });
 	}
 
-	async sessionExists(): Promise<boolean> {
-		return false;
-	}
-
-	async listSessions(): Promise<string[]> {
-		return [];
-	}
-
-	async killSession(): Promise<void> {
-		// No-op
-	}
-
-	async cleanupIdleSessions(): Promise<number> {
-		return 0;
-	}
-
-	getSessionInfo(): undefined {
-		return undefined;
-	}
-
-	getAllSessions(): never[] {
-		return [];
-	}
-
-	async createWorkspaceSession(): Promise<void> {
-		// No-op
-	}
-
-	async killWorkspaceSession(): Promise<void> {
-		// No-op
-	}
-
-	async syncSessions(): Promise<void> {
-		// No-op
+	async getRequest(requestId: string): Promise<RequestTrackerState | null> {
+		return this.states.get(requestId) || null;
 	}
 }
 
 describe("AgentHttpServer", () => {
 	let server: AgentHttpServer;
 	let sessionPool: MockSessionPoolService;
-	let requestTracker: RequestTracker;
-	let testStateDir: string;
+	let requestTracker: MockRequestTracker;
 	let config: {
 		port: number;
 		host: string;
@@ -184,23 +134,41 @@ describe("AgentHttpServer", () => {
 		rateLimitWindow: string;
 	};
 
-	beforeEach(async () => {
-		testStateDir = `/tmp/test-api-server-state-${Date.now()}`;
-		await mkdir(testStateDir, { recursive: true });
+	const injectJson = async (
+		target: AgentHttpServer,
+		input: {
+			method: string;
+			url: string;
+			apiKey?: string;
+			payload?: unknown;
+			headers?: Record<string, string>;
+		},
+	) => {
+		const headers: Record<string, string> = {
+			...(input.headers || {}),
+		};
+		if (input.apiKey) headers["x-api-key"] = input.apiKey;
+		if (input.payload !== undefined && !headers["content-type"]) {
+			headers["content-type"] = "application/json";
+		}
+		return target.inject({
+			method: input.method,
+			url: input.url,
+			headers,
+			payload: input.payload !== undefined ? JSON.stringify(input.payload) : undefined,
+		});
+	};
 
-		// Initialize services
+	beforeEach(async () => {
 		const tmuxManager = new MockTmuxManager();
 		sessionPool = new MockSessionPoolService();
-
-		requestTracker = new RequestTracker({
-			stateBaseDir: testStateDir,
-		});
+		requestTracker = new MockRequestTracker();
 
 		await requestTracker.start();
 		await sessionPool.start();
 
 		config = {
-			port: 0, // Use random port for testing
+			port: 0,
 			host: "127.0.0.1",
 			apiKey: "test-api-key",
 			enableAuth: true,
@@ -208,124 +176,86 @@ describe("AgentHttpServer", () => {
 			rateLimitWindow: "1 minute",
 		};
 
-		server = new AgentHttpServer(config, sessionPool as SessionPoolService, requestTracker, tmuxManager as TmuxManager);
+		server = new AgentHttpServer(config, sessionPool, requestTracker, tmuxManager);
 	});
 
 	afterEach(async () => {
-		if (server) {
-			await server.stop();
-		}
+		await server.stop();
 		await sessionPool.stop();
 		await requestTracker.stop();
-		await rm(testStateDir, { recursive: true, force: true });
 	});
 
 	describe("Server Lifecycle", () => {
-		test("should start and stop server", async () => {
-			await server.start();
-
-			expect(server.isRunning()).toBe(true);
-
-			await server.stop();
-
-			expect(server.isRunning()).toBe(false);
+		test.serial("should handle request via injection without binding network port", async () => {
+			const response = await injectJson(server, {
+				method: "GET",
+				url: "/health",
+				apiKey: "test-api-key",
+			});
+			expect([200, 503]).toContain(response.statusCode);
 		});
 
-		test("should handle starting already started server", async () => {
-			await server.start();
-			await server.start(); // Should not throw
-
-			expect(server.isRunning()).toBe(true);
+		test.serial("stop should be safe before start", async () => {
+			await expect(server.stop()).resolves.toBeUndefined();
 		});
 	});
 
 	describe("Authentication", () => {
-		test("should reject request without API key when auth enabled", async () => {
-			await server.start();
-
-			const response = await fetch(`http://127.0.0.1:${server.getPort()}/health`);
-
-			expect(response.status).toBe(401);
+		test.serial("should reject request without API key when auth enabled", async () => {
+			const response = await injectJson(server, { method: "GET", url: "/health" });
+			expect(response.statusCode).toBe(401);
 		});
 
-		test("should reject request with invalid API key", async () => {
-			await server.start();
-
-			const response = await fetch(`http://127.0.0.1:${server.getPort()}/health`, {
-				headers: {
-					"X-API-Key": "wrong-key",
-				},
+		test.serial("should reject request with invalid API key", async () => {
+			const response = await injectJson(server, {
+				method: "GET",
+				url: "/health",
+				apiKey: "wrong-key",
 			});
-
-			expect(response.status).toBe(401);
+			expect(response.statusCode).toBe(401);
 		});
 
-		test("should accept request with valid API key", async () => {
-			await server.start();
-
-			const response = await fetch(`http://127.0.0.1:${server.getPort()}/health`, {
-				headers: {
-					"X-API-Key": "test-api-key",
-				},
+		test.serial("should accept request with valid API key", async () => {
+			const response = await injectJson(server, {
+				method: "GET",
+				url: "/health",
+				apiKey: "test-api-key",
 			});
-
-			// May return 200 or 503 depending on health status
-			expect([200, 503]).toContain(response.status);
+			expect([200, 503]).toContain(response.statusCode);
 		});
 	});
 
 	describe("POST /execute", () => {
-		test("should reject request without workspace", async () => {
-			await server.start();
-
-			const response = await fetch(`http://127.0.0.1:${server.getPort()}/execute`, {
+		test.serial("should reject request without workspace", async () => {
+			const response = await injectJson(server, {
 				method: "POST",
-				headers: {
-					"X-API-Key": "test-api-key",
-					"Content-Type": "application/json",
-				},
-				body: JSON.stringify({ command: "echo test" }),
+				url: "/execute",
+				apiKey: "test-api-key",
+				payload: { command: "echo test" },
 			});
-
-			expect(response.status).toBe(400);
-
-			const data = await response.json();
-			expect(data.error).toContain("Missing required fields");
+			expect(response.statusCode).toBe(400);
+			expect(response.json().error).toContain("Missing required fields");
 		});
 
-		test("should reject request without command", async () => {
-			await server.start();
-
-			const response = await fetch(`http://127.0.0.1:${server.getPort()}/execute`, {
+		test.serial("should reject request without command", async () => {
+			const response = await injectJson(server, {
 				method: "POST",
-				headers: {
-					"X-API-Key": "test-api-key",
-					"Content-Type": "application/json",
-				},
-				body: JSON.stringify({ workspace: "test" }),
+				url: "/execute",
+				apiKey: "test-api-key",
+				payload: { workspace: "test" },
 			});
-
-			expect(response.status).toBe(400);
+			expect(response.statusCode).toBe(400);
 		});
 
-		test("should queue command and return requestId", async () => {
-			await server.start();
-
-			const response = await fetch(`http://127.0.0.1:${server.getPort()}/execute`, {
+		test.serial("should queue command and return requestId", async () => {
+			const response = await injectJson(server, {
 				method: "POST",
-				headers: {
-					"X-API-Key": "test-api-key",
-					"Content-Type": "application/json",
-				},
-				body: JSON.stringify({
-					workspace: "test-workspace",
-					command: "echo 'hello'",
-				}),
+				url: "/execute",
+				apiKey: "test-api-key",
+				payload: { workspace: "test-workspace", command: "echo 'hello'" },
 			});
-
-			expect(response.status).toBe(202);
-
-			const data = await response.json();
+			expect(response.statusCode).toBe(202);
+			const data = response.json();
 			expect(data.requestId).toBeDefined();
 			expect(data.workspace).toBe("test-workspace");
 			expect(data.status).toBe("queued");
@@ -333,17 +263,13 @@ describe("AgentHttpServer", () => {
 	});
 
 	describe("GET /health", () => {
-		test("should return health status", async () => {
-			await server.start();
-
-			const response = await fetch(`http://127.0.0.1:${server.getPort()}/health`, {
-				headers: {
-					"X-API-Key": "test-api-key",
-				},
+		test.serial("should return health status", async () => {
+			const response = await injectJson(server, {
+				method: "GET",
+				url: "/health",
+				apiKey: "test-api-key",
 			});
-
-			const data = await response.json();
-
+			const data = response.json();
 			expect(data.status).toBeDefined();
 			expect(["healthy", "degraded", "unhealthy"]).toContain(data.status);
 			expect(data.timestamp).toBeDefined();
@@ -352,37 +278,27 @@ describe("AgentHttpServer", () => {
 	});
 
 	describe("GET /sessions", () => {
-		test("should return empty sessions list initially", async () => {
-			await server.start();
-
-			const response = await fetch(`http://127.0.0.1:${server.getPort()}/sessions`, {
-				headers: {
-					"X-API-Key": "test-api-key",
-				},
+		test.serial("should return empty sessions list initially", async () => {
+			const response = await injectJson(server, {
+				method: "GET",
+				url: "/sessions",
+				apiKey: "test-api-key",
 			});
-
-			expect(response.status).toBe(200);
-
-			const data = await response.json();
+			expect(response.statusCode).toBe(200);
+			const data = response.json();
 			expect(data.sessions).toEqual([]);
 			expect(data.total).toBe(0);
 		});
 
-		test("should return sessions after creating one", async () => {
-			await server.start();
-
-			// Create a session via the session pool
+		test.serial("should return sessions after creating one", async () => {
 			await sessionPool.getOrCreateSession("test-workspace");
-
-			const response = await fetch(`http://127.0.0.1:${server.getPort()}/sessions`, {
-				headers: {
-					"X-API-Key": "test-api-key",
-				},
+			const response = await injectJson(server, {
+				method: "GET",
+				url: "/sessions",
+				apiKey: "test-api-key",
 			});
-
-			expect(response.status).toBe(200);
-
-			const data = await response.json();
+			expect(response.statusCode).toBe(200);
+			const data = response.json();
 			expect(data.sessions).toHaveLength(1);
 			expect(data.sessions[0].workspace).toBe("test-workspace");
 			expect(data.total).toBe(1);
@@ -390,149 +306,99 @@ describe("AgentHttpServer", () => {
 	});
 
 	describe("POST /session/create", () => {
-		test("should create new session", async () => {
-			await server.start();
-
-			const response = await fetch(`http://127.0.0.1:${server.getPort()}/session/create`, {
+		test.serial("should create new session", async () => {
+			const response = await injectJson(server, {
 				method: "POST",
-				headers: {
-					"X-API-Key": "test-api-key",
-					"Content-Type": "application/json",
-				},
-				body: JSON.stringify({ workspace: "new-workspace" }),
+				url: "/session/create",
+				apiKey: "test-api-key",
+				payload: { workspace: "new-workspace" },
 			});
-
-			expect(response.status).toBe(201);
-
-			const data = await response.json();
+			expect(response.statusCode).toBe(201);
+			const data = response.json();
 			expect(data.workspace).toBe("new-workspace");
 			expect(data.sessionName).toBeDefined();
 			expect(data.status).toBeDefined();
 			expect(data.createdAt).toBeDefined();
 		});
 
-		test("should reject request without workspace", async () => {
-			await server.start();
-
-			const response = await fetch(`http://127.0.0.1:${server.getPort()}/session/create`, {
+		test.serial("should reject request without workspace", async () => {
+			const response = await injectJson(server, {
 				method: "POST",
-				headers: {
-					"X-API-Key": "test-api-key",
-					"Content-Type": "application/json",
-				},
-				body: JSON.stringify({}),
+				url: "/session/create",
+				apiKey: "test-api-key",
+				payload: {},
 			});
-
-			expect(response.status).toBe(400);
+			expect(response.statusCode).toBe(400);
 		});
 
-		test("should be idempotent - return existing session", async () => {
-			await server.start();
-
-			// Create session first time
-			const response1 = await fetch(`http://127.0.0.1:${server.getPort()}/session/create`, {
+		test.serial("should be idempotent - return existing session", async () => {
+			const response1 = await injectJson(server, {
 				method: "POST",
-				headers: {
-					"X-API-Key": "test-api-key",
-					"Content-Type": "application/json",
-				},
-				body: JSON.stringify({ workspace: "same-workspace" }),
+				url: "/session/create",
+				apiKey: "test-api-key",
+				payload: { workspace: "same-workspace" },
 			});
-
-			// Create session second time
-			const response2 = await fetch(`http://127.0.0.1:${server.getPort()}/session/create`, {
+			const response2 = await injectJson(server, {
 				method: "POST",
-				headers: {
-					"X-API-Key": "test-api-key",
-					"Content-Type": "application/json",
-				},
-				body: JSON.stringify({ workspace: "same-workspace" }),
+				url: "/session/create",
+				apiKey: "test-api-key",
+				payload: { workspace: "same-workspace" },
 			});
-
-			const data1 = await response1.json();
-			const data2 = await response2.json();
-
-			expect(data1.sessionName).toBe(data2.sessionName);
+			expect(response1.json().sessionName).toBe(response2.json().sessionName);
 		});
 	});
 
 	describe("DELETE /session/:workspace", () => {
-		test("should delete existing session", async () => {
-			await server.start();
-
-			// Create a session first
+		test.serial("should delete existing session", async () => {
 			await sessionPool.getOrCreateSession("delete-test");
-
-			const response = await fetch(`http://127.0.0.1:${server.getPort()}/session/delete-test`, {
+			const response = await injectJson(server, {
 				method: "DELETE",
-				headers: {
-					"X-API-Key": "test-api-key",
-				},
+				url: "/session/delete-test",
+				apiKey: "test-api-key",
 			});
-
-			expect(response.status).toBe(200);
-
-			const data = await response.json();
+			expect(response.statusCode).toBe(200);
+			const data = response.json();
 			expect(data.workspace).toBe("delete-test");
 			expect(data.status).toBe("deleted");
 		});
 
-		test("should return 404 for non-existent session", async () => {
-			await server.start();
-
-			const response = await fetch(`http://127.0.0.1:${server.getPort()}/session/non-existent`, {
+		test.serial("should return 404 for non-existent session", async () => {
+			const response = await injectJson(server, {
 				method: "DELETE",
-				headers: {
-					"X-API-Key": "test-api-key",
-				},
+				url: "/session/non-existent",
+				apiKey: "test-api-key",
 			});
-
-			expect(response.status).toBe(404);
+			expect(response.statusCode).toBe(404);
 		});
 
-		test("should return 409 when session has active requests", async () => {
-			await server.start();
-
+		test.serial("should return 409 when session has active requests", async () => {
 			const workspace = "active-requests-test";
 			await sessionPool.getOrCreateSession(workspace);
 			sessionPool.trackRequestStart(workspace);
-
-			const response = await fetch(`http://127.0.0.1:${server.getPort()}/session/${workspace}`, {
+			const response = await injectJson(server, {
 				method: "DELETE",
-				headers: {
-					"X-API-Key": "test-api-key",
-				},
+				url: `/session/${workspace}`,
+				apiKey: "test-api-key",
 			});
-
-			expect(response.status).toBe(409);
-
-			// Clean up
+			expect(response.statusCode).toBe(409);
 			sessionPool.trackRequestComplete(workspace);
 		});
 
-		test("should force delete session with active requests", async () => {
-			await server.start();
-
+		test.serial("should force delete session with active requests", async () => {
 			const workspace = "force-delete-test";
 			await sessionPool.getOrCreateSession(workspace);
 			sessionPool.trackRequestStart(workspace);
-
-			const response = await fetch(`http://127.0.0.1:${server.getPort()}/session/${workspace}?force=true`, {
+			const response = await injectJson(server, {
 				method: "DELETE",
-				headers: {
-					"X-API-Key": "test-api-key",
-				},
+				url: `/session/${workspace}?force=true`,
+				apiKey: "test-api-key",
 			});
-
-			expect(response.status).toBe(200);
+			expect(response.statusCode).toBe(200);
 		});
 	});
 
 	describe("GET /status/:requestId", () => {
-		test("should return request status", async () => {
-			await server.start();
-
-			// Create a request
+		test.serial("should return request status", async () => {
 			const requestId = "test-status-request";
 			await requestTracker.createRequest({
 				requestId,
@@ -540,47 +406,37 @@ describe("AgentHttpServer", () => {
 				workspace: "test",
 				prompt: "echo test",
 			});
-
-			const response = await fetch(`http://127.0.0.1:${server.getPort()}/status/${requestId}`, {
-				headers: {
-					"X-API-Key": "test-api-key",
-				},
+			const response = await injectJson(server, {
+				method: "GET",
+				url: `/status/${requestId}`,
+				apiKey: "test-api-key",
 			});
-
-			expect(response.status).toBe(200);
-
-			const data = await response.json();
+			expect(response.statusCode).toBe(200);
+			const data = response.json();
 			expect(data.requestId).toBe(requestId);
 			expect(data.state).toBeDefined();
 			expect(data.elapsed).toBeGreaterThanOrEqual(0);
 		});
 
-		test("should return 404 for non-existent request", async () => {
-			await server.start();
-
-			const response = await fetch(`http://127.0.0.1:${server.getPort()}/status/non-existent`, {
-				headers: {
-					"X-API-Key": "test-api-key",
-				},
+		test.serial("should return 404 for non-existent request", async () => {
+			const response = await injectJson(server, {
+				method: "GET",
+				url: "/status/non-existent",
+				apiKey: "test-api-key",
 			});
-
-			expect(response.status).toBe(404);
+			expect(response.statusCode).toBe(404);
 		});
 	});
 
 	describe("GET /api-docs", () => {
-		test("should return OpenAPI specification", async () => {
-			await server.start();
-
-			const response = await fetch(`http://127.0.0.1:${server.getPort()}/api-docs`, {
-				headers: {
-					"X-API-Key": "test-api-key",
-				},
+		test.serial("should return OpenAPI specification", async () => {
+			const response = await injectJson(server, {
+				method: "GET",
+				url: "/api-docs",
+				apiKey: "test-api-key",
 			});
-
-			expect(response.status).toBe(200);
-
-			const data = await response.json();
+			expect(response.statusCode).toBe(200);
+			const data = response.json();
 			expect(data.openapi).toBe("3.0.0");
 			expect(data.info).toBeDefined();
 			expect(data.paths).toBeDefined();
@@ -588,103 +444,65 @@ describe("AgentHttpServer", () => {
 	});
 
 	describe("Rate Limiting", () => {
-		test("should enforce rate limit", async () => {
-			// Create server with low rate limit for testing
+		test.serial("should enforce rate limit", async () => {
 			const limitedServer = new AgentHttpServer(
 				{
 					...config,
-					rateLimitMax: 3, // Even lower limit
-					rateLimitWindow: "10 seconds", // Longer window
+					rateLimitMax: 3,
+					rateLimitWindow: "10 seconds",
 				},
-				sessionPool as SessionPoolService,
+				sessionPool,
 				requestTracker,
-				new MockTmuxManager() as TmuxManager,
+				new MockTmuxManager(),
 			);
 
-			await limitedServer.start();
-			const port = limitedServer.getPort();
-
-			// First, verify a single request works
-			const singleResponse = await fetch(`http://127.0.0.1:${port}/sessions`, {
-				headers: {
-					"X-API-Key": "test-api-key",
-				},
-			});
-			console.log("Single request status:", singleResponse.status);
-			expect(singleResponse.status).toBe(200);
-
-			// Now send 5 requests sequentially (should trigger rate limit)
-			const responses: Array<{
-				status: number;
-				headers: Record<string, string>;
-			}> = [];
+			const responses: number[] = [];
 			for (let i = 0; i < 5; i++) {
-				const response = await fetch(`http://127.0.0.1:${port}/sessions`, {
-					headers: {
-						"X-API-Key": "test-api-key",
-					},
+				const res = await injectJson(limitedServer, {
+					method: "GET",
+					url: "/sessions",
+					apiKey: "test-api-key",
 				});
-				const headers: Record<string, string> = {};
-				response.headers.forEach((value, key) => {
-					headers[key] = value;
-				});
-				responses.push({ status: response.status, headers });
-				// Small delay between requests
-				await new Promise((resolve) => setTimeout(resolve, 10));
+				responses.push(res.statusCode);
 			}
 
-			console.log("Sequential responses:");
-			responses.forEach((r, i) => {
-				console.log(
-					`  Request ${i + 1}: status=${r.status}, rateLimit=${r.headers["x-ratelimit-limit"]}, remaining=${r.headers["x-ratelimit-remaining"]}, reset=${r.headers["x-ratelimit-reset"]}`,
-				);
-			});
-			const rateLimitedCount = responses.filter((r) => r.status === 429).length;
-
-			await limitedServer.stop();
-
-			// With max 3, at least the 4th and 5th requests should be rate limited
+			const rateLimitedCount = responses.filter((s) => s === 429).length;
 			expect(rateLimitedCount).toBeGreaterThanOrEqual(1);
+			await limitedServer.stop();
 		});
 	});
 
 	describe("CORS", () => {
-		test("should handle CORS preflight", async () => {
-			await server.start();
-
-			const response = await fetch(`http://127.0.0.1:${server.getPort()}/health`, {
+		test.serial("should handle CORS preflight", async () => {
+			const response = await injectJson(server, {
 				method: "OPTIONS",
+				url: "/health",
 				headers: {
-					Origin: "http://example.com",
-					"Access-Control-Request-Method": "GET",
+					origin: "http://example.com",
+					"access-control-request-method": "GET",
 				},
 			});
-
-			// Should have CORS headers
-			expect(response.headers.get("access-control-allow-origin")).not.toBeNull();
+			expect(response.headers["access-control-allow-origin"]).toBeDefined();
 		});
 	});
 
 	describe("No Authentication Mode", () => {
-		test("should allow requests without API key when auth disabled", async () => {
+		test.serial("should allow requests without API key when auth disabled", async () => {
 			const noAuthServer = new AgentHttpServer(
 				{
 					...config,
 					enableAuth: false,
 				},
-				sessionPool as SessionPoolService,
+				sessionPool,
 				requestTracker,
-				new MockTmuxManager() as TmuxManager,
+				new MockTmuxManager(),
 			);
 
-			await noAuthServer.start();
-			const port = noAuthServer.getPort();
-
-			const response = await fetch(`http://127.0.0.1:${port}/health`);
-
-			// Should not require auth
-			expect([200, 503]).toContain(response.status);
-
+			const response = await injectJson(noAuthServer, {
+				method: "GET",
+				url: "/health",
+			});
+			expect([200, 503]).toContain(response.statusCode);
 			await noAuthServer.stop();
 		});
 	});
