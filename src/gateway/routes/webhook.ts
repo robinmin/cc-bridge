@@ -5,6 +5,7 @@ import type { FeishuChannel } from "@/gateway/channels/feishu";
 import { decryptFeishuWebhook, isEncryptedFeishuWebhook } from "@/gateway/channels/feishu";
 import type { TelegramChannel } from "@/gateway/channels/telegram";
 import { markChatStart } from "@/gateway/channels/telegram";
+import { persistence } from "@/gateway/persistence";
 import type { Bot, Message } from "@/gateway/pipeline";
 import { BotRouter } from "@/gateway/pipeline/bot-router";
 import { rateLimiter } from "@/gateway/rate-limiter";
@@ -125,6 +126,7 @@ async function processWebhookMessage(
 	// Process through Bot Router (instant pattern-based routing)
 	markChatStart(message.chatId);
 	setChannelForChat(message.chatId, channel.name);
+	await persistence.setChatChannel(message.chatId, channel.name);
 	logger.info(`[${message.chatId}] ==> ${message.text}`);
 
 	// Handle attachments (download + validation)
@@ -194,7 +196,13 @@ async function processWebhookMessage(
  * Route: POST /webhook/telegram
  */
 export async function handleTelegramWebhook(c: Context, { telegram, bots, config }: WebhookContext): Promise<Response> {
-	const body = await c.req.json();
+	let body: unknown;
+	try {
+		body = await c.req.json();
+	} catch {
+		logger.debug({ body: "invalid json" }, "Ignored Telegram webhook: invalid JSON");
+		return c.json({ status: "ignored", reason: "invalid json" }, 400);
+	}
 
 	// Parse webhook using the Telegram channel adapter
 	const message = (telegram as ChannelAdapter).parseWebhook(body);
@@ -222,7 +230,13 @@ export async function handleFeishuWebhook(
 		return c.json({ status: "ignored", reason: "feishu not configured" }, 503);
 	}
 
-	const rawBody = await c.req.json();
+	let rawBody: unknown;
+	try {
+		rawBody = await c.req.json();
+	} catch {
+		logger.debug({ body: "invalid json" }, "Ignored Feishu webhook: invalid JSON");
+		return c.json({ status: "ignored", reason: "invalid json" }, 400);
+	}
 	logger.debug({ body: rawBody, headers: c.req.header() }, "Received Feishu/Lark webhook request");
 	let body = rawBody;
 
