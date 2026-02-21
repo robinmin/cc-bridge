@@ -34,13 +34,11 @@ export const WorkspaceList = ({
 	const hint =
 		format === "telegram" ? "Use `/ws_switch <name>` to change." : "Use 'make ws_switch target=<name>' to change.";
 
-	return (
-		renderTemplate(WORKSPACE_LIST_TEMPLATE, {
-			header,
-			list,
-			hint,
-		}) + "\n"
-	);
+	return `${renderTemplate(WORKSPACE_LIST_TEMPLATE, {
+		header,
+		list,
+		hint,
+	})}\n`;
 };
 
 export const WorkspaceStatus = ({
