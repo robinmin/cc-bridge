@@ -2,6 +2,7 @@ import fs from "node:fs";
 import net from "node:net";
 import path from "node:path";
 import { logger } from "@/packages/logger";
+import { parseRawResponseBody, toIpcErrorPayload } from "./response-utils";
 import type { IIpcClient, IpcClientConfig, IpcRequest, IpcResponse } from "./types";
 
 const SOCKET_TIMEOUT_MS = 5000;
@@ -103,7 +104,7 @@ export class UnixSocketIpcClient implements IIpcClient {
 			const status = statusMatch ? Number.parseInt(statusMatch[1], 10) : 500;
 
 			// Parse JSON body
-			const responseBody = bodyPart ? JSON.parse(bodyPart) : {};
+			const responseBody = parseRawResponseBody(bodyPart);
 
 			logger.debug({ id: request.id, path: requestPath, status, method: this.getMethod() }, "IPC request processed");
 
@@ -111,7 +112,7 @@ export class UnixSocketIpcClient implements IIpcClient {
 				id: request.id,
 				status,
 				result: status >= 200 && status < 300 ? responseBody : undefined,
-				error: status >= 400 ? responseBody : undefined,
+				error: status >= 400 ? toIpcErrorPayload(responseBody, status) : undefined,
 			};
 		} catch (error) {
 			logger.warn(
