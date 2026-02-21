@@ -156,13 +156,11 @@ export const HealthReport = ({ data, format }: { data: HealthData; format: "tele
 		}),
 	].filter(Boolean) as string[];
 
-	return (
-		renderTemplate(HEALTH_TEMPLATE, {
-			header,
-			sections,
-			summary,
-		}) + "\n"
-	);
+	return `${renderTemplate(HEALTH_TEMPLATE, {
+		header,
+		sections,
+		summary,
+	})}\n`;
 };
 
 const HEALTH_TEMPLATE = ["{{header}}", "", "{{#each sections}}{{this}}\n{{/each}}", "{{summary}}"].join("\n");
