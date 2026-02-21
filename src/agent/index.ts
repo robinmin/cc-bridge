@@ -2,9 +2,7 @@ import fs from "node:fs";
 import { AgentHttpServer } from "@/agent/api/server";
 import { app } from "@/agent/app";
 import { AGENT_CONSTANTS } from "@/agent/consts";
-import { RequestTracker } from "@/gateway/services/RequestTracker";
-import { SessionPoolService } from "@/gateway/services/SessionPoolService";
-import { TmuxManager } from "@/gateway/services/tmux-manager";
+import { createGatewayBackedAgentRuntime } from "@/agent/runtime/gateway-adapter";
 import { StdioIpcAdapter } from "@/packages/ipc";
 
 // IPC Startup
@@ -21,13 +19,11 @@ if (import.meta.main) {
 		// HTTP API Server Mode
 		console.info("Starting agent HTTP API server");
 
-		const tmuxManager = new TmuxManager();
-		const sessionPool = new SessionPoolService(tmuxManager, {
+		const runtime = createGatewayBackedAgentRuntime({
 			containerId: process.env.AGENT_CONTAINER_ID || "claude-agent",
-		});
-		const requestTracker = new RequestTracker({
 			stateBaseDir: AGENT_CONSTANTS.STATE_BASE_DIR,
 		});
+		const { tmuxManager, sessionPool, requestTracker } = runtime;
 
 		const httpServer = new AgentHttpServer(
 			{
@@ -46,7 +42,7 @@ if (import.meta.main) {
 		// Start services
 		Promise.all([tmuxManager.start(), requestTracker.start(), sessionPool.start(), httpServer.start()])
 			.then(() => {
-				console.info(`HTTP API server listening on port ${httpServer.config.port}`);
+				console.info(`HTTP API server listening on port ${httpServer.getPort()}`);
 			})
 			.catch((err) => {
 				console.error("Failed to start HTTP server:", err);
@@ -54,20 +50,29 @@ if (import.meta.main) {
 			});
 
 		// Graceful shutdown
-		process.on("SIGTERM", async () => {
+		const shutdown = async () => {
 			console.info("Shutting down HTTP server...");
 			await Promise.all([httpServer.stop(), sessionPool.stop(), requestTracker.stop(), tmuxManager.stop()]);
 			process.exit(0);
-		});
+		};
+		process.on("SIGTERM", shutdown);
+		process.on("SIGINT", shutdown);
 	} else if (isTcpMode) {
 		// TCP Server Mode (for faster IPC from host)
 		const port = Number.parseInt(process.env.AGENT_TCP_PORT || "3001", 10);
 		console.info(`Starting agent TCP server on port ${port}`);
-		Bun.serve({
+		const server = Bun.serve({
 			port,
 			hostname: "0.0.0.0",
 			fetch: app.fetch,
 		});
+		const shutdown = () => {
+			console.info("Shutting down TCP server...");
+			server.stop(true);
+			process.exit(0);
+		};
+		process.on("SIGTERM", shutdown);
+		process.on("SIGINT", shutdown);
 	} else if (isServerMode && !isStdioForced && socketPath) {
 		// Persistent Unix Socket Server Mode
 		// Ensure parent directory exists
@@ -80,10 +85,17 @@ if (import.meta.main) {
 			fs.unlinkSync(socketPath);
 		}
 		console.info(`Starting persistent agent server on ${socketPath}`);
-		Bun.serve({
+		const server = Bun.serve({
 			unix: socketPath,
 			fetch: app.fetch,
 		});
+		const shutdown = () => {
+			console.info("Shutting down unix socket server...");
+			server.stop(true);
+			process.exit(0);
+		};
+		process.on("SIGTERM", shutdown);
+		process.on("SIGINT", shutdown);
 	} else {
 		// One-shot Stdio IPC Mode (Default/Fallback)
 		const adapter = new StdioIpcAdapter(app);
