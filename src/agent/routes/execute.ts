@@ -10,43 +10,47 @@ const app = new Hono();
 function applyLlmProviderEnv(env: Record<string, string>): Record<string, string> {
 	const provider = (process.env.LLM_PROVIDER || "anthropic").toLowerCase();
 	const next = { ...env };
+	const setIfDefined = (key: "ANTHROPIC_BASE_URL" | "ANTHROPIC_API_KEY" | "ANTHROPIC_AUTH_TOKEN", value?: string) => {
+		if (value && value.trim().length > 0) {
+			next[key] = value;
+		}
+	};
 
 	switch (provider) {
 		case "anthropic": {
-			next.ANTHROPIC_BASE_URL = process.env.LLM_ANTHROPIC_BASE_URL || process.env.ANTHROPIC_BASE_URL || "";
-			next.ANTHROPIC_API_KEY = process.env.LLM_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY || "";
-			next.ANTHROPIC_AUTH_TOKEN = process.env.LLM_ANTHROPIC_AUTH_TOKEN || process.env.ANTHROPIC_AUTH_TOKEN || "";
+			setIfDefined("ANTHROPIC_BASE_URL", process.env.LLM_ANTHROPIC_BASE_URL || process.env.ANTHROPIC_BASE_URL);
+			setIfDefined("ANTHROPIC_API_KEY", process.env.LLM_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY);
+			setIfDefined("ANTHROPIC_AUTH_TOKEN", process.env.LLM_ANTHROPIC_AUTH_TOKEN || process.env.ANTHROPIC_AUTH_TOKEN);
 			break;
 		}
 		case "openrouter": {
-			next.ANTHROPIC_BASE_URL = process.env.LLM_OPENROUTER_BASE_URL || "https://openrouter.ai/api/v1";
-			next.ANTHROPIC_API_KEY = process.env.LLM_OPENROUTER_API_KEY || "";
-			next.ANTHROPIC_AUTH_TOKEN = "";
+			setIfDefined("ANTHROPIC_BASE_URL", process.env.LLM_OPENROUTER_BASE_URL || "https://openrouter.ai/api/v1");
+			setIfDefined("ANTHROPIC_API_KEY", process.env.LLM_OPENROUTER_API_KEY);
 			break;
 		}
 		case "proxy": {
-			next.ANTHROPIC_BASE_URL = process.env.LLM_PROXY_BASE_URL || "";
-			next.ANTHROPIC_API_KEY = process.env.LLM_PROXY_API_KEY || "";
-			next.ANTHROPIC_AUTH_TOKEN = process.env.LLM_PROXY_AUTH_TOKEN || "";
+			setIfDefined("ANTHROPIC_BASE_URL", process.env.LLM_PROXY_BASE_URL);
+			setIfDefined("ANTHROPIC_API_KEY", process.env.LLM_PROXY_API_KEY);
+			setIfDefined("ANTHROPIC_AUTH_TOKEN", process.env.LLM_PROXY_AUTH_TOKEN);
 			break;
 		}
 		case "zai": {
-			next.ANTHROPIC_BASE_URL = process.env.LLM_ZAI_BASE_URL || "";
-			next.ANTHROPIC_API_KEY = process.env.LLM_ZAI_API_KEY || "";
-			next.ANTHROPIC_AUTH_TOKEN = process.env.LLM_ZAI_AUTH_TOKEN || "";
+			setIfDefined("ANTHROPIC_BASE_URL", process.env.LLM_ZAI_BASE_URL);
+			setIfDefined("ANTHROPIC_API_KEY", process.env.LLM_ZAI_API_KEY);
+			setIfDefined("ANTHROPIC_AUTH_TOKEN", process.env.LLM_ZAI_AUTH_TOKEN);
 			break;
 		}
 		case "minimax": {
-			next.ANTHROPIC_BASE_URL = process.env.LLM_MINIMAX_BASE_URL || "";
-			next.ANTHROPIC_API_KEY = process.env.LLM_MINIMAX_API_KEY || "";
-			next.ANTHROPIC_AUTH_TOKEN = process.env.LLM_MINIMAX_AUTH_TOKEN || "";
+			setIfDefined("ANTHROPIC_BASE_URL", process.env.LLM_MINIMAX_BASE_URL);
+			setIfDefined("ANTHROPIC_API_KEY", process.env.LLM_MINIMAX_API_KEY);
+			setIfDefined("ANTHROPIC_AUTH_TOKEN", process.env.LLM_MINIMAX_AUTH_TOKEN);
 			break;
 		}
 		default: {
 			// Safe fallback
-			next.ANTHROPIC_BASE_URL = process.env.LLM_ANTHROPIC_BASE_URL || process.env.ANTHROPIC_BASE_URL || "";
-			next.ANTHROPIC_API_KEY = process.env.LLM_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY || "";
-			next.ANTHROPIC_AUTH_TOKEN = process.env.LLM_ANTHROPIC_AUTH_TOKEN || process.env.ANTHROPIC_AUTH_TOKEN || "";
+			setIfDefined("ANTHROPIC_BASE_URL", process.env.LLM_ANTHROPIC_BASE_URL || process.env.ANTHROPIC_BASE_URL);
+			setIfDefined("ANTHROPIC_API_KEY", process.env.LLM_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY);
+			setIfDefined("ANTHROPIC_AUTH_TOKEN", process.env.LLM_ANTHROPIC_AUTH_TOKEN || process.env.ANTHROPIC_AUTH_TOKEN);
 			break;
 		}
 	}
@@ -83,6 +87,11 @@ app.post("/", zValidator("json", ExecuteCommandSchema), async (c) => {
 			timedOut = true;
 			proc.kill();
 		}, timeout);
+		const abortSignal = c.req.raw.signal;
+		const onAbort = () => {
+			proc.kill();
+		};
+		abortSignal.addEventListener("abort", onAbort, { once: true });
 
 		// 2. Output Limiting (Prevent OOM)
 		const MAX_OUTPUT_SIZE = AGENT_CONSTANTS.EXECUTION.MAX_OUTPUT_SIZE_BYTES;
@@ -120,6 +129,7 @@ app.post("/", zValidator("json", ExecuteCommandSchema), async (c) => {
 		const [stdout, stderr] = await Promise.all([readStream(proc.stdout), readStream(proc.stderr)]);
 
 		clearTimeout(timeoutId);
+		abortSignal.removeEventListener("abort", onAbort);
 
 		// If timed out, exitCode might be null or signal based,
 		// but we want to report the timeout clearly.
