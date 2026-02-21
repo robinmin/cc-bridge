@@ -19,23 +19,23 @@
     {
       "name": "agent-sdk-verifier-ts",
       "plugin": "agent-sdk-dev@claude-plugins-official",
-      "version": "8deab8460a9d",
+      "version": "aa296ec81e8c",
       "description": "Use this agent to verify that a TypeScript Agent SDK application is properly configured, follows SDK best practices and documentation recommendations, and is ready for deployment or testing. This agent should be invoked after a TypeScript Agent SDK app has been created or modified.",
       "model": "sonnet",
-      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/agent-sdk-dev/8deab8460a9d/agents/agent-sdk-verifier-ts.md"
+      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/agent-sdk-dev/aa296ec81e8c/agents/agent-sdk-verifier-ts.md"
     },
     {
       "name": "agent-sdk-verifier-py",
       "plugin": "agent-sdk-dev@claude-plugins-official",
-      "version": "8deab8460a9d",
+      "version": "aa296ec81e8c",
       "description": "Use this agent to verify that a Python Agent SDK application is properly configured, follows SDK best practices and documentation recommendations, and is ready for deployment or testing. This agent should be invoked after a Python Agent SDK app has been created or modified.",
       "model": "sonnet",
-      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/agent-sdk-dev/8deab8460a9d/agents/agent-sdk-verifier-py.md"
+      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/agent-sdk-dev/aa296ec81e8c/agents/agent-sdk-verifier-py.md"
     },
     {
       "name": "conversation-analyzer",
       "plugin": "hookify@claude-plugins-official",
-      "version": "8deab8460a9d",
+      "version": "aa296ec81e8c",
       "description": "Use this agent when analyzing conversation transcripts to find behaviors worth preventing with hooks. Examples: <example>Context: User is running /hookify command without arguments\\nuser: \"/hookify\"\\nassistant: \"I'll analyze the conversation to find behaviors you want to prevent\"\\n<commentary>The /hookify command without arguments triggers conversation analysis to find unwanted behaviors.</commentary></example><example>Context: User wants to create hooks from recent frustrations\\nuser: \"Can you look back at this conversation and help me create hooks for the mistakes you made?\"\\nassistant: \"I'll use the conversation-analyzer agent to identify the issues and suggest hooks.\"\\n<commentary>User explicitly asks to analyze conversation for mistakes that should be prevented.</commentary></example>",
       "model": "inherit",
       "color": "yellow",
@@ -43,12 +43,12 @@
         "Read",
         "Grep"
       ],
-      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/hookify/8deab8460a9d/agents/conversation-analyzer.md"
+      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/hookify/aa296ec81e8c/agents/conversation-analyzer.md"
     },
     {
       "name": "agent-creator",
       "plugin": "plugin-dev@claude-plugins-official",
-      "version": "8deab8460a9d",
+      "version": "aa296ec81e8c",
       "description": "|",
       "model": "sonnet",
       "color": "magenta",
@@ -56,12 +56,12 @@
         "Write",
         "Read"
       ],
-      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/plugin-dev/8deab8460a9d/agents/agent-creator.md"
+      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/plugin-dev/aa296ec81e8c/agents/agent-creator.md"
     },
     {
       "name": "skill-reviewer",
       "plugin": "plugin-dev@claude-plugins-official",
-      "version": "8deab8460a9d",
+      "version": "aa296ec81e8c",
       "description": "|",
       "model": "inherit",
       "color": "cyan",
@@ -70,12 +70,12 @@
         "Grep",
         "Glob"
       ],
-      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/plugin-dev/8deab8460a9d/agents/skill-reviewer.md"
+      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/plugin-dev/aa296ec81e8c/agents/skill-reviewer.md"
     },
     {
       "name": "plugin-validator",
       "plugin": "plugin-dev@claude-plugins-official",
-      "version": "8deab8460a9d",
+      "version": "aa296ec81e8c",
       "description": "|",
       "model": "inherit",
       "color": "yellow",
@@ -85,7 +85,7 @@
         "Glob",
         "Bash"
       ],
-      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/plugin-dev/8deab8460a9d/agents/plugin-validator.md"
+      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/plugin-dev/aa296ec81e8c/agents/plugin-validator.md"
     },
     {
       "name": "context-manager",
@@ -564,77 +564,77 @@
     {
       "name": "help",
       "plugin": "ralph-loop@claude-plugins-official",
-      "version": "8deab8460a9d",
+      "version": "aa296ec81e8c",
       "description": "Explain Ralph Loop plugin and available commands",
-      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/ralph-loop/8deab8460a9d/commands/help.md"
+      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/ralph-loop/aa296ec81e8c/commands/help.md"
     },
     {
       "name": "cancel-ralph",
       "plugin": "ralph-loop@claude-plugins-official",
-      "version": "8deab8460a9d",
+      "version": "aa296ec81e8c",
       "description": "Cancel active Ralph Loop",
       "allowedTools": [
         "Bash(test -f .claude/ralph-loop.local.md:*)",
         "Bash(rm .claude/ralph-loop.local.md)",
         "Read(.claude/ralph-loop.local.md)"
       ],
-      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/ralph-loop/8deab8460a9d/commands/cancel-ralph.md"
+      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/ralph-loop/aa296ec81e8c/commands/cancel-ralph.md"
     },
     {
       "name": "ralph-loop",
       "plugin": "ralph-loop@claude-plugins-official",
-      "version": "8deab8460a9d",
+      "version": "aa296ec81e8c",
       "description": "Start Ralph Loop in current session",
       "argumentHint": "PROMPT [--max-iterations N] [--completion-promise TEXT]",
       "allowedTools": [
         "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/setup-ralph-loop.sh:*)"
       ],
-      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/ralph-loop/8deab8460a9d/commands/ralph-loop.md"
+      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/ralph-loop/aa296ec81e8c/commands/ralph-loop.md"
     },
     {
       "name": "new-sdk-app",
       "plugin": "agent-sdk-dev@claude-plugins-official",
-      "version": "8deab8460a9d",
+      "version": "aa296ec81e8c",
       "description": "Create and setup a new Claude Agent SDK application",
       "argumentHint": [
         "project-name"
       ],
-      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/agent-sdk-dev/8deab8460a9d/commands/new-sdk-app.md"
+      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/agent-sdk-dev/aa296ec81e8c/commands/new-sdk-app.md"
     },
     {
       "name": "code-review",
       "plugin": "code-review@claude-plugins-official",
-      "version": "8deab8460a9d",
+      "version": "aa296ec81e8c",
       "description": "Code review a pull request",
       "allowedTools": "Bash(gh issue view:*), Bash(gh search:*), Bash(gh issue list:*), Bash(gh pr comment:*), Bash(gh pr diff:*), Bash(gh pr view:*), Bash(gh pr list:*)",
-      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/code-review/8deab8460a9d/commands/code-review.md"
+      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/code-review/aa296ec81e8c/commands/code-review.md"
     },
     {
       "name": "help",
       "plugin": "hookify@claude-plugins-official",
-      "version": "8deab8460a9d",
+      "version": "aa296ec81e8c",
       "description": "Get help with the hookify plugin",
       "allowedTools": [
         "Read"
       ],
-      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/hookify/8deab8460a9d/commands/help.md"
+      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/hookify/aa296ec81e8c/commands/help.md"
     },
     {
       "name": "list",
       "plugin": "hookify@claude-plugins-official",
-      "version": "8deab8460a9d",
+      "version": "aa296ec81e8c",
       "description": "List all configured hookify rules",
       "allowedTools": [
         "Glob",
         "Read",
         "Skill"
       ],
-      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/hookify/8deab8460a9d/commands/list.md"
+      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/hookify/aa296ec81e8c/commands/list.md"
     },
     {
       "name": "configure",
       "plugin": "hookify@claude-plugins-official",
-      "version": "8deab8460a9d",
+      "version": "aa296ec81e8c",
       "description": "Enable or disable hookify rules interactively",
       "allowedTools": [
         "Glob",
@@ -643,12 +643,12 @@
         "AskUserQuestion",
         "Skill"
       ],
-      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/hookify/8deab8460a9d/commands/configure.md"
+      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/hookify/aa296ec81e8c/commands/configure.md"
     },
     {
       "name": "hookify",
       "plugin": "hookify@claude-plugins-official",
-      "version": "8deab8460a9d",
+      "version": "aa296ec81e8c",
       "description": "Create hooks to prevent unwanted behaviors from conversation analysis or explicit instructions",
       "argumentHint": "Optional specific behavior to address",
       "allowedTools": [
@@ -660,12 +660,12 @@
         "TodoWrite",
         "Skill"
       ],
-      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/hookify/8deab8460a9d/commands/hookify.md"
+      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/hookify/aa296ec81e8c/commands/hookify.md"
     },
     {
       "name": "create-plugin",
       "plugin": "plugin-dev@claude-plugins-official",
-      "version": "8deab8460a9d",
+      "version": "aa296ec81e8c",
       "description": "Guided end-to-end plugin creation workflow with component design, implementation, and validation",
       "argumentHint": "Optional plugin description",
       "allowedTools": [
@@ -679,48 +679,48 @@
         "Skill",
         "Task"
       ],
-      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/plugin-dev/8deab8460a9d/commands/create-plugin.md"
+      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/plugin-dev/aa296ec81e8c/commands/create-plugin.md"
     },
     {
       "name": "multi-agent-optimize",
       "plugin": "agent-orchestration@claude-code-workflows",
       "version": "1.2.0",
-      "description": "",
+      "description": "The Multi-Agent Optimization Tool is an advanced AI-driven framework designed to holistically improve system performance through intelligent, coordinated agent-based optimization. Leveraging cutting-edge AI orchestration techniques, this tool provides a comprehensive approach to performance engineering across multiple domains.",
       "path": "/Users/robin/.claude/plugins/cache/claude-code-workflows/agent-orchestration/1.2.0/commands/multi-agent-optimize.md"
     },
     {
       "name": "improve-agent",
       "plugin": "agent-orchestration@claude-code-workflows",
       "version": "1.2.0",
-      "description": "",
+      "description": "Systematic improvement of existing agents through performance analysis, prompt engineering, and continuous iteration.",
       "path": "/Users/robin/.claude/plugins/cache/claude-code-workflows/agent-orchestration/1.2.0/commands/improve-agent.md"
     },
     {
       "name": "api-mock",
       "plugin": "api-testing-observability@claude-code-workflows",
       "version": "1.2.0",
-      "description": "apiVersion: apps/v1",
+      "description": "You are an API mocking expert specializing in creating realistic mock services for development, testing, and demonstration purposes. Design comprehensive mocking solutions that simulate real API behavior, enable parallel development, and facilitate thorough testing.",
       "path": "/Users/robin/.claude/plugins/cache/claude-code-workflows/api-testing-observability/1.2.0/commands/api-mock.md"
     },
     {
       "name": "feature-development",
       "plugin": "backend-development@claude-code-workflows",
       "version": "1.2.4",
-      "description": "",
+      "description": "Orchestrate end-to-end feature development from requirements to production deployment:",
       "path": "/Users/robin/.claude/plugins/cache/claude-code-workflows/backend-development/1.2.4/commands/feature-development.md"
     },
     {
       "name": "ai-review",
       "plugin": "code-review-ai@claude-code-workflows",
       "version": "1.2.0",
-      "description": "",
+      "description": "You are an expert AI-powered code review specialist combining automated static analysis, intelligent pattern recognition, and modern DevOps practices. Leverage AI tools (GitHub Copilot, Qodo, GPT-5, Claude 4.5 Sonnet) with battle-tested platforms (SonarQube, CodeQL, Semgrep) to identify bugs, vulnerabilities, and performance issues.",
       "path": "/Users/robin/.claude/plugins/cache/claude-code-workflows/code-review-ai/1.2.0/commands/ai-review.md"
     },
     {
       "name": "full-stack-feature",
       "plugin": "full-stack-orchestration@claude-code-workflows",
       "version": "1.2.1",
-      "description": "",
+      "description": "Orchestrate full-stack feature development across backend, frontend, and infrastructure layers with modern API-first approach:",
       "path": "/Users/robin/.claude/plugins/cache/claude-code-workflows/full-stack-orchestration/1.2.1/commands/full-stack-feature.md"
     },
     {
@@ -748,21 +748,21 @@
       "name": "refactor-clean",
       "plugin": "code-refactoring@claude-code-workflows",
       "version": "1.2.0",
-      "description": "",
+      "description": "You are a code refactoring expert specializing in clean code principles, SOLID design patterns, and modern software engineering best practices. Analyze and refactor the provided code to improve its quality, maintainability, and performance.",
       "path": "/Users/robin/.claude/plugins/cache/claude-code-workflows/code-refactoring/1.2.0/commands/refactor-clean.md"
     },
     {
       "name": "context-restore",
       "plugin": "code-refactoring@claude-code-workflows",
       "version": "1.2.0",
-      "description": "",
+      "description": "Expert Context Restoration Specialist focused on intelligent, semantic-aware context retrieval and reconstruction across complex multi-agent AI workflows. Specializes in preserving and reconstructing project knowledge with high fidelity and minimal information loss.",
       "path": "/Users/robin/.claude/plugins/cache/claude-code-workflows/code-refactoring/1.2.0/commands/context-restore.md"
     },
     {
       "name": "tech-debt",
       "plugin": "code-refactoring@claude-code-workflows",
       "version": "1.2.0",
-      "description": "",
+      "description": "You are a technical debt expert specializing in identifying, quantifying, and prioritizing technical debt in software projects. Analyze the codebase to uncover debt, assess its impact, and create actionable remediation plans.",
       "path": "/Users/robin/.claude/plugins/cache/claude-code-workflows/code-refactoring/1.2.0/commands/tech-debt.md"
     },
     {
@@ -788,7 +788,7 @@
       "plugin": "wt@cc-agents",
       "version": "1.7.4",
       "description": "Analyze codebases and generate High-Level Design (HLD) documents with critical issue audits",
-      "argumentHint": "\"[codebase-path]\" [--scope <scope>] [--format <format>]",
+      "argumentHint": "[codebase-path]\" [--scope <scope>] [--format <format>]",
       "path": "/Users/robin/.claude/plugins/cache/cc-agents/wt/1.7.4/commands/info-reve.md"
     },
     {
@@ -826,7 +826,7 @@
       "plugin": "wt@cc-agents",
       "version": "1.7.4",
       "description": "Conduct systematic, evidence-based research with file input support and 1-research/ output integration",
-      "argumentHint": "\"<research-topic>\" [--file <path>] [--type <type>] [--years <N>] [--format <format>] [--depth <depth>]",
+      "argumentHint": "<research-topic>\" [--file <path>] [--type <type>] [--years <N>] [--format <format>] [--depth <depth>]",
       "path": "/Users/robin/.claude/plugins/cache/cc-agents/wt/1.7.4/commands/info-research.md"
     },
     {
@@ -1165,65 +1165,65 @@
     {
       "name": "frontend-design",
       "plugin": "frontend-design@claude-plugins-official",
-      "version": "8deab8460a9d",
+      "version": "aa296ec81e8c",
       "description": "Create distinctive, production-grade frontend interfaces with high design quality. Use this skill when the user asks to build web components, pages, or applications. Generates creative, polished code that avoids generic AI aesthetics.",
-      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/frontend-design/8deab8460a9d/skills/frontend-design/SKILL.md"
+      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/frontend-design/aa296ec81e8c/skills/frontend-design/SKILL.md"
     },
     {
       "name": "writing-hookify-rules",
       "plugin": "hookify@claude-plugins-official",
-      "version": "8deab8460a9d",
+      "version": "aa296ec81e8c",
       "description": "This skill should be used when the user asks to \"create a hookify rule\", \"write a hook rule\", \"configure hookify\", \"add a hookify rule\", or needs guidance on hookify rule syntax and patterns.",
-      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/hookify/8deab8460a9d/skills/writing-rules/SKILL.md"
+      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/hookify/aa296ec81e8c/skills/writing-rules/SKILL.md"
     },
     {
       "name": "command-development",
       "plugin": "plugin-dev@claude-plugins-official",
-      "version": "8deab8460a9d",
+      "version": "aa296ec81e8c",
       "description": "This skill should be used when the user asks to \"create a slash command\", \"add a command\", \"write a custom command\", \"define command arguments\", \"use command frontmatter\", \"organize commands\", \"create command with file references\", \"interactive command\", \"use AskUserQuestion in command\", or needs guidance on slash command structure, YAML frontmatter fields, dynamic arguments, bash execution in commands, user interaction patterns, or command development best practices for Claude Code.",
-      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/plugin-dev/8deab8460a9d/skills/command-development/SKILL.md"
+      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/plugin-dev/aa296ec81e8c/skills/command-development/SKILL.md"
     },
     {
       "name": "skill-development",
       "plugin": "plugin-dev@claude-plugins-official",
-      "version": "8deab8460a9d",
+      "version": "aa296ec81e8c",
       "description": "This skill should be used when the user wants to \"create a skill\", \"add a skill to plugin\", \"write a new skill\", \"improve skill description\", \"organize skill content\", or needs guidance on skill structure, progressive disclosure, or skill development best practices for Claude Code plugins.",
-      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/plugin-dev/8deab8460a9d/skills/skill-development/SKILL.md"
+      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/plugin-dev/aa296ec81e8c/skills/skill-development/SKILL.md"
     },
     {
       "name": "plugin-settings",
       "plugin": "plugin-dev@claude-plugins-official",
-      "version": "8deab8460a9d",
+      "version": "aa296ec81e8c",
       "description": "This skill should be used when the user asks about \"plugin settings\", \"store plugin configuration\", \"user-configurable plugin\", \".local.md files\", \"plugin state files\", \"read YAML frontmatter\", \"per-project plugin settings\", or wants to make plugin behavior configurable. Documents the .claude/plugin-name.local.md pattern for storing plugin-specific configuration with YAML frontmatter and markdown content.",
-      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/plugin-dev/8deab8460a9d/skills/plugin-settings/SKILL.md"
+      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/plugin-dev/aa296ec81e8c/skills/plugin-settings/SKILL.md"
     },
     {
       "name": "plugin-structure",
       "plugin": "plugin-dev@claude-plugins-official",
-      "version": "8deab8460a9d",
+      "version": "aa296ec81e8c",
       "description": "This skill should be used when the user asks to \"create a plugin\", \"scaffold a plugin\", \"understand plugin structure\", \"organize plugin components\", \"set up plugin.json\", \"use ${CLAUDE_PLUGIN_ROOT}\", \"add commands/agents/skills/hooks\", \"configure auto-discovery\", or needs guidance on plugin directory layout, manifest configuration, component organization, file naming conventions, or Claude Code plugin architecture best practices.",
-      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/plugin-dev/8deab8460a9d/skills/plugin-structure/SKILL.md"
+      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/plugin-dev/aa296ec81e8c/skills/plugin-structure/SKILL.md"
     },
     {
       "name": "hook-development",
       "plugin": "plugin-dev@claude-plugins-official",
-      "version": "8deab8460a9d",
+      "version": "aa296ec81e8c",
       "description": "This skill should be used when the user asks to \"create a hook\", \"add a PreToolUse/PostToolUse/Stop hook\", \"validate tool use\", \"implement prompt-based hooks\", \"use ${CLAUDE_PLUGIN_ROOT}\", \"set up event-driven automation\", \"block dangerous commands\", or mentions hook events (PreToolUse, PostToolUse, Stop, SubagentStop, SessionStart, SessionEnd, UserPromptSubmit, PreCompact, Notification). Provides comprehensive guidance for creating and implementing Claude Code plugin hooks with focus on advanced prompt-based hooks API.",
-      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/plugin-dev/8deab8460a9d/skills/hook-development/SKILL.md"
+      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/plugin-dev/aa296ec81e8c/skills/hook-development/SKILL.md"
     },
     {
       "name": "mcp-integration",
       "plugin": "plugin-dev@claude-plugins-official",
-      "version": "8deab8460a9d",
+      "version": "aa296ec81e8c",
       "description": "This skill should be used when the user asks to \"add MCP server\", \"integrate MCP\", \"configure MCP in plugin\", \"use .mcp.json\", \"set up Model Context Protocol\", \"connect external service\", mentions \"${CLAUDE_PLUGIN_ROOT} with MCP\", or discusses MCP server types (SSE, stdio, HTTP, WebSocket). Provides comprehensive guidance for integrating Model Context Protocol servers into Claude Code plugins for external tool and service integration.",
-      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/plugin-dev/8deab8460a9d/skills/mcp-integration/SKILL.md"
+      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/plugin-dev/aa296ec81e8c/skills/mcp-integration/SKILL.md"
     },
     {
       "name": "agent-development",
       "plugin": "plugin-dev@claude-plugins-official",
-      "version": "8deab8460a9d",
+      "version": "aa296ec81e8c",
       "description": "This skill should be used when the user asks to \"create an agent\", \"add an agent\", \"write a subagent\", \"agent frontmatter\", \"when to use description\", \"agent examples\", \"agent tools\", \"agent colors\", \"autonomous agent\", or needs guidance on agent structure, system prompts, triggering conditions, or agent development best practices for Claude Code plugins.",
-      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/plugin-dev/8deab8460a9d/skills/agent-development/SKILL.md"
+      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/plugin-dev/aa296ec81e8c/skills/agent-development/SKILL.md"
     },
     {
       "name": "fastapi-templates",
@@ -1793,6 +1793,6 @@
       "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.2/skills/code-review-opencode/SKILL.md"
     }
   ],
-  "lastUpdated": "2026-02-20T02:03:30.340Z",
+  "lastUpdated": "2026-02-21T12:50:40.067Z",
   "version": "1.0"
 }
