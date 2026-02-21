@@ -1,11 +1,11 @@
 import fastifyCors from "@fastify/cors";
 import { fastifyRateLimit } from "@fastify/rate-limit";
 import { randomUUIDv7 } from "bun";
+import type { InjectOptions } from "fastify";
 import type { FastifyInstance, FastifyServerOptions } from "fastify";
 import fastify from "fastify";
-import type { RequestTracker } from "@/gateway/services/RequestTracker";
-import type { SessionPoolService } from "@/gateway/services/SessionPoolService";
-import type { TmuxManager } from "@/gateway/services/tmux-manager";
+import { z } from "zod";
+import type { RequestTrackerContract, SessionPoolContract, TmuxManagerContract } from "@/packages/agent-runtime";
 import { createErrorResponse, getStatusCode } from "@/packages/errors";
 import { logger } from "@/packages/logger";
 
@@ -28,16 +28,16 @@ export interface HttpServerConfig {
 export class AgentHttpServer {
 	private app: FastifyInstance;
 	private config: HttpServerConfig;
-	private sessionPool: SessionPoolService;
-	private requestTracker: RequestTracker;
-	private tmuxManager: TmuxManager;
+	private sessionPool: SessionPoolContract;
+	private requestTracker: RequestTrackerContract;
+	private tmuxManager: TmuxManagerContract;
 	private started = false;
 
 	constructor(
 		config: HttpServerConfig,
-		sessionPool: SessionPoolService,
-		requestTracker: RequestTracker,
-		tmuxManager: TmuxManager,
+		sessionPool: SessionPoolContract,
+		requestTracker: RequestTrackerContract,
+		tmuxManager: TmuxManagerContract,
 	) {
 		this.config = config;
 		this.sessionPool = sessionPool;
@@ -134,6 +134,11 @@ export class AgentHttpServer {
 		return this.config.port;
 	}
 
+	async inject(options: InjectOptions): Promise<Awaited<ReturnType<FastifyInstance["inject"]>>> {
+		await this.app.ready();
+		return this.app.inject(options);
+	}
+
 	/**
 	 * Register middleware
 	 */
@@ -149,19 +154,29 @@ export class AgentHttpServer {
 				const apiKey = request.headers["x-api-key"];
 
 				if (!apiKey || apiKey !== this.config.apiKey) {
-					return reply.code(401).send({ error: "Unauthorized" });
+					reply.code(401).send({ error: "Unauthorized" });
+					return;
 				}
 			});
 		}
 
 		// Error handler
 		this.app.setErrorHandler((error, request, reply) => {
+			if (reply.sent || reply.raw.headersSent) {
+				logger.debug(
+					{ requestId: request.id, replySent: reply.sent, headersSent: reply.raw.headersSent },
+					"Skipping error handler because response was already started",
+				);
+				return;
+			}
+
 			logger.error({ err: error, requestId: request.id }, "HTTP request error");
 
 			const statusCode = getStatusCode(error);
 			const response = createErrorResponse(error, request.id);
 
-			return reply.code(statusCode).send(response);
+			reply.code(statusCode).send(response);
+			return;
 		});
 	}
 
@@ -204,23 +219,26 @@ export class AgentHttpServer {
 	 * Register API routes
 	 */
 	private registerRoutes(): void {
+		const ExecuteRequestSchema = z.object({
+			workspace: z.string().min(1),
+			command: z.string().min(1),
+			chatId: z.union([z.string(), z.number()]).optional(),
+			timeoutMs: z.number().int().positive().optional(),
+		});
+		const CreateSessionSchema = z.object({
+			workspace: z.string().min(1),
+		});
+
 		// POST /execute - Execute command
 		this.app.post("/execute", async (request, reply) => {
-			const body = request.body as {
-				workspace: string;
-				command: string;
-				chatId?: string;
-				timeoutMs?: number;
-			};
-
-			const { workspace, command, chatId, timeoutMs } = body;
-
-			// Validation
-			if (!workspace || !command) {
-				return reply.code(400).send({
+			const parsed = ExecuteRequestSchema.safeParse(request.body);
+			if (!parsed.success) {
+				reply.code(400).send({
 					error: "Missing required fields: workspace, command",
 				});
+				return;
 			}
+			const { workspace, command, chatId, timeoutMs } = parsed.data;
 
 			try {
 				// Generate requestId
@@ -276,18 +294,20 @@ export class AgentHttpServer {
 						this.sessionPool.trackRequestComplete(workspace);
 					});
 
-				return reply.code(202).send({
+				reply.code(202).send({
 					requestId,
 					workspace,
 					status: "queued",
 					message: "Command queued for execution",
 				});
+				return;
 			} catch (err) {
 				logger.error({ err }, "Execute endpoint failed");
-				return reply.code(500).send({
+				reply.code(500).send({
 					error: "Internal server error",
 					message: err instanceof Error ? err.message : String(err),
 				});
+				return;
 			}
 		});
 
@@ -297,13 +317,15 @@ export class AgentHttpServer {
 				const health = await this.getHealthStatus();
 				const statusCode = health.status === "healthy" ? 200 : 503;
 
-				return reply.code(statusCode).send(health);
+				reply.code(statusCode).send(health);
+				return;
 			} catch (err) {
 				logger.error({ err }, "Health check failed");
-				return reply.code(500).send({
+				reply.code(500).send({
 					status: "unhealthy",
 					error: err instanceof Error ? err.message : String(err),
 				});
+				return;
 			}
 		});
 
@@ -323,37 +345,41 @@ export class AgentHttpServer {
 					age: Date.now() - s.createdAt,
 				}));
 
-				return reply.send({
+				reply.send({
 					sessions: sessionsData,
 					total: sessionsData.length,
 				});
+				return;
 			} catch (err) {
 				logger.error({ err }, "List sessions failed");
-				return reply.code(500).send({ error: err instanceof Error ? err.message : String(err) });
+				reply.code(500).send({ error: err instanceof Error ? err.message : String(err) });
+				return;
 			}
 		});
 
 		// POST /session/create - Create session
 		this.app.post("/session/create", async (request, reply) => {
-			const body = request.body as { workspace: string };
-			const { workspace } = body;
-
-			if (!workspace) {
-				return reply.code(400).send({ error: "Missing workspace" });
+			const parsed = CreateSessionSchema.safeParse(request.body);
+			if (!parsed.success) {
+				reply.code(400).send({ error: "Missing workspace" });
+				return;
 			}
+			const { workspace } = parsed.data;
 
 			try {
 				const session = await this.sessionPool.getOrCreateSession(workspace);
 
-				return reply.code(201).send({
+				reply.code(201).send({
 					workspace: session.workspace,
 					sessionName: session.sessionName,
 					status: session.status,
 					createdAt: session.createdAt,
 				});
+				return;
 			} catch (err) {
 				logger.error({ err, workspace }, "Create session failed");
-				return reply.code(500).send({ error: err instanceof Error ? err.message : String(err) });
+				reply.code(500).send({ error: err instanceof Error ? err.message : String(err) });
+				return;
 			}
 		});
 
@@ -369,28 +395,32 @@ export class AgentHttpServer {
 				const session = this.sessionPool.getSession(workspace);
 
 				if (!session) {
-					return reply.code(404).send({
+					reply.code(404).send({
 						error: `Session not found: ${workspace}`,
 					});
+					return;
 				}
 
 				// Check for active requests
 				if (session.activeRequests > 0 && force !== "true") {
-					return reply.code(409).send({
+					reply.code(409).send({
 						error: `Session has ${session.activeRequests} active requests`,
 						message: "Use ?force=true to terminate anyway",
 					});
+					return;
 				}
 
 				await this.sessionPool.deleteSession(workspace);
 
-				return reply.send({
+				reply.send({
 					workspace,
 					status: "deleted",
 				});
+				return;
 			} catch (err) {
 				logger.error({ err, workspace }, "Delete session failed");
-				return reply.code(500).send({ error: err instanceof Error ? err.message : String(err) });
+				reply.code(500).send({ error: err instanceof Error ? err.message : String(err) });
+				return;
 			}
 		});
 
@@ -402,15 +432,16 @@ export class AgentHttpServer {
 				const requestData = await this.requestTracker.getRequest(requestId);
 
 				if (!requestData) {
-					return reply.code(404).send({
+					reply.code(404).send({
 						error: `Request not found: ${requestId}`,
 					});
+					return;
 				}
 
 				const elapsed = Date.now() - requestData.createdAt;
 				const duration = requestData.completedAt ? requestData.completedAt - requestData.createdAt : elapsed;
 
-				return reply.send({
+				reply.send({
 					requestId: requestData.requestId,
 					workspace: requestData.workspace,
 					state: requestData.state,
@@ -420,15 +451,18 @@ export class AgentHttpServer {
 					duration,
 					error: requestData.error,
 				});
+				return;
 			} catch (err) {
 				logger.error({ err, requestId }, "Status query failed");
-				return reply.code(500).send({ error: err instanceof Error ? err.message : String(err) });
+				reply.code(500).send({ error: err instanceof Error ? err.message : String(err) });
+				return;
 			}
 		});
 
 		// GET /api-docs - OpenAPI documentation
 		this.app.get("/api-docs", async (_request, reply) => {
-			return reply.send(this.getOpenApiSpec());
+			reply.send(this.getOpenApiSpec());
+			return;
 		});
 	}
 
@@ -558,7 +592,7 @@ export class AgentHttpServer {
 		try {
 			// Simple filesystem check - try to write a test file
 			const fs = await import("node:fs/promises");
-			const testFile = "/tmp/.health-check";
+			const testFile = `/tmp/.health-check-${process.pid}-${Date.now()}-${randomUUIDv7()}`;
 			await fs.writeFile(testFile, "ok");
 			await fs.unlink(testFile);
 
@@ -638,16 +672,15 @@ export class AgentHttpServer {
 								"application/json": {
 									schema: {
 										type: "object",
-										required: ["workspace", "command"],
-										properties: {
-											workspace: { type: "string" },
-											command: { type: "string" },
-											chatId: { type: "string" },
-											timeoutMs: { type: "number" },
-											priority: { type: "string", enum: ["normal", "high"] },
-										},
+									required: ["workspace", "command"],
+									properties: {
+										workspace: { type: "string" },
+										command: { type: "string" },
+										chatId: { oneOf: [{ type: "string" }, { type: "number" }] },
+										timeoutMs: { type: "number" },
 									},
 								},
+							},
 							},
 						},
 						responses: {
