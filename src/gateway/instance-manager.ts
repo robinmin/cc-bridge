@@ -14,12 +14,51 @@ export class InstanceManager {
 	private instances: Map<string, AgentInstance> = new Map();
 	private parseErrorCount = 0;
 	private totalParseAttempts = 0;
+	private dockerUnavailable = false;
+	private dockerBinary: string | null | undefined;
+
+	private resolveDockerBinary(): string | null {
+		if (this.dockerBinary !== undefined) {
+			return this.dockerBinary;
+		}
+
+		const candidates: string[] = [];
+		if (process.env.DOCKER_BIN) {
+			candidates.push(process.env.DOCKER_BIN);
+		}
+		for (const dir of (process.env.PATH || "").split(path.delimiter)) {
+			if (!dir) continue;
+			candidates.push(path.join(dir, "docker"));
+		}
+		candidates.push("/usr/local/bin/docker", "/opt/homebrew/bin/docker", "/usr/bin/docker");
+
+		for (const candidate of candidates) {
+			if (fs.existsSync(candidate)) {
+				this.dockerBinary = candidate;
+				return candidate;
+			}
+		}
+
+		this.dockerBinary = null;
+		return null;
+	}
 
 	async refresh(): Promise<AgentInstance[]> {
+		if (this.dockerUnavailable) {
+			return Array.from(this.instances.values());
+		}
+
+		const dockerBinary = this.resolveDockerBinary();
+		if (!dockerBinary) {
+			this.dockerUnavailable = true;
+			logger.warn("Docker CLI not found in PATH/common locations; disabling instance discovery until gateway restart");
+			return Array.from(this.instances.values());
+		}
+
 		try {
 			// Discover containers with the specific label
 			const proc = Bun.spawn([
-				"docker",
+				dockerBinary,
 				"ps",
 				"-a",
 				"--filter",
@@ -77,6 +116,11 @@ export class InstanceManager {
 
 			return Array.from(this.instances.values());
 		} catch (error) {
+			if (error && typeof error === "object" && "code" in error && (error as { code?: string }).code === "ENOENT") {
+				this.dockerUnavailable = true;
+				logger.warn({ dockerBinary }, "Docker CLI not executable; disabling instance discovery until gateway restart");
+				return Array.from(this.instances.values());
+			}
 			logger.error({ error }, "Failed to refresh instances");
 			return Array.from(this.instances.values());
 		}
