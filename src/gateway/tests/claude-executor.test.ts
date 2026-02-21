@@ -9,9 +9,9 @@ import { IpcFactory } from "@/packages/ipc/factory";
 import type { IpcRequest, IpcResponse } from "@/packages/ipc/types";
 
 // Track the last request sent to IPC
-let lastRequest: IpcRequest | null = null;
+let _lastRequest: IpcRequest | null = null;
 const mockSendRequest = mock(async (request: IpcRequest): Promise<IpcResponse> => {
-	lastRequest = request;
+	_lastRequest = request;
 	return {
 		id: request.id,
 		status: 200,
@@ -121,7 +121,7 @@ describe("executeClaudeViaIpc", () => {
 	let factorySpy: ReturnType<typeof spyOn>;
 
 	beforeEach(() => {
-		lastRequest = null;
+		_lastRequest = null;
 		mockSendRequest.mockClear();
 
 		// Mock IpcFactory.create to return our mock client
