@@ -1,7 +1,8 @@
 .PHONY: help all dev test test-quick lint format check status clean \
 	gateway-start gateway-stop gateway-restart gateway-install gateway-uninstall logs-monitor \
 	docker-restart docker-stop docker-logs docker-logs-cmd docker-status \
-	talk talk-response msg-sessions msg-health msg-create-session msg-kill-session msg-help
+	talk talk-response msg-sessions msg-health msg-create-session msg-kill-session msg-help \
+	app-new app-run app-schedule app-list-tasks app-unschedule
 
 # Default target
 .DEFAULT_GOAL := help
@@ -62,6 +63,36 @@ gateway-uninstall:
 dev:
 	@echo "Starting development server..."
 	$(BUN) run start:gateway
+
+## app-new: Create a mini-app from template (usage: make app-new APP_ID=my-app)
+app-new:
+	@if [ -z "$(APP_ID)" ]; then echo "Usage: make app-new APP_ID=<app-id>"; exit 1; fi
+	@./scripts/host_cmd.sh app-new "$(APP_ID)"
+
+## app-run: Run a mini-app (usage: make app-run APP_ID=my-app [APP_INPUT='...'] [APP_CHAT_ID=123] [APP_TIMEOUT_MS=45000] [APP_CONCURRENCY=1])
+app-run:
+	@if [ -z "$(APP_ID)" ]; then echo "Usage: make app-run APP_ID=<app-id> [APP_INPUT='...'] [APP_CHAT_ID=<id>] [APP_TIMEOUT_MS=<ms>] [APP_CONCURRENCY=<n>]"; exit 1; fi
+	@MINI_APP_CHAT_ID="$(APP_CHAT_ID)" MINI_APP_TIMEOUT_MS="$(APP_TIMEOUT_MS)" MINI_APP_CONCURRENCY="$(APP_CONCURRENCY)" ./scripts/host_cmd.sh app-run "$(APP_ID)" $(if $(APP_INPUT),"$(APP_INPUT)")
+
+## app-schedule: Register mini-app scheduled task (usage: make app-schedule APP_ID=my-app [APP_SCHEDULE_TYPE=recurring|cron APP_SCHEDULE_VALUE='1h|0 9 * * 1-5' APP_INPUT='...' APP_INSTANCE=cc-bridge])
+app-schedule:
+	@if [ -z "$(APP_ID)" ]; then echo "Usage: make app-schedule APP_ID=<app-id> [APP_SCHEDULE_TYPE=recurring|cron APP_SCHEDULE_VALUE='1h|0 9 * * 1-5' APP_INPUT='...'] [APP_INSTANCE=cc-bridge]"; exit 1; fi
+	@./scripts/host_cmd.sh app-schedule "$(APP_ID)" "$(APP_SCHEDULE_TYPE)" "$(APP_SCHEDULE_VALUE)" "$(APP_INPUT)" "$(APP_INSTANCE)"
+
+## app-list-tasks: List mini-app scheduled tasks (usage: make app-list-tasks [APP_ID=my-app])
+app-list-tasks:
+	@./scripts/host_cmd.sh app-list-tasks "$(APP_ID)"
+
+## app-unschedule: Unschedule mini-app task(s) (usage: make app-unschedule TASK_ID=task-xxx OR make app-unschedule APP_ID=my-app)
+app-unschedule:
+	@if [ -n "$(TASK_ID)" ]; then \
+		./scripts/host_cmd.sh app-unschedule --task-id "$(TASK_ID)"; \
+	elif [ -n "$(APP_ID)" ]; then \
+		./scripts/host_cmd.sh app-unschedule --app-id "$(APP_ID)"; \
+	else \
+		echo "Usage: make app-unschedule TASK_ID=<task-id> OR make app-unschedule APP_ID=<app-id>"; \
+		exit 1; \
+	fi
 
 ## test: Run tests with coverage
 test:
