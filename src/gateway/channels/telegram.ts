@@ -43,7 +43,7 @@ function sanitizeTelegramNetworkError(error: unknown, token: string): Error {
 function escapeMarkdownV2(text: string): string {
 	// Telegram MarkdownV2 reserved chars:
 	// _ * [ ] ( ) ~ ` > # + - = | { } . !
-	return text.replace(/([_*\[\]()~`>#+\-=|{}.!\\])/g, "\\$1");
+	return text.replace(/([_*[\]()~`>#+\-=|{}.!\\])/g, "\\$1");
 }
 
 export class TelegramClient {
