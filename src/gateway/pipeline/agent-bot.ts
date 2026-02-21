@@ -118,13 +118,52 @@ export class AgentBot implements Bot {
 			return true;
 		}
 		if (text.startsWith("/scheduler_add ")) {
-			const match = text.match(/^\/scheduler_add\s+(\S+)\s+(once|recurring)\s+(\S+)\s+(.+)$/);
+			const match = text.match(/^\/scheduler_add\s+(\S+)\s+(once|recurring|cron)\s+(.+)$/);
 			if (match) {
-				await this.handleSchedulerAdd(message, match[1], match[2], match[3], match[4]);
+				const instanceName = match[1];
+				const scheduleType = match[2];
+				const remainder = match[3].trim();
+
+				if (scheduleType === "cron") {
+					const cronParts = remainder.split(/\s+/);
+					if (cronParts.length >= 6) {
+						const scheduleValue = cronParts.slice(0, 5).join(" ");
+						const prompt = cronParts.slice(5).join(" ").trim();
+						if (prompt) {
+							await this.handleSchedulerAdd(message, instanceName, scheduleType, scheduleValue, prompt);
+						} else {
+							await this.channel.sendMessage(
+								message.chatId,
+								'Usage: /scheduler_add <instance> <once|recurring|cron> <schedule> <prompt>\nExamples:\n/scheduler_add cc-bridge recurring 1h "Daily summary"\n/scheduler_add cc-bridge cron 0 9 * * 1-5 "Weekday report"',
+							);
+						}
+					} else {
+						await this.channel.sendMessage(
+							message.chatId,
+							'Usage: /scheduler_add <instance> <once|recurring|cron> <schedule> <prompt>\nExamples:\n/scheduler_add cc-bridge recurring 1h "Daily summary"\n/scheduler_add cc-bridge cron 0 9 * * 1-5 "Weekday report"',
+						);
+					}
+				} else {
+					const intervalMatch = remainder.match(/^(\S+)\s+(.+)$/);
+					if (intervalMatch) {
+						await this.handleSchedulerAdd(
+							message,
+							instanceName,
+							scheduleType,
+							intervalMatch[1],
+							intervalMatch[2].trim(),
+						);
+					} else {
+						await this.channel.sendMessage(
+							message.chatId,
+							'Usage: /scheduler_add <instance> <once|recurring|cron> <schedule> <prompt>\nExamples:\n/scheduler_add cc-bridge recurring 1h "Daily summary"\n/scheduler_add cc-bridge cron 0 9 * * 1-5 "Weekday report"',
+						);
+					}
+				}
 			} else {
 				await this.channel.sendMessage(
 					message.chatId,
-					'Usage: /scheduler_add <instance> <once|recurring> <schedule> <prompt>\nExample: /scheduler_add cc-bridge recurring 1h "Daily summary"',
+					'Usage: /scheduler_add <instance> <once|recurring|cron> <schedule> <prompt>\nExamples:\n/scheduler_add cc-bridge recurring 1h "Daily summary"\n/scheduler_add cc-bridge cron 0 9 * * 1-5 "Weekday report"',
 				);
 			}
 			return true;
