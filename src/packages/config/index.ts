@@ -2,6 +2,27 @@ import fs from "node:fs";
 import { parse } from "jsonc-parser";
 import { logger } from "@/packages/logger";
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+function deepMerge<T>(defaults: T, parsed: unknown): T {
+	if (!isRecord(defaults) || !isRecord(parsed)) {
+		return (parsed ?? defaults) as T;
+	}
+
+	const merged: Record<string, unknown> = { ...defaults };
+	for (const [key, parsedValue] of Object.entries(parsed)) {
+		const defaultValue = (defaults as Record<string, unknown>)[key];
+		if (isRecord(defaultValue) && isRecord(parsedValue)) {
+			merged[key] = deepMerge(defaultValue, parsedValue);
+			continue;
+		}
+		merged[key] = parsedValue;
+	}
+	return merged as T;
+}
+
 // biome-ignore lint/complexity/noStaticOnlyClass: Static utility class for configuration loading
 export class ConfigLoader {
 	/**
@@ -25,7 +46,7 @@ export class ConfigLoader {
 			}
 
 			logger.info({ configPath }, "Configuration loaded successfully");
-			return { ...defaults, ...parsed };
+			return deepMerge(defaults, parsed);
 		} catch (error) {
 			logger.error({ configPath, error }, "Error loading configuration");
 			return defaults;
