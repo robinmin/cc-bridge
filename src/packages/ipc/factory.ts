@@ -5,7 +5,7 @@ import { DockerExecIpcClient } from "./docker-exec-client";
 import { HostIpcClient } from "./host-client";
 import { RemoteIpcClient } from "./remote-client";
 import { TcpIpcClient } from "./tcp-client";
-import type { IIpcClient, IpcClientConfig, IpcMethod } from "./types";
+import type { IIpcClient, IpcClientConfig, IpcMethod, IpcRequest, IpcResponse } from "./types";
 import { UnixSocketIpcClient } from "./unix-client";
 
 /**
