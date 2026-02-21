@@ -34,6 +34,12 @@ export interface DBWorkspace {
 	last_updated: string;
 }
 
+export interface DBChatChannel {
+	chat_id: string | number;
+	channel: string;
+	last_updated: string;
+}
+
 /**
  * Simple LRU Cache entry with TTL support
  */
@@ -94,6 +100,14 @@ class LRUCache<T> {
 		this.cache.delete(key);
 	}
 
+	deleteByPrefix(prefix: string): void {
+		for (const key of this.cache.keys()) {
+			if (key.startsWith(prefix)) {
+				this.cache.delete(key);
+			}
+		}
+	}
+
 	clear(): void {
 		this.cache.clear();
 	}
@@ -105,7 +119,7 @@ class LRUCache<T> {
 
 // Cache key generator for history
 function historyCacheKey(chatId: string | number, limit: number, workspace: string): string {
-	return `history:${chatId}:${limit}:${workspace}`;
+	return `history:${chatId}:${workspace}:${limit}`;
 }
 
 export class PersistenceManager {
@@ -184,6 +198,14 @@ export class PersistenceManager {
                 last_updated DATETIME DEFAULT CURRENT_TIMESTAMP
             )
         `);
+
+		this.db.run(`
+            CREATE TABLE IF NOT EXISTS chat_channels (
+                chat_id TEXT PRIMARY KEY,
+                channel TEXT NOT NULL,
+                last_updated DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
 	}
 
 	// --- Messages ---
@@ -192,10 +214,7 @@ export class PersistenceManager {
 
 		// Invalidate cache for this chat/workspace when storing new message
 		if (this.historyCache) {
-			// Invalidate all cached entries for this chat/workspace (any limit)
-			for (const limit of [10, 20, 50, 100]) {
-				this.historyCache.delete(historyCacheKey(chatId, limit, workspaceName));
-			}
+			this.historyCache.deleteByPrefix(`history:${chatId}:${workspaceName}:`);
 		}
 
 		this.db.run("INSERT INTO messages (chat_id, workspace_name, sender, text) VALUES (?, ?, ?, ?)", [
@@ -249,6 +268,12 @@ export class PersistenceManager {
 		return result ? result.instance_name : null;
 	}
 
+	async getAllSessions(): Promise<DBSession[]> {
+		return this.db
+			.query("SELECT chat_id, instance_name, last_activity FROM sessions ORDER BY last_activity DESC")
+			.all() as DBSession[];
+	}
+
 	// --- Tasks ---
 	async saveTask(task: DBTask) {
 		this.db.run(
@@ -295,6 +320,27 @@ export class PersistenceManager {
 			workspace_name: string;
 		} | null;
 		return result?.workspace_name || "cc-bridge"; // Default to cc-bridge
+	}
+
+	// --- Chat Channels ---
+	async setChatChannel(chatId: string | number, channel: string) {
+		this.db.run(
+			"INSERT OR REPLACE INTO chat_channels (chat_id, channel, last_updated) VALUES (?, ?, CURRENT_TIMESTAMP)",
+			[String(chatId), channel],
+		);
+	}
+
+	async getChatChannel(chatId: string | number): Promise<string | null> {
+		const result = this.db.query("SELECT channel FROM chat_channels WHERE chat_id = ?").get(String(chatId)) as {
+			channel: string;
+		} | null;
+		return result?.channel || null;
+	}
+
+	async getAllChatChannels(): Promise<DBChatChannel[]> {
+		return this.db
+			.query("SELECT chat_id, channel, last_updated FROM chat_channels ORDER BY last_updated DESC")
+			.all() as DBChatChannel[];
 	}
 
 	close() {
