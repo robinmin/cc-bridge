@@ -10,12 +10,10 @@ export interface CommandInfo {
 
 export const HelpReport = ({ commands, format }: { commands: CommandInfo[]; format: "telegram" | "terminal" }) => {
 	const header = Header({ title: "Kirin Help", format });
-	return (
-		renderTemplate(HELP_TEMPLATE, {
-			header,
-			commands,
-		}) + "\n"
-	);
+	return `${renderTemplate(HELP_TEMPLATE, {
+		header,
+		commands,
+	})}\n`;
 };
 
 const HELP_TEMPLATE = [
