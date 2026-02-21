@@ -134,7 +134,11 @@ export async function acceptAttachments(
 			const fileName = safeName(att.fileName || `file_${att.fileId}`);
 			const dest = path.join(dir, `${timePrefix}_${fileName}`);
 
-			let download;
+			let download: {
+				sizeBytes: number;
+				mimeType: string | null;
+				buffer: Uint8Array;
+			};
 			if (isTelegramChannel(channel) && att.source === "telegram") {
 				download = await downloadTelegram(channel, att, dest, maxBytes);
 			} else if (isFeishuChannel(channel) && att.source === "feishu") {
