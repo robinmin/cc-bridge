@@ -8,7 +8,7 @@ import { NotifySchema } from "@/agent/types";
 const router = new Hono();
 
 // Helper to transform Zod errors into consistent format
-function transformZodError(error: unknown): { error: string } {
+export function transformNotifyError(error: unknown): { error: string } {
 	if (error instanceof ZodError) {
 		const issues = error.issues.map((issue) => {
 			const path = issue.path.length > 0 ? issue.path.join(".") : "root";
@@ -49,14 +49,14 @@ router.post("/", async (c) => {
 		const filename = `msg_${Date.now()}_${Math.random().toString(36).substring(7)}.json`;
 		const filePath = path.join(ipcMessagesDir, filename);
 
-			await fs.writeFile(filePath, JSON.stringify({ type, chatId, text }), "utf-8");
+		await fs.writeFile(filePath, JSON.stringify({ type, chatId, text }), "utf-8");
 
-			return c.json({ status: "ok", file: filename });
-		} catch (error) {
-			if (error instanceof ZodError) {
-				const transformed = transformZodError(error);
-				return c.json(transformed, 400);
-			}
+		return c.json({ status: "ok", file: filename });
+	} catch (error) {
+		if (error instanceof ZodError) {
+			const transformed = transformNotifyError(error);
+			return c.json(transformed, 400);
+		}
 		console.error("[Agent Notify] Error writing to mailbox:", error);
 		return c.json({ error: "Internal server error" }, 500);
 	}

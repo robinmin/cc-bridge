@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { TmuxManager, TmuxManagerError } from "@/gateway/services/tmux-manager";
 
 // Test container ID
@@ -46,8 +46,20 @@ class TestableTmuxManager extends TmuxManager {
 
 describe("TmuxManager", () => {
 	let tmuxManager: TestableTmuxManager;
+	let originalSpawn: typeof Bun.spawn;
+
+	const streamFrom = (text: string): ReadableStream<Uint8Array> =>
+		(new Response(text).body as ReadableStream<Uint8Array>);
+
+	const spawnResult = (stdout: string, stderr: string, exitCode: number) =>
+		({
+			stdout: streamFrom(stdout),
+			stderr: streamFrom(stderr),
+			exited: Promise.resolve(exitCode),
+		}) as unknown as ReturnType<typeof Bun.spawn>;
 
 	beforeEach(() => {
+		originalSpawn = Bun.spawn;
 		tmuxManager = new TestableTmuxManager({ sessionIdleTimeoutMs: 1000 });
 		// Mock the execInContainer method
 		tmuxManager.mockExecInContainer = mock(async (_containerId: string, _command: string[]) => ({
@@ -67,6 +79,7 @@ describe("TmuxManager", () => {
 	afterEach(() => {
 		tmuxManager.mockExecInContainer = null;
 		tmuxManager.mockExecInContainerWithStdin = null;
+		Bun.spawn = originalSpawn;
 	});
 
 	describe("Session Naming", () => {
@@ -386,6 +399,11 @@ describe("TmuxManager", () => {
 				"claude-test-workspace-123456789",
 			]);
 		});
+
+		test("should return false when session existence check throws", async () => {
+			tmuxManager.mockExecInContainer.mockRejectedValueOnce(new Error("docker error"));
+			await expect(tmuxManager.sessionExists(TEST_CONTAINER_ID, "missing")).resolves.toBe(false);
+		});
 	});
 
 	describe("Session Lifecycle", () => {
@@ -535,6 +553,27 @@ describe("TmuxManager", () => {
 			// Should return empty array on error
 			expect(sessions).toEqual([]);
 		});
+
+		test("should wrap timeout-shaped errors when sending to session", async () => {
+			tmuxManager.mockExecInContainer
+				.mockResolvedValueOnce({ stdout: "", stderr: "", exitCode: 1 })
+				.mockResolvedValueOnce({ stdout: "", stderr: "", exitCode: 0 });
+			const sessionName = await tmuxManager.getOrCreateSession(TEST_CONTAINER_ID, TEST_WORKSPACE, TEST_CHAT_ID);
+
+			tmuxManager.mockExecInContainer.mockClear();
+			tmuxManager.mockExecInContainer
+				.mockResolvedValueOnce({ stdout: "", stderr: "", exitCode: 0 })
+				.mockRejectedValueOnce(Object.assign(new Error("timed out"), { name: "TimeoutError" }));
+			tmuxManager.mockExecInContainerWithStdin?.mockResolvedValueOnce({ stdout: "", stderr: "", exitCode: 0 });
+
+			await expect(
+				tmuxManager.sendToSession(TEST_CONTAINER_ID, sessionName, "hi", {
+					requestId: "req-timeout",
+					chatId: TEST_CHAT_ID,
+					workspace: TEST_WORKSPACE,
+				}),
+			).rejects.toThrow(TmuxManagerError);
+		});
 	});
 
 	describe("Session Metadata", () => {
@@ -583,6 +622,207 @@ describe("TmuxManager", () => {
 			const updatedTimestamp = tmuxManager.getSessionInfo(sessionName)?.lastUsedAt;
 
 			expect(updatedTimestamp?.getTime()).toBeGreaterThan(originalTimestamp?.getTime() ?? 0);
+		});
+	});
+
+	describe("Lifecycle and Workspace Operations", () => {
+		test("start discovers local sessions and stop clears tracked sessions", async () => {
+			const spawnMock = mock((_cmd: string[]) => spawnResult("", "", 0));
+			spawnMock
+				.mockImplementationOnce(() => spawnResult("", "", 1))
+				.mockImplementationOnce(() => spawnResult("", "", 0))
+				.mockImplementationOnce(() => spawnResult("claude-ws-42\nother", "", 0))
+				.mockImplementationOnce(() => spawnResult("", "", 0));
+			Bun.spawn = spawnMock as typeof Bun.spawn;
+
+			await tmuxManager.start();
+			expect(tmuxManager.isRunning()).toBe(true);
+			expect(tmuxManager.getSessionInfo("claude-ws-42")?.containerId).toBe("local");
+
+			await tmuxManager.stop();
+			expect(tmuxManager.isRunning()).toBe(false);
+			expect(tmuxManager.getAllSessions()).toEqual([]);
+		});
+
+		test("start short-circuits when already running and stop short-circuits when not started", async () => {
+			Bun.spawn = mock((_cmd: string[]) => spawnResult("", "", 0)) as typeof Bun.spawn;
+			await tmuxManager.stop();
+			await tmuxManager.start();
+			await tmuxManager.start();
+			expect(tmuxManager.isRunning()).toBe(true);
+		});
+
+		test("clearSession returns false when absent and true when killed", async () => {
+			tmuxManager.mockExecInContainer
+				.mockResolvedValueOnce({ stdout: "", stderr: "", exitCode: 1 })
+				.mockResolvedValueOnce({ stdout: "", stderr: "", exitCode: 0 })
+				.mockResolvedValueOnce({ stdout: "", stderr: "", exitCode: 0 });
+
+			await expect(tmuxManager.clearSession(TEST_CONTAINER_ID, TEST_WORKSPACE, TEST_CHAT_ID)).resolves.toBe(false);
+			await tmuxManager.getOrCreateSession(TEST_CONTAINER_ID, TEST_WORKSPACE, TEST_CHAT_ID);
+			await expect(tmuxManager.clearSession(TEST_CONTAINER_ID, TEST_WORKSPACE, TEST_CHAT_ID)).resolves.toBe(true);
+		});
+
+		test("createWorkspaceSession and listAllSessions handle success and failure branches", async () => {
+			tmuxManager.mockExecInContainer
+				.mockResolvedValueOnce({ stdout: "", stderr: "", exitCode: 0 })
+				.mockResolvedValueOnce({ stdout: "", stderr: "", exitCode: 0 });
+			await expect(
+				tmuxManager.createWorkspaceSession(TEST_CONTAINER_ID, "workspace-main", TEST_WORKSPACE),
+			).resolves.toBeUndefined();
+
+			tmuxManager.mockExecInContainer.mockResolvedValueOnce({
+				stdout: "",
+				stderr: "boom",
+				exitCode: 1,
+			});
+			await expect(
+				tmuxManager.createWorkspaceSession(TEST_CONTAINER_ID, "workspace-fail", TEST_WORKSPACE),
+			).rejects.toThrow(TmuxManagerError);
+
+			tmuxManager.mockExecInContainer.mockResolvedValueOnce({
+				stdout: "workspace-main\nclaude-ws-1",
+				stderr: "",
+				exitCode: 0,
+			});
+			await expect(tmuxManager.listAllSessions(TEST_CONTAINER_ID)).resolves.toEqual(["workspace-main", "claude-ws-1"]);
+
+			tmuxManager.mockExecInContainer.mockResolvedValueOnce({
+				stdout: "",
+				stderr: "no server running",
+				exitCode: 1,
+			});
+			await expect(tmuxManager.listAllSessions(TEST_CONTAINER_ID)).resolves.toEqual([]);
+
+			tmuxManager.mockExecInContainer.mockRejectedValueOnce(new Error("docker fail"));
+			await expect(tmuxManager.listAllSessions(TEST_CONTAINER_ID)).resolves.toEqual([]);
+		});
+
+		test("killWorkspaceSession tolerates already-dead sessions", async () => {
+			tmuxManager.mockExecInContainer
+				.mockResolvedValueOnce({ stdout: "", stderr: "session not found", exitCode: 1 })
+				.mockResolvedValueOnce({ stdout: "", stderr: "other failure", exitCode: 1 });
+
+			await expect(tmuxManager.killWorkspaceSession(TEST_CONTAINER_ID, "ws-1")).resolves.toBeUndefined();
+			await expect(tmuxManager.killWorkspaceSession(TEST_CONTAINER_ID, "ws-2")).resolves.toBeUndefined();
+		});
+
+		test("syncSessions removes stale tracked sessions for a container", async () => {
+			tmuxManager.mockExecInContainer
+				.mockResolvedValueOnce({ stdout: "", stderr: "", exitCode: 1 })
+				.mockResolvedValueOnce({ stdout: "", stderr: "", exitCode: 0 })
+				.mockResolvedValueOnce({ stdout: "", stderr: "", exitCode: 0 })
+				.mockResolvedValueOnce({ stdout: "", stderr: "", exitCode: 1 })
+				.mockResolvedValueOnce({ stdout: "", stderr: "", exitCode: 0 })
+				.mockResolvedValueOnce({ stdout: "", stderr: "", exitCode: 0 });
+
+			const stale = await tmuxManager.getOrCreateSession(TEST_CONTAINER_ID, "stale", "1");
+			const keep = await tmuxManager.getOrCreateSession(TEST_CONTAINER_ID, "keep", "2");
+
+			tmuxManager.mockExecInContainer.mockResolvedValueOnce({
+				stdout: `${keep}\nnot-tracked`,
+				stderr: "",
+				exitCode: 0,
+			});
+
+			await tmuxManager.syncSessions(TEST_CONTAINER_ID);
+			expect(tmuxManager.getSessionInfo(stale)).toBeUndefined();
+			expect(tmuxManager.getSessionInfo(keep)).toBeDefined();
+		});
+
+		test("syncSessions serializes concurrent calls through mutex", async () => {
+			tmuxManager.mockExecInContainer.mockResolvedValue({
+				stdout: "",
+				stderr: "",
+				exitCode: 0,
+			});
+			const listSpy = spyOn(tmuxManager, "listSessions");
+			listSpy
+				.mockImplementationOnce(async () => {
+					await new Promise((resolve) => setTimeout(resolve, 20));
+					return [];
+				})
+				.mockResolvedValueOnce([]);
+
+			await Promise.all([tmuxManager.syncSessions(TEST_CONTAINER_ID), tmuxManager.syncSessions(TEST_CONTAINER_ID)]);
+			expect(listSpy).toHaveBeenCalledTimes(2);
+		});
+	});
+
+	describe("Internal Execution Helpers", () => {
+		test("execInContainer and execInContainerWithStdin parse spawn output", async () => {
+			type TmuxManagerInternals = {
+				execInContainer: (
+					containerId: string,
+					command: string[],
+				) => Promise<{ stdout: string; stderr: string; exitCode: number }>;
+				execInContainerWithStdin: (
+					containerId: string,
+					command: string[],
+					stdinContent: string,
+				) => Promise<{ stdout: string; stderr: string; exitCode: number }>;
+			};
+
+			const stdinWrite = mock(() => {});
+			const stdinEnd = mock(() => {});
+			const spawnMock = mock((_cmd: string[]) => spawnResult("ok-stdout", "ok-stderr", 7));
+			spawnMock.mockImplementationOnce((_cmd: string[]) => spawnResult("ok-stdout", "ok-stderr", 7));
+			spawnMock.mockImplementationOnce(
+				(_cmd: string[]) =>
+					({
+						stdout: streamFrom("pipe-stdout"),
+						stderr: streamFrom("pipe-stderr"),
+						exited: Promise.resolve(3),
+						stdin: {
+							write: stdinWrite,
+							end: stdinEnd,
+						},
+					}) as unknown as ReturnType<typeof Bun.spawn>,
+			);
+			Bun.spawn = spawnMock as typeof Bun.spawn;
+
+			const rawManager = new TmuxManager();
+			const rawManagerInternals = rawManager as unknown as TmuxManagerInternals;
+			const execResult = await rawManagerInternals.execInContainer("cid", [
+				"echo",
+				"hello",
+			]);
+			expect(execResult).toEqual({ stdout: "ok-stdout", stderr: "ok-stderr", exitCode: 7 });
+
+			const execStdinResult = await rawManagerInternals.execInContainerWithStdin("cid", ["cat"], "payload");
+			expect(execStdinResult).toEqual({ stdout: "pipe-stdout", stderr: "pipe-stderr", exitCode: 3 });
+			expect(stdinWrite).toHaveBeenCalledTimes(1);
+			expect(stdinEnd).toHaveBeenCalledTimes(1);
+		});
+
+		test("sendToSession can hit real timeout path", async () => {
+			tmuxManager.mockExecInContainer
+				.mockResolvedValueOnce({ stdout: "", stderr: "", exitCode: 1 })
+				.mockResolvedValueOnce({ stdout: "", stderr: "", exitCode: 0 });
+			const sessionName = await tmuxManager.getOrCreateSession(TEST_CONTAINER_ID, TEST_WORKSPACE, TEST_CHAT_ID);
+
+			tmuxManager.mockExecInContainer.mockClear();
+			tmuxManager.mockExecInContainer
+				.mockResolvedValueOnce({ stdout: "", stderr: "", exitCode: 0 })
+				.mockImplementationOnce(async () => {
+					await new Promise((resolve) => setTimeout(resolve, 20));
+					return { stdout: "", stderr: "", exitCode: 0 };
+				});
+			tmuxManager.mockExecInContainerWithStdin?.mockResolvedValueOnce({ stdout: "", stderr: "", exitCode: 0 });
+
+			await expect(
+				tmuxManager.sendToSession(
+					TEST_CONTAINER_ID,
+					sessionName,
+					"slow",
+					{
+						requestId: "req-real-timeout",
+						chatId: TEST_CHAT_ID,
+						workspace: TEST_WORKSPACE,
+					},
+					1,
+				),
+			).rejects.toThrow("timed out");
 		});
 	});
 });

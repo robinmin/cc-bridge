@@ -8,9 +8,13 @@ describe("TelegramChannel", () => {
 	let telegram: TelegramChannel;
 	const testBotToken = "test-token-12345";
 	let mockCalls: Array<{ url: string; body?: unknown }> = [];
+	let getFileResponse:
+		| { ok: boolean; body: { ok?: boolean; result?: { file_path?: string; file_size?: number } }; text: string }
+		| undefined;
 
 	beforeEach(() => {
 		mockCalls = [];
+		getFileResponse = undefined;
 		// @ts-expect-error - mock fetch
 		globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
 			const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
@@ -47,6 +51,26 @@ describe("TelegramChannel", () => {
 					ok: true,
 					json: async () => ({ ok: true, result: { url: "https://test.com" } }),
 					text: async () => "OK",
+				} as Response;
+			}
+
+			if (url.includes("getFile")) {
+				const cfg = getFileResponse ?? {
+					ok: true,
+					body: { ok: true, result: { file_path: "documents/test.txt", file_size: 7 } },
+					text: "OK",
+				};
+				return {
+					ok: cfg.ok,
+					json: async () => cfg.body,
+					text: async () => cfg.text,
+				} as Response;
+			}
+
+			if (url.includes("/file/bot")) {
+				return {
+					ok: true,
+					text: async () => "file-bytes",
 				} as Response;
 			}
 
@@ -257,6 +281,83 @@ describe("TelegramChannel", () => {
 
 				expect(info).toBeDefined();
 			});
+
+			test("should throw on getWebhookInfo API errors", async () => {
+				// @ts-expect-error - mock fetch
+				globalThis.fetch = async () =>
+					({
+						ok: false,
+						text: async () => "bad webhook",
+					}) as Response;
+
+				await expect(client.getWebhookInfo()).rejects.toThrow("Telegram API (getWebhookInfo) error: bad webhook");
+			});
+		});
+
+		describe("files", () => {
+			test("should get file metadata", async () => {
+				const file = await client.getFile("file-1");
+				expect(file.file_path).toBe("documents/test.txt");
+				expect(file.file_size).toBe(7);
+			});
+
+			test("should throw when getFile response is non-ok", async () => {
+				getFileResponse = {
+					ok: false,
+					body: {},
+					text: "not found",
+				};
+				await expect(client.getFile("file-2")).rejects.toThrow("Telegram API error (getFile): not found");
+			});
+
+			test("should throw when getFile payload is missing path", async () => {
+				getFileResponse = {
+					ok: true,
+					body: { ok: true, result: {} },
+					text: "OK",
+				};
+				await expect(client.getFile("file-3")).rejects.toThrow("Telegram API error (getFile): missing file_path");
+			});
+
+			test("should download file", async () => {
+				const response = await client.downloadFile("documents/test.txt");
+				expect(response.ok).toBe(true);
+				expect(mockCalls.some((c) => c.url.includes("/file/bot"))).toBe(true);
+			});
+		});
+	});
+
+	describe("channel delegation and attachments", () => {
+		test("should expose underlying client", () => {
+			expect(telegram.getClient()).toBeInstanceOf(TelegramClient);
+		});
+
+		test("should delegate setMenu and getStatus", async () => {
+			await telegram.setMenu([{ command: "help", description: "Show help" }]);
+			expect(mockCalls.some((c) => c.url.includes("setMyCommands"))).toBe(true);
+			const status = await telegram.getStatus();
+			expect(status).toBeDefined();
+		});
+
+		test("should parse document and photo attachments", () => {
+			const msg = telegram.parseWebhook({
+				update_id: 1,
+				message: {
+					chat: { id: 1001 },
+					document: {
+						file_id: "doc1",
+						mime_type: "application/pdf",
+						file_size: 10,
+					},
+					photo: [
+						{ file_id: "p1", file_size: 1, file_unique_id: "u1" },
+						{ file_id: "p2", file_size: 9, file_unique_id: "u2" },
+					],
+				},
+			});
+			expect(msg?.attachments?.length).toBe(2);
+			expect(msg?.attachments?.[0]?.fileId).toBe("doc1");
+			expect(msg?.attachments?.[1]?.fileId).toBe("p2");
 		});
 	});
 });

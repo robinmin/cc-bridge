@@ -6,17 +6,29 @@ import { TmuxManager } from "@/gateway/services/tmux-manager";
 class MockTmuxManager {
 	public sessions: Map<string, boolean> = new Map();
 	public killedSessions: string[] = [];
+	public failCreate = false;
+	public failList = false;
+	public failKillFor: string | null = null;
 
 	async createWorkspaceSession(_containerId: string, sessionName: string, _workspace: string): Promise<void> {
+		if (this.failCreate) {
+			throw new Error("create failed");
+		}
 		this.sessions.set(sessionName, true);
 	}
 
 	async killWorkspaceSession(_containerId: string, sessionName: string): Promise<void> {
+		if (this.failKillFor && sessionName.includes(this.failKillFor)) {
+			throw new Error("kill failed");
+		}
 		this.killedSessions.push(sessionName);
 		this.sessions.delete(sessionName);
 	}
 
 	async listAllSessions(_containerId: string): Promise<string[]> {
+		if (this.failList) {
+			throw new Error("list failed");
+		}
 		return Array.from(this.sessions.keys());
 	}
 }
@@ -284,5 +296,67 @@ describe("SessionPoolService", () => {
 					maxSessions: 5,
 				}),
 		).toThrow("containerId is required");
+	});
+
+	test("should cleanup all sessions and set destroyed state", async () => {
+		await sessionPool.getOrCreateSession("ws-clean-1");
+		await sessionPool.getOrCreateSession("ws-clean-2");
+		expect(sessionPool.getStats().totalSessions).toBe(2);
+
+		await sessionPool.cleanup();
+
+		expect(sessionPool.isDestroyed()).toBe(true);
+		expect(sessionPool.getStats().totalSessions).toBe(0);
+	});
+
+	test("should support switchWorkspace", async () => {
+		const switched = await sessionPool.switchWorkspace("old-ws", "new-ws");
+		expect(switched.workspace).toBe("new-ws");
+		expect(switched.sessionName).toBe("claude-new-ws");
+	});
+
+	test("should handle createSession failures", async () => {
+		mockTmux.failCreate = true;
+		await expect(sessionPool.getOrCreateSession("will-fail")).rejects.toThrow("create failed");
+	});
+
+	test("should survive discovery failures on start", async () => {
+		const badTmux = new MockTmuxManager();
+		badTmux.failList = true;
+		const pool = new SessionPoolService(badTmux as unknown as TmuxManager, {
+			containerId,
+			enableAutoCleanup: false,
+		});
+		await expect(pool.start()).resolves.toBeUndefined();
+		await pool.stop();
+	});
+
+	test("should tolerate kill failures during cleanup and terminate", async () => {
+		await sessionPool.getOrCreateSession("kill-fail");
+		mockTmux.failKillFor = "kill-fail";
+
+		// deleteSession should swallow kill failure and still remove from map
+		await sessionPool.deleteSession("kill-fail");
+		expect(sessionPool.getSession("kill-fail")).toBeUndefined();
+
+		await sessionPool.getOrCreateSession("term-fail");
+		mockTmux.failKillFor = "term-fail";
+		await expect(sessionPool.stop()).resolves.toBeUndefined();
+	});
+
+	test("should handle auto-cleanup timer callback errors", async () => {
+		const pool = new SessionPoolService(mockTmux as unknown as TmuxManager, {
+			containerId,
+			enableAutoCleanup: true,
+			cleanupIntervalMs: 5,
+		});
+		const p = pool as unknown as { cleanupInactiveSessions: () => Promise<void> };
+		p.cleanupInactiveSessions = async () => {
+			throw new Error("timer cleanup failed");
+		};
+
+		await pool.start();
+		await new Promise((resolve) => setTimeout(resolve, 20));
+		await pool.stop();
 	});
 });

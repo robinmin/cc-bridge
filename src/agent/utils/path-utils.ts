@@ -18,7 +18,7 @@ export function isTestMode(): boolean {
  * Verify test mode is only used in test environment
  */
 export function validateTestMode(): void {
-	if (isTestMode() && process.env.NODE_ENV !== "test") {
+	if (process.env.TEST_MODE__INTERNAL_ONLY === "true" && process.env.NODE_ENV !== "test") {
 		throw new Error(
 			"TEST_MODE__INTERNAL_ONLY can only be enabled in test environment. " +
 				"Current environment: " +

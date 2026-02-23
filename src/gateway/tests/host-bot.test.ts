@@ -171,4 +171,88 @@ describe("HostBot", () => {
 		expect(spy).toHaveBeenCalledWith("123", expect.stringContaining("Output truncated"));
 		spawnSpy.mockRestore();
 	});
+
+	test("should show usage when /host command is empty", async () => {
+		const bot = new HostBot(mockChannel);
+		const msg: Message = { channelId: "test", chatId: "123", text: "/host   " };
+
+		const handled = await bot.handle(msg);
+
+		expect(handled).toBe(true);
+		expect(spy).toHaveBeenCalledWith("123", "Usage: /host <command>");
+	});
+
+	test("should handle timeout for /host_uptime command", async () => {
+		const killSpy = spyOn({ kill: () => {} }, "kill");
+		const spawnSpy = spyOn(Bun, "spawn").mockReturnValue({
+			stdout: new ReadableStream({
+				start() {},
+			}),
+			stderr: new ReadableStream({
+				start() {},
+			}),
+			exited: new Promise<number>(() => {}),
+			kill: killSpy,
+		} as unknown as {
+			stdout: ReadableStream;
+			stderr: ReadableStream;
+			exited: Promise<number>;
+			kill: () => void;
+		});
+		const timeoutSpy = spyOn(globalThis, "setTimeout").mockImplementation(((fn: TimerHandler) => {
+			if (typeof fn === "function") {
+				fn();
+			}
+			return 0 as unknown as ReturnType<typeof setTimeout>;
+		}) as typeof setTimeout);
+
+		const bot = new HostBot(mockChannel);
+		const msg: Message = { channelId: "test", chatId: "123", text: "/host_uptime" };
+
+		const handled = await bot.handle(msg);
+
+		expect(handled).toBe(true);
+		expect(killSpy).toHaveBeenCalled();
+		expect(spy).toHaveBeenCalledWith("123", expect.stringContaining("timed out"));
+
+		timeoutSpy.mockRestore();
+		spawnSpy.mockRestore();
+	});
+
+	test("should handle timeout for raw /host command", async () => {
+		const killSpy = spyOn({ kill: () => {} }, "kill");
+		const spawnSpy = spyOn(Bun, "spawn").mockReturnValue({
+			stdout: new ReadableStream({
+				start() {},
+			}),
+			stderr: new ReadableStream({
+				start() {},
+			}),
+			exited: new Promise<number>(() => {}),
+			kill: killSpy,
+		} as unknown as {
+			stdout: ReadableStream;
+			stderr: ReadableStream;
+			exited: Promise<number>;
+			kill: () => void;
+		});
+		const timeoutSpy = spyOn(globalThis, "setTimeout").mockImplementation(((fn: TimerHandler) => {
+			if (typeof fn === "function") {
+				fn();
+			}
+			return 0 as unknown as ReturnType<typeof setTimeout>;
+		}) as typeof setTimeout);
+
+		const bot = new HostBot(mockChannel);
+		const msg: Message = { channelId: "test", chatId: "123", text: "/host echo never" };
+
+		const handled = await bot.handle(msg);
+
+		expect(handled).toBe(true);
+		expect(killSpy).toHaveBeenCalled();
+		expect(spy).toHaveBeenCalledWith("123", expect.stringContaining("timed out"));
+
+		timeoutSpy.mockRestore();
+		spawnSpy.mockRestore();
+	});
 });

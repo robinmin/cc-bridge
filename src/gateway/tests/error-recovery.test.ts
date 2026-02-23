@@ -672,4 +672,61 @@ describe("ErrorRecoveryService", () => {
 			expect(strategies.get(ErrorType.PERMISSION).circuitBreakerThreshold).toBe(5);
 		});
 	});
+
+	describe("Lifecycle and Event API", () => {
+		test("should start and stop health check timer", async () => {
+			service.start();
+			expect(service["healthCheckTimer"]).not.toBeNull();
+			await service.stop();
+			expect(service["healthCheckTimer"]).toBeNull();
+		});
+
+		test("should support on/once/off/removeAll/listenerCount/eventNames wrappers", () => {
+			const onListener = (..._args: unknown[]) => {};
+			const onceListener = (..._args: unknown[]) => {};
+
+			service.on("health:check", onListener);
+			service.once("health:check", onceListener);
+
+			expect(service.listenerCount("health:check")).toBe(2);
+			expect(service.eventNames()).toContain("health:check");
+
+			service.emit("health:check", { ok: true });
+			// once listener should have been removed after first emit
+			expect(service.listenerCount("health:check")).toBe(1);
+
+			service.off("health:check", onListener);
+			expect(service.listenerCount("health:check")).toBe(0);
+
+			service.on("error:failed", () => {});
+			service.removeAllListeners("error:failed");
+			expect(service.listenerCount("error:failed")).toBe(0);
+
+			service.on("error:failed", () => {});
+			service.on("health:check", () => {});
+			service.removeAllListeners();
+			expect(service.eventNames()).toEqual([]);
+		});
+
+		test("should reset expired circuit breakers", () => {
+			const breakers = service.getCircuitBreakers();
+			const oldFailure = Date.now() - 10 * 60 * 1000;
+			breakers.set(ErrorType.PERMISSION, {
+				isOpen: true,
+				lastFailureTime: oldFailure,
+				failureCount: 5,
+			});
+
+			(service as unknown as { resetFailureCounter: (t: ErrorType) => void }).resetFailureCounter(
+				ErrorType.PERMISSION,
+			);
+			(service as unknown as { resetCircuitBreakers: () => void }).resetCircuitBreakers();
+
+			const state = breakers.get(ErrorType.PERMISSION);
+			expect(state?.isOpen).toBe(false);
+			expect(state?.failureCount).toBe(0);
+			const resetEvent = capturedEvents.find((e) => e.event === "circuit_breaker:reset");
+			expect(resetEvent).toBeDefined();
+		});
+	});
 });

@@ -1,12 +1,18 @@
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import {
 	buildClaudePrompt,
+	ClaudeTimeoutError,
+	type ClaudeExecutionResult,
+	executeClaude,
 	type ClaudeExecutionConfig,
+	executeClaudeWithHistory,
 	executeClaudeViaIpc,
+	IpcCommunicationError,
 	validateAndSanitizePrompt,
 } from "@/gateway/services/claude-executor";
 import { IpcFactory } from "@/packages/ipc/factory";
 import type { IpcRequest, IpcResponse } from "@/packages/ipc/types";
+import { TmuxManager } from "@/gateway/services/tmux-manager";
 
 // Track the last request sent to IPC
 let _lastRequest: IpcRequest | null = null;
@@ -233,5 +239,79 @@ describe("executeClaudeViaIpc", () => {
 
 		// Verify that sendRequest was called (using defaults)
 		expect(mockSendRequest).toHaveBeenCalled();
+	});
+});
+
+describe("claude-executor additional branches", () => {
+	test("should initialize custom error subclasses", () => {
+		const cause = new Error("root cause");
+		const ipcErr = new IpcCommunicationError("ipc failed", { operation: "x", containerId: "c1" }, cause);
+		const timeoutErr = new ClaudeTimeoutError("timeout", { operation: "x", timeoutMs: 1000 }, cause);
+
+		expect(ipcErr.name).toBe("IpcCommunicationError");
+		expect(ipcErr.context.operation).toBe("ipc_communication");
+		expect(timeoutErr.name).toBe("ClaudeTimeoutError");
+		expect(timeoutErr.context.operation).toBe("timeout");
+	});
+
+	test("executeClaudeWithHistory should return error object on non-validation exception", async () => {
+		const instance = {
+			name: "test-instance",
+			containerId: "test-container",
+			status: "running",
+		};
+		const badHistory = [
+			{
+				sender: "user",
+				get text() {
+					throw new Error("history read failed");
+				},
+				timestamp: "2024-01-01 12:00:00",
+			},
+		] as unknown as Array<{ sender: string; text: string; timestamp: string }>;
+
+		const result = await executeClaudeWithHistory(instance, "hello", badHistory);
+		expect(result.success).toBe(false);
+		expect(result.error).toContain("history read failed");
+		expect(result.retryable).toBe(false);
+	});
+
+	test("executeClaude should use sync mode with history when useTmux is false", async () => {
+		const factorySpy = spyOn(IpcFactory, "create").mockReturnValue(mockClient as never);
+		mockSendRequest.mockResolvedValueOnce({
+			id: "test",
+			status: 200,
+			result: { stdout: "sync result" },
+		});
+
+		const result = (await executeClaude("container-a", "workspace-a", "hello", {
+			useTmux: false,
+			history: [{ sender: "user", text: "previous", timestamp: "2024-01-01 00:00:00" }],
+		})) as ClaudeExecutionResult;
+
+		expect(result.success).toBe(true);
+		expect(result.output).toBe("sync result");
+		factorySpy.mockRestore();
+	});
+
+	test("executeClaude should use tmux mode when useTmux is true", async () => {
+		const originalGetOrCreateSession = TmuxManager.prototype.getOrCreateSession;
+		const originalSendToSession = TmuxManager.prototype.sendToSession;
+		TmuxManager.prototype.getOrCreateSession = (async () => "claude-workspace-chat") as typeof TmuxManager.prototype.getOrCreateSession;
+		TmuxManager.prototype.sendToSession = (async () => {}) as typeof TmuxManager.prototype.sendToSession;
+
+		const result = await executeClaude("container-a", "workspace-a", "hello", {
+			useTmux: true,
+			workspace: "workspace-a",
+			chatId: "42",
+		});
+
+		TmuxManager.prototype.getOrCreateSession = originalGetOrCreateSession;
+		TmuxManager.prototype.sendToSession = originalSendToSession;
+
+		expect("mode" in result).toBe(true);
+		if ("mode" in result) {
+			expect(result.mode).toBe("tmux");
+		}
 	});
 });

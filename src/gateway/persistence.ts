@@ -28,6 +28,34 @@ export interface DBTask {
 	status?: string;
 }
 
+export interface UpsertMiniAppTaskInput {
+	id: string;
+	instance_name: string;
+	app_id: string;
+	prompt: string;
+	schedule_type: "once" | "recurring" | "cron";
+	schedule_value: string;
+	next_run: string | null;
+	status?: string;
+}
+
+export interface UpsertMiniAppTaskResult {
+	created: boolean;
+	duplicate_ids_deleted: string[];
+}
+
+export interface DBMiniAppTask {
+	id: string;
+	chat_id: string;
+	instance_name: string;
+	prompt: string;
+	schedule_type: string;
+	schedule_value: string;
+	next_run: string | null;
+	status: string;
+	app_id: string;
+}
+
 export interface DBWorkspace {
 	chat_id: string | number;
 	workspace_name: string;
@@ -289,6 +317,77 @@ export class PersistenceManager {
 				task.status,
 			],
 		);
+	}
+
+	async upsertMiniAppTask(input: UpsertMiniAppTaskInput): Promise<UpsertMiniAppTaskResult> {
+		const chatId = `miniapp:${input.app_id}`;
+		const existingRows = this.db
+			.query("SELECT id FROM tasks WHERE status != 'deleted' AND instance_name = ? AND prompt = ?")
+			.all(input.instance_name, input.prompt) as Array<{ id: string }>;
+
+		const created = !existingRows.some((row) => row.id === input.id);
+		const duplicateIds = existingRows.filter((row) => row.id !== input.id).map((row) => row.id);
+
+		if (duplicateIds.length > 0) {
+			const placeholders = duplicateIds.map(() => "?").join(", ");
+			this.db.run(`UPDATE tasks SET status = 'deleted' WHERE id IN (${placeholders})`, duplicateIds);
+		}
+
+		await this.saveTask({
+			id: input.id,
+			instance_name: input.instance_name,
+			chat_id: chatId,
+			prompt: input.prompt,
+			schedule_type: input.schedule_type,
+			schedule_value: input.schedule_value,
+			next_run: input.next_run ?? undefined,
+			status: input.status ?? "active",
+		});
+
+		return {
+			created,
+			duplicate_ids_deleted: duplicateIds,
+		};
+	}
+
+	async getMiniAppTasks(appId?: string): Promise<DBMiniAppTask[]> {
+		const rows = this.db
+			.query(
+				"SELECT id, chat_id, instance_name, prompt, schedule_type, schedule_value, next_run, status FROM tasks WHERE status != 'deleted' AND prompt LIKE '@miniapp:%' ORDER BY next_run ASC",
+			)
+			.all() as Array<{
+			id: string;
+			chat_id: string;
+			instance_name: string;
+			prompt: string;
+			schedule_type: string;
+			schedule_value: string;
+			next_run: string | null;
+			status: string;
+		}>;
+
+		return rows
+			.map((row) => {
+				const appMatch = row.prompt.match(/^@miniapp:([^\s]+)/);
+				const parsedAppId = appMatch?.[1] || "";
+				return { ...row, app_id: parsedAppId };
+			})
+			.filter((row) => row.app_id && (!appId || row.app_id === appId));
+	}
+
+	async unscheduleMiniAppTaskByTaskId(taskId: string): Promise<number> {
+		const result = this.db.run("UPDATE tasks SET status = 'deleted' WHERE id = ? AND prompt LIKE '@miniapp:%'", [
+			taskId,
+		]);
+		return result.changes;
+	}
+
+	async unscheduleMiniAppTaskByAppId(appId: string): Promise<number> {
+		const result = this.db.run(
+			"UPDATE tasks SET status = 'deleted' WHERE status != 'deleted' AND prompt LIKE '@miniapp:%' AND (prompt = ? OR prompt LIKE ?)",
+			[`@miniapp:${appId}`, `@miniapp:${appId} %`],
+		);
+		return result.changes;
 	}
 
 	async getActiveTasks() {

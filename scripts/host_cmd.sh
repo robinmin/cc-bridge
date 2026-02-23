@@ -54,7 +54,7 @@ function cmd_host_help() {
     echo "  app-new <app-id> - Create mini-app markdown from template"
     echo "  app-list - List available mini-apps"
     echo "  app-run <app-id> [input] - Run mini-app by id (env: MINI_APP_CHAT_ID, MINI_APP_TIMEOUT_MS, MINI_APP_CONCURRENCY)"
-    echo "  app-schedule <app-id> [once|recurring|cron] [schedule] [input] [instance] - Register mini-app task"
+    echo "  app-schedule <app-id> [once|recurring|cron] [schedule] [input] [instance] - Upsert mini-app task"
     echo "  app-list-tasks [app-id] - List scheduled mini-app tasks"
     echo "  app-unschedule --task-id <task-id> | --app-id <app-id> - Remove mini-app schedule(s)"
     echo "  clear - Clear current workspace session context"
@@ -132,16 +132,16 @@ function cmd_host_app_schedule() {
         exit 1
     fi
 
-    bun run scripts/schedule_miniapp.ts "$app_id" "$schedule_type" "$schedule_value" "$input" "$instance"
+    bun run src/gateway/apps/lifecycle.ts schedule "$app_id" "$schedule_type" "$schedule_value" "$input" "$instance"
 }
 
 ## command : app-list-tasks
 function cmd_host_app_list_tasks() {
     local app_id="${1:-}"
     if [[ -n "$app_id" ]]; then
-        bun run scripts/list_miniapp_tasks.ts "$app_id"
+        bun run src/gateway/apps/lifecycle.ts list "$app_id"
     else
-        bun run scripts/list_miniapp_tasks.ts
+        bun run src/gateway/apps/lifecycle.ts list
     fi
 }
 
@@ -161,7 +161,7 @@ function cmd_host_app_unschedule() {
         exit 1
     fi
 
-    bun run scripts/unschedule_miniapp.ts "$flag" "$value"
+    bun run src/gateway/apps/lifecycle.ts unschedule "$flag" "$value"
 }
 
 ## Entry point

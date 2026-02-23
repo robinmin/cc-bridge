@@ -11,6 +11,7 @@ This directory contains the runtime driver for mini-apps.
 ## Mini-App Definitions
 
 Mini-app definitions (`.md` files) are stored in `src/apps/`. Each markdown file is one mini-app.
+Mini-app-specific scripts should be stored under `src/apps/<app-id>/` to keep operational tooling colocated with the spec.
 
 ## CLI Usage
 

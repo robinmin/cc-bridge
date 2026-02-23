@@ -53,4 +53,13 @@ describe("BotRouter", () => {
 
 		expect(target?.name).toBe("HostBot");
 	});
+
+	test("reports router stats for discovered bots", () => {
+		const router = new BotRouter([menuBot, hostBot, agentBot]);
+		expect(router.getStats()).toEqual({
+			menuBot: true,
+			hostBot: true,
+			agentBot: true,
+		});
+	});
 });

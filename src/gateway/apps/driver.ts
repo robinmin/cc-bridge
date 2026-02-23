@@ -10,7 +10,7 @@ import { executeClaudeRaw } from "@/gateway/services/claude-executor";
 import { mapWithConcurrency } from "@/packages/async";
 import { ConfigLoader } from "@/packages/config";
 import { logger } from "@/packages/logger";
-import { parseMarkdownFrontmatter, stripMarkdownFrontmatter, type FrontmatterValue } from "@/packages/markdown";
+import { type FrontmatterValue, parseMarkdownFrontmatter, stripMarkdownFrontmatter } from "@/packages/markdown";
 import { renderTemplate } from "@/packages/template";
 import { splitTextChunks } from "@/packages/text";
 import { getMissingRequiredFields } from "@/packages/validation";
@@ -60,9 +60,21 @@ export interface MiniAppRunResult {
 const TELEGRAM_SAFE_CHUNK_SIZE = 3500;
 const DAILY_NEWS_BOILERPLATE_PATTERNS = [
 	/^based on (my |the )?search results/i,
+	/^based on my retrieval/i,
+	/^based on (my |the )?retrieval from/i,
 	/^根据(?:我的)?(?:搜索|检索)结果/i,
 	/^以下是.*(?:每日|今天).*(?:新闻|简报|摘要)/i,
+	/^daily news summary completed/i,
+	/^日报(?:已)?(?:完成|生成|发送)/i,
+	/^新闻简报(?:已)?(?:完成|生成|发送)/i,
 ];
+const DAILY_NEWS_FORBIDDEN_META_PATTERNS = [
+	/daily news summary completed/i,
+	/\b(the brief includes|includes \d+ stories)\b/i,
+	/(based on|from) (my |the )?(knowledge|knowledge cutoff)/i,
+	/(知识截止|知识库|无法获取.*尚未到来)/i,
+];
+const DAILY_NEWS_SOURCE_LINE_PATTERN = /来源：\[[^\]]+\]\(https?:\/\/[^\s)]+\)/;
 
 function parseBool(value: string | undefined, defaultValue: boolean): boolean {
 	if (!value) return defaultValue;
@@ -105,7 +117,10 @@ function validateMiniAppFrontmatter(frontmatter: Record<string, FrontmatterValue
 	}
 
 	const scheduleType = frontmatter.schedule_type;
-	if (typeof scheduleType === "string" && (scheduleType === "once" || scheduleType === "recurring" || scheduleType === "cron")) {
+	if (
+		typeof scheduleType === "string" &&
+		(scheduleType === "once" || scheduleType === "recurring" || scheduleType === "cron")
+	) {
 		const scheduleValue = frontmatter.schedule_value;
 		if (!(typeof scheduleValue === "string" && scheduleValue.trim().length > 0)) {
 			throw new Error(`Mini-app "${appId}" requires "schedule_value" when "schedule_type" is set`);
@@ -170,6 +185,12 @@ function sanitizeMiniAppOutput(appId: string, rawOutput: string): string {
 	return lines.join("\n").trim();
 }
 
+function isValidDailyNewsOutput(output: string): boolean {
+	if (!output.trim()) return false;
+	if (DAILY_NEWS_FORBIDDEN_META_PATTERNS.some((pattern) => pattern.test(output))) return false;
+	return DAILY_NEWS_SOURCE_LINE_PATTERN.test(output);
+}
+
 type DispatchChannels = {
 	telegram?: TelegramChannel;
 	feishu?: FeishuChannel;
@@ -185,7 +206,10 @@ function buildDispatchChannels(): DispatchChannels {
 
 	return {
 		telegram: telegramToken ? new TelegramChannel(telegramToken) : undefined,
-		feishu: feishuAppId && feishuAppSecret ? new FeishuChannel(feishuAppId, feishuAppSecret, feishuDomain, feishuEncryptKey) : undefined,
+		feishu:
+			feishuAppId && feishuAppSecret
+				? new FeishuChannel(feishuAppId, feishuAppSecret, feishuDomain, feishuEncryptKey)
+				: undefined,
 	};
 }
 
@@ -278,7 +302,9 @@ export class MiniAppDriver {
 			enabled: parseBool(typeof frontmatter.enabled === "string" ? frontmatter.enabled : undefined, true),
 			instance: typeof frontmatter.instance === "string" ? frontmatter.instance : undefined,
 			workspace: typeof frontmatter.workspace === "string" ? frontmatter.workspace : undefined,
-			execTimeoutMs: parsePositiveInt(typeof frontmatter.exec_timeout_ms === "string" ? frontmatter.exec_timeout_ms : undefined),
+			execTimeoutMs: parsePositiveInt(
+				typeof frontmatter.exec_timeout_ms === "string" ? frontmatter.exec_timeout_ms : undefined,
+			),
 			scheduleType:
 				frontmatter.schedule_type === "once" ||
 				frontmatter.schedule_type === "recurring" ||
@@ -338,9 +364,7 @@ export class MiniAppDriver {
 		await instanceManager.refresh();
 
 		const timeoutMs =
-			options?.timeoutMs ||
-			app.execTimeoutMs ||
-			Number.parseInt(process.env.MINI_APP_EXEC_TIMEOUT_MS || "300000", 10);
+			options?.timeoutMs || app.execTimeoutMs || Number.parseInt(process.env.MINI_APP_EXEC_TIMEOUT_MS || "300000", 10);
 		const executionTarget = targets.find((target) => {
 			const instanceName = target.instanceName || app.instance;
 			if (!instanceName) return false;
@@ -393,13 +417,44 @@ export class MiniAppDriver {
 		if (!generation.success) {
 			throw new Error(generation.error || `Mini-app "${appId}" generation failed`);
 		}
-		const output = sanitizeMiniAppOutput(app.id, generation.output || "");
+		let output = sanitizeMiniAppOutput(app.id, generation.output || "");
 		if (!output) {
 			throw new Error(`Mini-app "${appId}" produced empty output`);
 		}
+		if (app.id === "daily-news" && !isValidDailyNewsOutput(output)) {
+			logger.warn({ appId }, "Daily-news output failed validation; retrying generation with stricter constraints");
+			const retryPrompt = [
+				launcherPrompt,
+				"",
+				"Your previous output was rejected by runtime validation.",
+				"Retry now. Return only the final news report content.",
+				"",
+				"Hard constraints (must satisfy all):",
+				"- No completion/status/meta text (for example: 'Daily news summary completed...').",
+				"- Use only fetched web news within last 48 hours from now_iso.",
+				"- Include 7-12 story items grouped by required categories.",
+				"- Every story item must include one source line exactly in this form: 来源：[<媒体简称>](<原始新闻URL>).",
+				"- Source links must be valid article URLs, not dead links or generic pages.",
+			].join("\n");
+			const retryGeneration = await executeClaudeRaw(instance.containerId, instanceName, retryPrompt, {
+				workspace,
+				chatId: executionTarget.chatId,
+				timeout: timeoutMs,
+			});
+			if (!retryGeneration.success) {
+				throw new Error(retryGeneration.error || `Mini-app "${appId}" retry generation failed`);
+			}
+			output = sanitizeMiniAppOutput(app.id, retryGeneration.output || "");
+			if (!output || !isValidDailyNewsOutput(output)) {
+				throw new Error(
+					`Mini-app "${appId}" produced invalid output: must be direct news content with valid 来源 links and no completion/meta summary`,
+				);
+			}
+		}
 
 		const channels = buildDispatchChannels();
-		const dispatchConcurrency = Number.isFinite(options?.concurrency) && (options?.concurrency || 0) > 0 ? Number(options?.concurrency) : 1;
+		const dispatchConcurrency =
+			Number.isFinite(options?.concurrency) && (options?.concurrency || 0) > 0 ? Number(options?.concurrency) : 1;
 		const outcomes = await mapWithConcurrency(targets, dispatchConcurrency, async (target) => {
 			try {
 				if (target.channel === "telegram") {
@@ -430,7 +485,12 @@ export class MiniAppDriver {
 					return "skipped" as const;
 				}
 
-				await persistence.storeMessage(target.chatId, "agent", output, target.workspace || app.workspace || "cc-bridge");
+				await persistence.storeMessage(
+					target.chatId,
+					"agent",
+					output,
+					target.workspace || app.workspace || "cc-bridge",
+				);
 				return "succeeded" as const;
 			} catch (error) {
 				logger.error(
@@ -465,8 +525,8 @@ export class MiniAppDriver {
 
 export const miniAppDriver = new MiniAppDriver();
 
-async function cli() {
-	const [command, appId, ...rest] = process.argv.slice(2);
+export async function runCli(argv = process.argv.slice(2)) {
+	const [command, appId, ...rest] = argv;
 	if (command === "list") {
 		const apps = await miniAppDriver.listApps();
 		for (const app of apps) {
@@ -483,7 +543,9 @@ async function cli() {
 					.map((id) => id.trim())
 					.filter(Boolean)
 			: undefined;
-		const timeoutMs = process.env.MINI_APP_TIMEOUT_MS ? Number.parseInt(process.env.MINI_APP_TIMEOUT_MS, 10) : undefined;
+		const timeoutMs = process.env.MINI_APP_TIMEOUT_MS
+			? Number.parseInt(process.env.MINI_APP_TIMEOUT_MS, 10)
+			: undefined;
 		const concurrency = process.env.MINI_APP_CONCURRENCY
 			? Number.parseInt(process.env.MINI_APP_CONCURRENCY, 10)
 			: undefined;
@@ -515,7 +577,7 @@ async function cli() {
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-	cli().catch((error) => {
+	runCli().catch((error) => {
 		process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
 		process.exitCode = 1;
 	});

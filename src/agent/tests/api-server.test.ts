@@ -198,6 +198,61 @@ describe("AgentHttpServer", () => {
 		test.serial("stop should be safe before start", async () => {
 			await expect(server.stop()).resolves.toBeUndefined();
 		});
+
+		test.serial("should start, report running state, and stop", async () => {
+			const internal = server as unknown as {
+				app: {
+					listen: (opts: unknown) => Promise<void>;
+					close: () => Promise<void>;
+					server?: { address: () => { port: number } | string | null };
+				};
+			};
+			const originalListen = internal.app.listen;
+			const originalClose = internal.app.close;
+			const originalServer = internal.app.server;
+
+			internal.app.listen = (async () => {
+				internal.app.server = {
+					address: () => ({ port: 23456 }),
+				};
+			}) as typeof internal.app.listen;
+			internal.app.close = (async () => {}) as typeof internal.app.close;
+
+			try {
+				expect(server.isRunning()).toBe(false);
+				expect(server.getPort()).toBe(0);
+
+				await server.start();
+				expect(server.isRunning()).toBe(true);
+				expect(server.getPort()).toBe(23456);
+
+				await server.start(); // no-op branch when already started
+				await server.stop();
+				expect(server.isRunning()).toBe(false);
+			} finally {
+				internal.app.listen = originalListen;
+				internal.app.close = originalClose;
+				internal.app.server = originalServer;
+			}
+		});
+
+		test.serial("should throw when start fails", async () => {
+			const internal = server as unknown as {
+				app: {
+					listen: (opts: unknown) => Promise<void>;
+				};
+			};
+			const originalListen = internal.app.listen;
+			internal.app.listen = (async () => {
+				throw new Error("listen failed");
+			}) as typeof internal.app.listen;
+
+			try {
+				await expect(server.start()).rejects.toThrow(/listen failed/i);
+			} finally {
+				internal.app.listen = originalListen;
+			}
+		});
 	});
 
 	describe("Authentication", () => {
@@ -259,6 +314,28 @@ describe("AgentHttpServer", () => {
 			expect(data.requestId).toBeDefined();
 			expect(data.workspace).toBe("test-workspace");
 			expect(data.status).toBe("queued");
+		});
+
+		test.serial("should mark request failed when executeCommand promise rejects", async () => {
+			(server as unknown as { executeCommand: () => Promise<never> }).executeCommand = () =>
+				Promise.reject(new Error("simulated rejection"));
+
+			const response = await injectJson(server, {
+				method: "POST",
+				url: "/execute",
+				apiKey: "test-api-key",
+				payload: { workspace: "reject-workspace", command: "echo 'hello'" },
+			});
+
+			expect(response.statusCode).toBe(202);
+			const data = response.json();
+			expect(data.requestId).toBeDefined();
+
+			// allow async .catch branch to update tracker state
+			await new Promise((resolve) => setTimeout(resolve, 20));
+			const state = await requestTracker.getRequest(data.requestId as string);
+			expect(state?.state).toBe("failed");
+			expect(state?.error).toContain("simulated rejection");
 		});
 	});
 

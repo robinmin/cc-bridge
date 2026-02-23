@@ -3,10 +3,10 @@
     {
       "name": "code-reviewer",
       "plugin": "superpowers@claude-plugins-official",
-      "version": "4.3.0",
+      "version": "4.3.1",
       "description": "|",
       "model": "inherit",
-      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/superpowers/4.3.0/agents/code-reviewer.md"
+      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/superpowers/4.3.1/agents/code-reviewer.md"
     },
     {
       "name": "code-simplifier",
@@ -543,23 +543,23 @@
     {
       "name": "execute-plan",
       "plugin": "superpowers@claude-plugins-official",
-      "version": "4.3.0",
+      "version": "4.3.1",
       "description": "Execute plan in batches with review checkpoints",
-      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/superpowers/4.3.0/commands/execute-plan.md"
+      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/superpowers/4.3.1/commands/execute-plan.md"
     },
     {
       "name": "write-plan",
       "plugin": "superpowers@claude-plugins-official",
-      "version": "4.3.0",
+      "version": "4.3.1",
       "description": "Create detailed implementation plan with bite-sized tasks",
-      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/superpowers/4.3.0/commands/write-plan.md"
+      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/superpowers/4.3.1/commands/write-plan.md"
     },
     {
       "name": "brainstorm",
       "plugin": "superpowers@claude-plugins-official",
-      "version": "4.3.0",
+      "version": "4.3.1",
       "description": "You MUST use this before any creative work - creating features, building components, adding functionality, or modifying behavior. Explores requirements and design before implementation.",
-      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/superpowers/4.3.0/commands/brainstorm.md"
+      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/superpowers/4.3.1/commands/brainstorm.md"
     },
     {
       "name": "help",
@@ -1067,100 +1067,100 @@
     {
       "name": "using-git-worktrees",
       "plugin": "superpowers@claude-plugins-official",
-      "version": "4.3.0",
+      "version": "4.3.1",
       "description": "Use when starting feature work that needs isolation from current workspace or before executing implementation plans - creates isolated git worktrees with smart directory selection and safety verification",
-      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/superpowers/4.3.0/skills/using-git-worktrees/SKILL.md"
+      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/superpowers/4.3.1/skills/using-git-worktrees/SKILL.md"
     },
     {
       "name": "test-driven-development",
       "plugin": "superpowers@claude-plugins-official",
-      "version": "4.3.0",
+      "version": "4.3.1",
       "description": "Use when implementing any feature or bugfix, before writing implementation code",
-      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/superpowers/4.3.0/skills/test-driven-development/SKILL.md"
+      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/superpowers/4.3.1/skills/test-driven-development/SKILL.md"
     },
     {
       "name": "systematic-debugging",
       "plugin": "superpowers@claude-plugins-official",
-      "version": "4.3.0",
+      "version": "4.3.1",
       "description": "Use when encountering any bug, test failure, or unexpected behavior, before proposing fixes",
-      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/superpowers/4.3.0/skills/systematic-debugging/SKILL.md"
+      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/superpowers/4.3.1/skills/systematic-debugging/SKILL.md"
     },
     {
       "name": "using-superpowers",
       "plugin": "superpowers@claude-plugins-official",
-      "version": "4.3.0",
+      "version": "4.3.1",
       "description": "Use when starting any conversation - establishes how to find and use skills, requiring Skill tool invocation before ANY response including clarifying questions",
-      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/superpowers/4.3.0/skills/using-superpowers/SKILL.md"
+      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/superpowers/4.3.1/skills/using-superpowers/SKILL.md"
     },
     {
       "name": "dispatching-parallel-agents",
       "plugin": "superpowers@claude-plugins-official",
-      "version": "4.3.0",
+      "version": "4.3.1",
       "description": "Use when facing 2+ independent tasks that can be worked on without shared state or sequential dependencies",
-      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/superpowers/4.3.0/skills/dispatching-parallel-agents/SKILL.md"
+      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/superpowers/4.3.1/skills/dispatching-parallel-agents/SKILL.md"
     },
     {
       "name": "executing-plans",
       "plugin": "superpowers@claude-plugins-official",
-      "version": "4.3.0",
+      "version": "4.3.1",
       "description": "Use when you have a written implementation plan to execute in a separate session with review checkpoints",
-      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/superpowers/4.3.0/skills/executing-plans/SKILL.md"
+      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/superpowers/4.3.1/skills/executing-plans/SKILL.md"
     },
     {
       "name": "finishing-a-development-branch",
       "plugin": "superpowers@claude-plugins-official",
-      "version": "4.3.0",
+      "version": "4.3.1",
       "description": "Use when implementation is complete, all tests pass, and you need to decide how to integrate the work - guides completion of development work by presenting structured options for merge, PR, or cleanup",
-      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/superpowers/4.3.0/skills/finishing-a-development-branch/SKILL.md"
+      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/superpowers/4.3.1/skills/finishing-a-development-branch/SKILL.md"
     },
     {
       "name": "brainstorming",
       "plugin": "superpowers@claude-plugins-official",
-      "version": "4.3.0",
+      "version": "4.3.1",
       "description": "You MUST use this before any creative work - creating features, building components, adding functionality, or modifying behavior. Explores user intent, requirements and design before implementation.",
-      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/superpowers/4.3.0/skills/brainstorming/SKILL.md"
+      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/superpowers/4.3.1/skills/brainstorming/SKILL.md"
     },
     {
       "name": "writing-plans",
       "plugin": "superpowers@claude-plugins-official",
-      "version": "4.3.0",
+      "version": "4.3.1",
       "description": "Use when you have a spec or requirements for a multi-step task, before touching code",
-      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/superpowers/4.3.0/skills/writing-plans/SKILL.md"
+      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/superpowers/4.3.1/skills/writing-plans/SKILL.md"
     },
     {
       "name": "requesting-code-review",
       "plugin": "superpowers@claude-plugins-official",
-      "version": "4.3.0",
+      "version": "4.3.1",
       "description": "Use when completing tasks, implementing major features, or before merging to verify work meets requirements",
-      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/superpowers/4.3.0/skills/requesting-code-review/SKILL.md"
+      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/superpowers/4.3.1/skills/requesting-code-review/SKILL.md"
     },
     {
       "name": "receiving-code-review",
       "plugin": "superpowers@claude-plugins-official",
-      "version": "4.3.0",
+      "version": "4.3.1",
       "description": "Use when receiving code review feedback, before implementing suggestions, especially if feedback seems unclear or technically questionable - requires technical rigor and verification, not performative agreement or blind implementation",
-      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/superpowers/4.3.0/skills/receiving-code-review/SKILL.md"
+      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/superpowers/4.3.1/skills/receiving-code-review/SKILL.md"
     },
     {
       "name": "writing-skills",
       "plugin": "superpowers@claude-plugins-official",
-      "version": "4.3.0",
+      "version": "4.3.1",
       "description": "Use when creating new skills, editing existing skills, or verifying skills work before deployment",
-      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/superpowers/4.3.0/skills/writing-skills/SKILL.md"
+      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/superpowers/4.3.1/skills/writing-skills/SKILL.md"
     },
     {
       "name": "verification-before-completion",
       "plugin": "superpowers@claude-plugins-official",
-      "version": "4.3.0",
+      "version": "4.3.1",
       "description": "Use when about to claim work is complete, fixed, or passing, before committing or creating PRs - requires running verification commands and confirming output before making any success claims; evidence before assertions always",
-      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/superpowers/4.3.0/skills/verification-before-completion/SKILL.md"
+      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/superpowers/4.3.1/skills/verification-before-completion/SKILL.md"
     },
     {
       "name": "subagent-driven-development",
       "plugin": "superpowers@claude-plugins-official",
-      "version": "4.3.0",
+      "version": "4.3.1",
       "description": "Use when executing implementation plans with independent tasks in the current session",
-      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/superpowers/4.3.0/skills/subagent-driven-development/SKILL.md"
+      "path": "/Users/robin/.claude/plugins/cache/claude-plugins-official/superpowers/4.3.1/skills/subagent-driven-development/SKILL.md"
     },
     {
       "name": "frontend-design",
@@ -1793,6 +1793,6 @@
       "path": "/Users/robin/.claude/plugins/cache/cc-agents/rd2/0.7.2/skills/code-review-opencode/SKILL.md"
     }
   ],
-  "lastUpdated": "2026-02-21T13:58:27.504Z",
+  "lastUpdated": "2026-02-22T15:30:11.883Z",
   "version": "1.0"
 }

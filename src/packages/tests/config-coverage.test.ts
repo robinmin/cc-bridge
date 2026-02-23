@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import fs from "node:fs";
-import { ConfigLoader } from "@/packages/config/index";
+import { ConfigLoader, deepMerge, isRecord } from "@/packages/config/index";
 
 describe("ConfigLoader - Coverage", () => {
 	const defaults = {
@@ -109,5 +109,32 @@ describe("ConfigLoader - Coverage", () => {
 		} finally {
 			cleanup(testConfigPath);
 		}
+	});
+
+	test("should cover deepMerge non-record defaults branch", () => {
+		const testConfigPath = getTestPath("non-record-defaults");
+		try {
+			fs.writeFileSync(testConfigPath, '{"value":"from-config"}', "utf-8");
+			const result = ConfigLoader.load(testConfigPath, "default-value" as unknown as Record<string, unknown>);
+			expect(result).toEqual({ value: "from-config" });
+		} finally {
+			cleanup(testConfigPath);
+		}
+	});
+
+	test("should expose and validate isRecord helper", () => {
+		expect(isRecord({})).toBe(true);
+		expect(isRecord([])).toBe(false);
+		expect(isRecord(null)).toBe(false);
+		expect(isRecord("x")).toBe(false);
+	});
+
+	test("should deepMerge nested objects recursively", () => {
+		const out = deepMerge({ nested: { a: 1, b: 2 }, top: "x" }, { nested: { b: 3 } });
+		expect(out).toEqual({ nested: { a: 1, b: 3 }, top: "x" });
+	});
+
+	test("should expose functional loader API", () => {
+		expect(typeof ConfigLoader.load).toBe("function");
 	});
 });

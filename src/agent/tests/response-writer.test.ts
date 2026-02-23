@@ -215,6 +215,34 @@ describe("ResponseWriter", () => {
 				.catch(() => false);
 			expect(tempExists).toBe(false);
 		});
+
+		test("should tolerate temp cleanup failure after write error", async () => {
+			const originalWriteFile = fs.writeFile;
+			const originalUnlink = fs.unlink;
+
+			(fs as unknown as { writeFile: typeof fs.writeFile }).writeFile = (async () => {
+				throw new Error("write failed");
+			}) as typeof fs.writeFile;
+			(fs as unknown as { unlink: typeof fs.unlink }).unlink = (async () => {
+				throw new Error("cleanup failed");
+			}) as typeof fs.unlink;
+
+			try {
+				await expect(
+					writer.writeResponse(TEST_WORKSPACE, TEST_REQUEST_ID, {
+						requestId: TEST_REQUEST_ID,
+						chatId: TEST_CHAT_ID,
+						workspace: TEST_WORKSPACE,
+						timestamp: new Date().toISOString(),
+						output: "x",
+						exitCode: 0,
+					}),
+				).rejects.toThrow(/failed to write response file/i);
+			} finally {
+				(fs as unknown as { writeFile: typeof fs.writeFile }).writeFile = originalWriteFile;
+				(fs as unknown as { unlink: typeof fs.unlink }).unlink = originalUnlink;
+			}
+		});
 	});
 
 	describe("writeTextResponse", () => {

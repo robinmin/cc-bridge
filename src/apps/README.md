@@ -2,6 +2,20 @@
 
 This directory contains mini-app definitions in markdown format. Each `*.md` file is one mini-app.
 
+Mini-app-specific utilities should live in a same-name folder next to the markdown spec:
+
+```text
+src/apps/<app-id>.md
+src/apps/<app-id>/
+```
+
+Example:
+
+```text
+src/apps/daily-news.md
+src/apps/daily-news/validate_links.ts
+```
+
 ## Quick Start
 
 To create a new mini-app:

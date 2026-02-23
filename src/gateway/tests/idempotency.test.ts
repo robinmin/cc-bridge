@@ -146,4 +146,13 @@ describe("IdempotencyService", () => {
 		expect(req2?.workspace).toBe("workspace-2");
 		expect(req3?.workspace).toBe("workspace-1");
 	});
+
+	test("should cover private cleanup path and stopCleanup idempotency", () => {
+		// cleanupExpired is intentionally minimal for this implementation, but should be callable.
+		expect(() => (service as unknown as { cleanupExpired: () => void }).cleanupExpired()).not.toThrow();
+
+		// stop twice to cover the no-op branch
+		service.stopCleanup();
+		expect(() => service.stopCleanup()).not.toThrow();
+	});
 });

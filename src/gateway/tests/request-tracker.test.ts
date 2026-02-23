@@ -18,6 +18,12 @@ describe("RequestTracker", () => {
 		await rm(testStateDir, { recursive: true, force: true });
 	});
 
+	test("should report running status transitions", async () => {
+		expect(tracker.isRunning()).toBe(true);
+		await tracker.stop();
+		expect(tracker.isRunning()).toBe(false);
+	});
+
 	describe("Request Creation", () => {
 		test("should create request with initial state", async () => {
 			const state = await tracker.createRequest({

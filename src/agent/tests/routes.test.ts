@@ -252,6 +252,45 @@ describe("Agent API Routes", () => {
 			expect(data.stdout.length).toBeGreaterThan(0);
 			expect(data.stdout.length).toBeLessThanOrEqual(10 * 1024 * 1024); // 10MB max
 		});
+
+		test("should truncate output when exceeding max output size", async () => {
+			const res = await app.request("/execute", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					command: "sh",
+					args: ["-c", "yes X | head -c 11000000"],
+				}),
+			});
+
+			expect(res.status).toBe(200);
+			const data = (await res.json()) as ExecuteCommandResponse;
+			expect(data.stdout).toContain("[Output Truncated]");
+		});
+
+		test("should handle request abort signal without hanging", async () => {
+			const controller = new AbortController();
+			const req = new Request("http://localhost/execute", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					command: "sh",
+					args: ["-c", "sleep 5"],
+					timeout: 60000,
+				}),
+				signal: controller.signal,
+			});
+
+			setTimeout(() => controller.abort(), 30);
+			const started = Date.now();
+			const res = await app.fetch(req);
+			const elapsed = Date.now() - started;
+			const data = (await res.json()) as ExecuteCommandResponse;
+
+			expect(res.status).toBe(200);
+			expect(elapsed).toBeLessThan(2000);
+			expect(data.exitCode).not.toBe(0);
+		});
 	});
 
 	describe("POST /execute provider env mapping", () => {
@@ -338,6 +377,79 @@ describe("Agent API Routes", () => {
 				},
 			);
 		});
+
+		test("should map openrouter profile and keep default base url fallback", async () => {
+			await withEnv(
+				{
+					LLM_PROVIDER: "openrouter",
+					LLM_OPENROUTER_API_KEY: "or-key",
+				},
+				async () => {
+					const res = await app.request("/execute", {
+						method: "POST",
+						headers: { "Content-Type": "application/json" },
+						body: JSON.stringify({
+							command: "sh",
+							args: ["-c", 'printf "%s|%s" "$ANTHROPIC_BASE_URL" "$ANTHROPIC_API_KEY"'],
+						}),
+					});
+
+					expect(res.status).toBe(200);
+					const data = (await res.json()) as ExecuteCommandResponse;
+					expect(data.stdout).toBe("https://openrouter.ai/api/v1|or-key");
+				},
+			);
+		});
+
+		test("should map proxy profile to ANTHROPIC_* env for child process", async () => {
+			await withEnv(
+				{
+					LLM_PROVIDER: "proxy",
+					LLM_PROXY_BASE_URL: "https://proxy.example/v1",
+					LLM_PROXY_API_KEY: "proxy-key",
+					LLM_PROXY_AUTH_TOKEN: "proxy-token",
+				},
+				async () => {
+					const res = await app.request("/execute", {
+						method: "POST",
+						headers: { "Content-Type": "application/json" },
+						body: JSON.stringify({
+							command: "sh",
+							args: ["-c", 'printf "%s|%s|%s" "$ANTHROPIC_BASE_URL" "$ANTHROPIC_API_KEY" "$ANTHROPIC_AUTH_TOKEN"'],
+						}),
+					});
+
+					expect(res.status).toBe(200);
+					const data = (await res.json()) as ExecuteCommandResponse;
+					expect(data.stdout).toBe("https://proxy.example/v1|proxy-key|proxy-token");
+				},
+			);
+		});
+
+		test("should use anthropic fallback for unknown provider", async () => {
+			await withEnv(
+				{
+					LLM_PROVIDER: "unknown-provider",
+					LLM_ANTHROPIC_BASE_URL: "https://anthropic.example/v1",
+					LLM_ANTHROPIC_API_KEY: "anthropic-key",
+					LLM_ANTHROPIC_AUTH_TOKEN: "anthropic-token",
+				},
+				async () => {
+					const res = await app.request("/execute", {
+						method: "POST",
+						headers: { "Content-Type": "application/json" },
+						body: JSON.stringify({
+							command: "sh",
+							args: ["-c", 'printf "%s|%s|%s" "$ANTHROPIC_BASE_URL" "$ANTHROPIC_API_KEY" "$ANTHROPIC_AUTH_TOKEN"'],
+						}),
+					});
+
+					expect(res.status).toBe(200);
+					const data = (await res.json()) as ExecuteCommandResponse;
+					expect(data.stdout).toBe("https://anthropic.example/v1|anthropic-key|anthropic-token");
+				},
+			);
+		});
 	});
 
 	describe("POST /fs/list", () => {
@@ -360,6 +472,31 @@ describe("Agent API Routes", () => {
 	});
 
 	describe("Error Handling", () => {
+		test("should handle execute spawn failure", async () => {
+			const originalSpawn = Bun.spawn;
+			(Bun as unknown as { spawn: typeof Bun.spawn }).spawn = (() => {
+				throw new Error("spawn failed");
+			}) as typeof Bun.spawn;
+
+			try {
+				const res = await app.request("/execute", {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({
+						command: "echo",
+						args: ["hello"],
+					}),
+				});
+
+				expect(res.status).toBe(500);
+				const data = (await res.json()) as ExecuteCommandResponse;
+				expect(data.error).toContain("spawn failed");
+				expect(data.exitCode).toBe(-1);
+			} finally {
+				(Bun as unknown as { spawn: typeof Bun.spawn }).spawn = originalSpawn;
+			}
+		});
+
 		test("should handle execute internal error", async () => {
 			const mockApp = new Hono();
 			mockApp.post("/err", async (_c) => {

@@ -319,4 +319,35 @@ describe("FileSystemIpc", () => {
 			expect(response.output.length).toBe(15 * 1024 * 1024);
 		});
 	});
+
+	describe("lifecycle", () => {
+		test("should destroy service and expose destroyed state", () => {
+			expect(ipc.isDestroyed()).toBe(false);
+			ipc.destroy();
+			expect(ipc.isDestroyed()).toBe(true);
+
+			// Idempotent destroy
+			expect(() => ipc.destroy()).not.toThrow();
+		});
+
+		test("should execute periodic cleanup callback and swallow cleanup errors", async () => {
+			const fast = new FileSystemIpc({
+				baseDir: TEST_IPC_DIR,
+				responseTimeout: 200,
+				cleanupInterval: 5,
+				fileTtl: 1000,
+			});
+
+			let invoked = 0;
+			fast.cleanupOrphanedFiles = async () => {
+				invoked++;
+				throw new Error("forced cleanup failure");
+			};
+
+			await new Promise((resolve) => setTimeout(resolve, 20));
+			expect(invoked).toBeGreaterThan(0);
+
+			fast.destroy();
+		});
+	});
 });

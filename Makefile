@@ -13,7 +13,11 @@ BIOME := npx @biomejs/biome
 PACKAGE_NAME := cc-bridge
 
 # Package test files (shared across multiple targets)
-PACKAGES_TESTS := src/packages/tests/config.test.ts src/packages/tests/config-coverage.test.ts src/packages/tests/errors.test.ts src/packages/tests/errors-coverage.test.ts src/packages/tests/logger.test.ts
+PACKAGES_TESTS := src/packages/tests/config.test.ts src/packages/tests/config-coverage.test.ts src/packages/tests/errors.test.ts src/packages/tests/errors-coverage.test.ts src/packages/tests/logger.test.ts src/packages/tests/logger-coverage.test.ts src/packages/tests/logger-internals.test.ts
+PACKAGES_GATE_TESTS := $(PACKAGES_TESTS) src/packages/tests/async.test.ts src/packages/tests/markdown.test.ts src/packages/tests/text.test.ts src/packages/tests/scheduler.test.ts src/packages/tests/validation.test.ts
+GATEWAY_GATE_TESTS := src/gateway/tests/channels-index.test.ts src/gateway/tests/consts.test.ts src/gateway/tests/common.test.tsx src/gateway/tests/host-bot.test.ts src/gateway/tests/bot-router.test.ts src/gateway/tests/callback-schema.test.ts src/gateway/tests/rate-limit.test.ts src/gateway/tests/response-file-reader.test.ts src/gateway/tests/request-utils.test.ts
+COVERAGE_THRESHOLD ?= 90
+COVERAGE_GATE_INCLUDE := src/agent/ src/packages/
 
 # User adaptation variables (moved to src/dockers/.env)
 # USER_NAME, USER_ID, GROUP_ID, WORKSPACE_NAME are now configured in .env
@@ -78,7 +82,7 @@ app-run:
 	@if [ -z "$(APP_ID)" ]; then echo "Usage: make app-run APP_ID=<app-id> [APP_INPUT='...'] [APP_CHAT_ID=<id>] [APP_TIMEOUT_MS=<ms>] [APP_CONCURRENCY=<n>]"; exit 1; fi
 	@MINI_APP_CHAT_ID="$(APP_CHAT_ID)" MINI_APP_TIMEOUT_MS="$(APP_TIMEOUT_MS)" MINI_APP_CONCURRENCY="$(APP_CONCURRENCY)" ./scripts/host_cmd.sh app-run "$(APP_ID)" $(if $(APP_INPUT),"$(APP_INPUT)")
 
-## app-schedule: Register mini-app scheduled task (usage: make app-schedule APP_ID=my-app [APP_SCHEDULE_TYPE=recurring|cron APP_SCHEDULE_VALUE='1h|0 9 * * 1-5' APP_INPUT='...' APP_INSTANCE=cc-bridge])
+## app-schedule: Upsert mini-app scheduled task (usage: make app-schedule APP_ID=my-app [APP_SCHEDULE_TYPE=recurring|cron APP_SCHEDULE_VALUE='1h|0 9 * * 1-5' APP_INPUT='...' APP_INSTANCE=cc-bridge])
 app-schedule:
 	@if [ -z "$(APP_ID)" ]; then echo "Usage: make app-schedule APP_ID=<app-id> [APP_SCHEDULE_TYPE=recurring|cron APP_SCHEDULE_VALUE='1h|0 9 * * 1-5' APP_INPUT='...'] [APP_INSTANCE=cc-bridge]"; exit 1; fi
 	@./scripts/host_cmd.sh app-schedule "$(APP_ID)" "$(APP_SCHEDULE_TYPE)" "$(APP_SCHEDULE_VALUE)" "$(APP_INPUT)" "$(APP_INSTANCE)"
@@ -111,6 +115,27 @@ test:
 	echo ""; \
 	echo "Note: src/packages/tests/ipc_adapter.test.ts skipped - has process.exit() call that kills test runner"; \
 	exit $$exit_code
+
+## test-coverage-gate: Run strict per-file coverage gate (funcs and lines) for maintained unit scope
+test-coverage-gate:
+	@echo "Running per-file coverage gate (threshold: $(COVERAGE_THRESHOLD)%)..."
+	@rm -rf coverage
+	@NODE_ENV=test $(BUN) test src/agent/tests/ $(PACKAGES_GATE_TESTS) --coverage --coverage-reporter=lcov
+	@$(BUN) run src/gateway/testing/check-lcov-threshold.ts --lcov coverage/lcov.info --threshold $(COVERAGE_THRESHOLD) $(foreach p,$(COVERAGE_GATE_INCLUDE),--include $(p))
+
+## test-coverage-gate-gateway: Run strict per-file coverage gate including selected gateway unit scope
+test-coverage-gate-gateway:
+	@echo "Running per-file coverage gate with gateway policy (threshold: $(COVERAGE_THRESHOLD)%)..."
+	@rm -rf coverage
+	@NODE_ENV=test $(BUN) test src/agent/tests/ $(PACKAGES_GATE_TESTS) $(GATEWAY_GATE_TESTS) --coverage --coverage-reporter=lcov
+	@$(BUN) run src/gateway/testing/check-lcov-threshold.ts --lcov coverage/lcov.info --threshold $(COVERAGE_THRESHOLD) --policy src/gateway/testing/coverage-policy.json
+
+## test-coverage-gate-all: Run strict per-file coverage gate across all measured files (very strict)
+test-coverage-gate-all:
+	@echo "Running per-file coverage gate on all measured files (threshold: $(COVERAGE_THRESHOLD)%)..."
+	@rm -rf coverage
+	@NODE_ENV=test $(BUN) test src --coverage --coverage-reporter=lcov
+	@$(BUN) run src/gateway/testing/check-lcov-threshold.ts --lcov coverage/lcov.info --threshold $(COVERAGE_THRESHOLD)
 
 ## test-quick: Run tests without coverage
 test-quick:

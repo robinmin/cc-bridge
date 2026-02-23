@@ -1,9 +1,15 @@
 export class UpdateTracker {
-	private processed: Map<string | number, number> = new Map();
-	private maxEntries = 1000;
-	private ttlMs = 10 * 60 * 1000; // 10 minutes
+	private processed: Map<string | number, number>;
+	private maxEntries: number;
+	private ttlMs: number;
 
-	async isProcessed(updateId: string | number): Promise<boolean> {
+	constructor() {
+		this.processed = new Map();
+		this.maxEntries = 1000;
+		this.ttlMs = 10 * 60 * 1000; // 10 minutes
+	}
+
+	isProcessed(updateId: string | number): Promise<boolean> {
 		const now = Date.now();
 
 		// Periodic cleanup
@@ -16,11 +22,11 @@ export class UpdateTracker {
 		}
 
 		if (this.processed.has(updateId)) {
-			return true;
+			return Promise.resolve(true);
 		}
 
 		this.processed.set(updateId, now);
-		return false;
+		return Promise.resolve(false);
 	}
 }
 

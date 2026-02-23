@@ -1,5 +1,10 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { RateLimiter } from "@/gateway/rate-limiter";
+
+type RateLimiterInternals = {
+	requests: Map<string | number, number[]>;
+	cleanup: () => void;
+};
 
 describe("RateLimiter", () => {
 	let rateLimiter: RateLimiter;
@@ -163,6 +168,28 @@ describe("RateLimiter", () => {
 
 			expect(stats.totalEntries).toBe(2);
 			expect(stats.totalRequests).toBe(2);
+		});
+	});
+
+	describe("internal cleanup branches", () => {
+		test("should prune stale timestamps and emit debug on removed entries", async () => {
+			const debugSpy = spyOn(console, "debug").mockImplementation(() => {});
+			const rl = new RateLimiter(2, 1);
+			const rlInternal = rl as unknown as RateLimiterInternals;
+
+			// Inject old and recent timestamps to cover both delete and replace paths
+			const now = Date.now();
+			rlInternal.requests.set("stale", [now - 5000]);
+			rlInternal.requests.set("mixed", [now - 5000, now]);
+
+			rlInternal.cleanup();
+
+			expect(rlInternal.requests.has("stale")).toBe(false);
+			expect(rlInternal.requests.get("mixed")).toHaveLength(1);
+			expect(debugSpy).toHaveBeenCalled();
+
+			rl.stop();
+			debugSpy.mockRestore();
 		});
 	});
 });

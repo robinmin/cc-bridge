@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import fs from "node:fs/promises";
 import { Hono } from "hono";
+import { ZodError } from "zod";
 import { AGENT_CONSTANTS } from "@/agent/consts";
-import notify from "@/agent/routes/notify";
+import notify, { transformNotifyError } from "@/agent/routes/notify";
 
 describe("Notify Route", () => {
 	const app = new Hono();
@@ -172,6 +173,52 @@ describe("Notify Route", () => {
 			expect(res.status).toBe(400);
 			const data = (await res.json()) as { error?: string };
 			expect(data.error).toContain("Invalid JSON");
+		});
+
+		test("should return 500 when mailbox write fails", async () => {
+			const originalWriteFile = fs.writeFile;
+			(fs as unknown as { writeFile: typeof fs.writeFile }).writeFile = (async () => {
+				throw new Error("disk full");
+			}) as typeof fs.writeFile;
+
+			try {
+				const res = await app.request("/notify", {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({
+						type: "info",
+						chatId: "111",
+						text: "Test notification",
+					}),
+				});
+
+				expect(res.status).toBe(500);
+				const data = (await res.json()) as { error?: string };
+				expect(data.error).toBe("Internal server error");
+			} finally {
+				(fs as unknown as { writeFile: typeof fs.writeFile }).writeFile = originalWriteFile;
+			}
+		});
+	});
+
+	describe("transformNotifyError", () => {
+		test("should convert generic Error", () => {
+			expect(transformNotifyError(new Error("boom"))).toEqual({ error: "boom" });
+		});
+
+		test("should convert unknown values", () => {
+			expect(transformNotifyError("boom")).toEqual({ error: "Unknown error" });
+		});
+
+		test("should format zod issues", () => {
+			const zodErr = new ZodError([
+				{
+					code: "custom",
+					path: [],
+					message: "invalid payload",
+				},
+			]);
+			expect(transformNotifyError(zodErr).error).toContain("root: invalid payload");
 		});
 	});
 });
