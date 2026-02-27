@@ -1,40 +1,13 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { createCipheriv, createHash, randomBytes } from "node:crypto";
 import { Hono } from "hono";
 import type { FeishuChannel } from "@/gateway/channels/feishu";
 import type { TelegramChannel } from "@/gateway/channels/telegram";
 import type { Bot } from "@/gateway/pipeline";
+import { persistence } from "@/gateway/persistence";
+import { rateLimiter } from "@/gateway/rate-limiter";
 import { handleFeishuWebhook, handleTelegramWebhook, handleWebhook } from "@/gateway/routes/webhook";
-
-// Mock dependencies
-const mockPersistence = {
-	getWorkspace: mock(async () => "default-workspace"),
-	storeMessage: mock(async () => {}),
-	setChatChannel: mock(async () => {}),
-};
-
-const mockRateLimiter = {
-	isAllowed: mock(async () => true),
-	getRetryAfter: mock(async () => 60),
-	stop: mock(() => {}),
-};
-
-const mockUpdateTracker = {
-	isProcessed: mock(async () => false),
-};
-
-// Mock the modules
-mock.module("@/gateway/persistence", () => ({
-	persistence: mockPersistence,
-}));
-
-mock.module("@/gateway/rate-limiter", () => ({
-	rateLimiter: mockRateLimiter,
-}));
-
-mock.module("@/gateway/tracker", () => ({
-	updateTracker: mockUpdateTracker,
-}));
+import { updateTracker } from "@/gateway/tracker";
 
 describe("Webhook Routing - handleWebhook", () => {
 	let mockTelegram: TelegramChannel;
@@ -43,8 +16,22 @@ describe("Webhook Routing - handleWebhook", () => {
 	let mockFeishuBots: Bot[];
 	let sendMessageSpy: ReturnType<typeof mock>;
 	let parseWebhookSpy: ReturnType<typeof mock>;
+	let mockPersistence: { setChatChannel: ReturnType<typeof spyOn> };
+	let mockRateLimiter: { isAllowed: ReturnType<typeof spyOn>; getRetryAfter: ReturnType<typeof spyOn> };
+	let mockUpdateTracker: { isProcessed: ReturnType<typeof spyOn> };
 
 	beforeEach(() => {
+		mockPersistence = {
+			setChatChannel: spyOn(persistence, "setChatChannel").mockResolvedValue(undefined),
+		};
+		mockRateLimiter = {
+			isAllowed: spyOn(rateLimiter, "isAllowed").mockResolvedValue(true),
+			getRetryAfter: spyOn(rateLimiter, "getRetryAfter").mockResolvedValue(60),
+		};
+		mockUpdateTracker = {
+			isProcessed: spyOn(updateTracker, "isProcessed").mockResolvedValue(false),
+		};
+
 		sendMessageSpy = mock(async () => {});
 		parseWebhookSpy = mock(() => ({
 			channelId: "test",
@@ -92,10 +79,11 @@ describe("Webhook Routing - handleWebhook", () => {
 	afterEach(() => {
 		sendMessageSpy.mockClear();
 		parseWebhookSpy.mockClear();
-		mockPersistence.getWorkspace.mockClear();
-		mockPersistence.storeMessage.mockClear();
+		mockPersistence.setChatChannel.mockClear();
+		mockRateLimiter.getRetryAfter.mockClear();
 		mockRateLimiter.isAllowed.mockClear();
 		mockUpdateTracker.isProcessed.mockClear();
+		mock.restore();
 	});
 
 	describe("Telegram webhook handling", () => {

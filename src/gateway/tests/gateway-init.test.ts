@@ -1,11 +1,10 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterAll, afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { FeishuChannel } from "@/gateway/channels/feishu";
 import { TelegramChannel } from "@/gateway/channels/telegram";
 import { AgentBot } from "@/gateway/pipeline/agent-bot";
 import { HostBot } from "@/gateway/pipeline/host-bot";
 import { MenuBot } from "@/gateway/pipeline/menu-bot";
 
-// Mock the dependencies
 const mockLogger = {
 	info: mock(() => {}),
 	warn: mock(() => {}),
@@ -24,15 +23,6 @@ const mockConfigLoader = {
 		projectsRoot: "/xprojects",
 	})),
 };
-
-mock.module("@/packages/logger", () => ({
-	logger: mockLogger,
-	setLogLevel: mock(() => {}),
-}));
-
-mock.module("@/packages/config", () => ({
-	ConfigLoader: mockConfigLoader,
-}));
 
 describe("Gateway Initialization - Feishu Channel", () => {
 	let originalEnv: Record<string, string | undefined>;
@@ -66,6 +56,10 @@ describe("Gateway Initialization - Feishu Channel", () => {
 		process.env.FEISHU_APP_ID = originalEnv.FEISHU_APP_ID;
 		process.env.FEISHU_APP_SECRET = originalEnv.FEISHU_APP_SECRET;
 		process.env.FEISHU_DOMAIN = originalEnv.FEISHU_DOMAIN;
+	});
+
+	afterAll(() => {
+		mock.restore();
 	});
 
 	describe("Channel initialization", () => {

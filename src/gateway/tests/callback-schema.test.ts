@@ -50,6 +50,15 @@ describe("callback schemas", () => {
 				workspace: "cc-bridge",
 			}),
 		).toThrow();
+
+		// Hits chatId union errorMap branch (wrong primitive type).
+		expect(() =>
+			CallbackRequestSchema.parse({
+				requestId: "ok_id",
+				chatId: true,
+				workspace: "cc-bridge",
+			}),
+		).toThrow("chatId must be a string or number");
 	});
 
 	test("validates response and callback response schemas", () => {
