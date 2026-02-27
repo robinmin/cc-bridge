@@ -1,4 +1,4 @@
-.PHONY: help all dev test test-quick lint format check status clean \
+.PHONY: help all dev test test-coverage lint format check status clean \
 	gateway-start gateway-stop gateway-restart gateway-install gateway-uninstall logs-monitor \
 	docker-restart docker-stop docker-logs docker-logs-cmd docker-status \
 	talk talk-response msg-sessions msg-health msg-create-session msg-kill-session msg-help \
@@ -11,13 +11,12 @@
 BUN := bun
 BIOME := npx @biomejs/biome
 PACKAGE_NAME := cc-bridge
+TEST_DIRS := src/agent/tests src/packages/tests src/gateway/tests
+ALL_TEST_FILES := $(shell find src -type f \( -name '*.test.ts' -o -name '*.test.tsx' \) | sort)
+COVERAGE_EXCLUDE_TESTS := src/packages/tests/ipc_adapter.test.ts
+COVERAGE_TESTS := $(filter-out $(COVERAGE_EXCLUDE_TESTS),$(ALL_TEST_FILES))
 
-# Package test files (shared across multiple targets)
-PACKAGES_TESTS := src/packages/tests/config.test.ts src/packages/tests/config-coverage.test.ts src/packages/tests/errors.test.ts src/packages/tests/errors-coverage.test.ts src/packages/tests/logger.test.ts src/packages/tests/logger-coverage.test.ts src/packages/tests/logger-internals.test.ts
-PACKAGES_GATE_TESTS := $(PACKAGES_TESTS) src/packages/tests/async.test.ts src/packages/tests/markdown.test.ts src/packages/tests/text.test.ts src/packages/tests/scheduler.test.ts src/packages/tests/validation.test.ts
-GATEWAY_GATE_TESTS := src/gateway/tests/channels-index.test.ts src/gateway/tests/consts.test.ts src/gateway/tests/common.test.tsx src/gateway/tests/host-bot.test.ts src/gateway/tests/bot-router.test.ts src/gateway/tests/callback-schema.test.ts src/gateway/tests/rate-limit.test.ts src/gateway/tests/response-file-reader.test.ts src/gateway/tests/request-utils.test.ts
 COVERAGE_THRESHOLD ?= 90
-COVERAGE_GATE_INCLUDE := src/agent/ src/packages/
 
 # User adaptation variables (moved to src/dockers/.env)
 # USER_NAME, USER_ID, GROUP_ID, WORKSPACE_NAME are now configured in .env
@@ -102,49 +101,23 @@ app-unschedule:
 		exit 1; \
 	fi
 
-## test: Run tests with coverage
+## test: Run tests without coverage
 test:
-	@echo "Running tests with coverage..."
-	@echo ""
-	@exit_code=0; \
-	NODE_ENV=test $(BUN) test src/agent/tests/ --coverage --coverage-reporter=text || exit_code=$$?; \
-	echo ""; \
-	NODE_ENV=test $(BUN) test src/gateway/tests/ --coverage --coverage-reporter=text || { echo "⚠️  Gateway tests have failures (see above)"; exit_code=1; }; \
-	echo ""; \
-	NODE_ENV=test $(BUN) test $(PACKAGES_TESTS) --coverage --coverage-reporter=text || { echo "⚠️  Some package tests failed (see above)"; exit_code=1; }; \
-	echo ""; \
-	echo "Note: src/packages/tests/ipc_adapter.test.ts skipped - has process.exit() call that kills test runner"; \
-	exit $$exit_code
+	@echo "Running tests by folder..."
+	@for d in $(TEST_DIRS); do \
+		echo "Running $$d ..."; \
+		NODE_ENV=test $(BUN) test $$d || exit $$?; \
+	done
 
-## test-coverage-gate: Run strict per-file coverage gate (funcs and lines) for maintained unit scope
-test-coverage-gate:
-	@echo "Running per-file coverage gate (threshold: $(COVERAGE_THRESHOLD)%)..."
+## test-coverage: Run tests with coverage + threshold gate
+test-coverage:
+	@echo "Running tests with coverage ($(TEST_DIRS))..."
 	@rm -rf coverage
-	@NODE_ENV=test $(BUN) test src/agent/tests/ $(PACKAGES_GATE_TESTS) --coverage --coverage-reporter=lcov
-	@$(BUN) run src/gateway/testing/check-lcov-threshold.ts --lcov coverage/lcov.info --threshold $(COVERAGE_THRESHOLD) $(foreach p,$(COVERAGE_GATE_INCLUDE),--include $(p))
-
-## test-coverage-gate-gateway: Run strict per-file coverage gate including selected gateway unit scope
-test-coverage-gate-gateway:
-	@echo "Running per-file coverage gate with gateway policy (threshold: $(COVERAGE_THRESHOLD)%)..."
-	@rm -rf coverage
-	@NODE_ENV=test $(BUN) test src/agent/tests/ $(PACKAGES_GATE_TESTS) $(GATEWAY_GATE_TESTS) --coverage --coverage-reporter=lcov
+	@NODE_ENV=test $(BUN) test $(COVERAGE_TESTS) --max-concurrency=1 --coverage --coverage-reporter=text --coverage-reporter=lcov
+	@echo "Excluded from consolidated coverage run: $(COVERAGE_EXCLUDE_TESTS)"
 	@$(BUN) run src/gateway/testing/check-lcov-threshold.ts --lcov coverage/lcov.info --threshold $(COVERAGE_THRESHOLD) --policy src/gateway/testing/coverage-policy.json
+	@echo "Coverage artifacts generated: coverage/lcov.info"
 
-## test-coverage-gate-all: Run strict per-file coverage gate across all measured files (very strict)
-test-coverage-gate-all:
-	@echo "Running per-file coverage gate on all measured files (threshold: $(COVERAGE_THRESHOLD)%)..."
-	@rm -rf coverage
-	@NODE_ENV=test $(BUN) test src --coverage --coverage-reporter=lcov
-	@$(BUN) run src/gateway/testing/check-lcov-threshold.ts --lcov coverage/lcov.info --threshold $(COVERAGE_THRESHOLD)
-
-## test-quick: Run tests without coverage
-test-quick:
-	@echo "Running tests..."
-	@exit_code=0; \
-	NODE_ENV=test $(BUN) test src/agent/tests/ || exit_code=$$?; \
-	NODE_ENV=test $(BUN) test src/gateway/tests/ || exit_code=$$?; \
-	NODE_ENV=test $(BUN) test $(PACKAGES_TESTS) || exit_code=$$?; \
-	exit $$exit_code
 
 # =============================================================================
 # Code Quality
@@ -166,9 +139,7 @@ check:
 	@exit_code=0; \
 	$(BIOME) check --error-on-warnings src || exit_code=$$?; \
 	echo "Running tests..."; \
-	NODE_ENV=test $(BUN) test src/agent/tests/ --coverage || exit_code=$$?; \
-	NODE_ENV=test $(BUN) test src/gateway/tests/ --coverage || exit_code=$$?; \
-	NODE_ENV=test $(BUN) test $(PACKAGES_TESTS) --coverage || exit_code=$$?; \
+	$(MAKE) test || exit_code=$$?; \
 	if [ $$exit_code -eq 0 ]; then echo "✅ All checks passed!"; fi; \
 	exit $$exit_code
 
