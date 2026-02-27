@@ -6,7 +6,7 @@
   "scripts": {
     "start:agent": "bun run src/agent/index.ts",
     "start:gateway": "bun run src/gateway/index.ts",
-    "test": "make test-quick",
+    "test": "make test",
     "test:coverage:gate": "make test-coverage-gate",
     "test:coverage:gate:gateway": "make test-coverage-gate-gateway",
     "format": "biome format --write src",
