@@ -158,6 +158,8 @@ vite.config.ts.timestamp-*
 /data/ipc
 /data/logs
 /data/gateway.db
-data/uploads/
+/data/uploads/
+/data/debug/
 /data/config/gateway.jsonc
 /data/config/discovery-cache.jsonc
+
