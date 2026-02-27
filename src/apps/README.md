@@ -26,6 +26,11 @@ cp ../gateway/apps/new_app_template.md <your-app-id>.md
 
 Then edit the frontmatter and prompt body.
 
+New execution controls in frontmatter:
+- `execution_engine`: `claude_container` | `claude_host` | `codex_host`
+- `context_mode`: `existing` | `fresh`
+- `engine_command` / `engine_args`: optional command/args override for host engines (`{{prompt}}` placeholder supported)
+
 ## Documentation
 
 - **Template**: `src/gateway/apps/new_app_template.md`

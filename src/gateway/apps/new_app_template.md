@@ -3,8 +3,12 @@ id: new-app
 name: New Mini-App
 description: Short summary of what this mini-app does and why it exists.
 enabled: false
+execution_engine: claude_container
+context_mode: fresh
 instance: cc-bridge
 workspace: cc-bridge
+engine_command:
+engine_args: []
 exec_timeout_ms: 300000
 schedule_type: recurring
 schedule_value: 1h
@@ -28,8 +32,12 @@ List all required and optional inputs.
 - `{{input}}`: operator-provided text (optional)
 
 ### Configuration
+- `execution_engine`: `claude_container` | `claude_host` | `codex_host`
+- `context_mode`: `existing` | `fresh`
 - `instance`: default runtime instance from frontmatter
 - `workspace`: default workspace from frontmatter
+- `engine_command`: optional command override per engine
+- `engine_args`: optional args array. Use `{{prompt}}`, `{{workspace}}`, `{{chat_id}}` placeholders.
 
 ### Data Sources
 - Local files:

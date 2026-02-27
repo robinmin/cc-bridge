@@ -3,10 +3,10 @@ import path from "node:path";
 import { FeishuChannel } from "@/gateway/channels/feishu";
 import { TelegramChannel } from "@/gateway/channels/telegram";
 import { GATEWAY_CONSTANTS } from "@/gateway/consts";
-import { instanceManager } from "@/gateway/instance-manager";
+import { type AgentInstance, instanceManager } from "@/gateway/instance-manager";
 import { persistence } from "@/gateway/persistence";
 import { type BroadcastChannel, type BroadcastTarget, resolveBroadcastTargets } from "@/gateway/services/broadcast";
-import { executeClaudeRaw } from "@/gateway/services/claude-executor";
+import { executeMiniAppPrompt, type ContextMode, type MiniAppExecutionEngine } from "@/gateway/services/execution-engine";
 import { mapWithConcurrency } from "@/packages/async";
 import { ConfigLoader } from "@/packages/config";
 import { logger } from "@/packages/logger";
@@ -25,8 +25,12 @@ export interface MiniAppDefinition {
 	name: string;
 	description?: string;
 	enabled: boolean;
+	executionEngine: MiniAppExecutionEngine;
+	contextMode: ContextMode;
 	instance?: string;
 	workspace?: string;
+	engineCommand?: string;
+	engineArgs?: string[];
 	execTimeoutMs?: number;
 	scheduleType?: "once" | "recurring" | "cron";
 	scheduleValue?: string;
@@ -102,6 +106,20 @@ function parsePositiveInt(value: string | undefined): number | undefined {
 	return parsed;
 }
 
+function parseExecutionEngine(value: FrontmatterValue | undefined): MiniAppExecutionEngine {
+	if (value === "claude_host" || value === "codex_host" || value === "claude_container") {
+		return value;
+	}
+	return "claude_container";
+}
+
+function parseContextMode(value: FrontmatterValue | undefined): ContextMode {
+	if (value === "existing" || value === "fresh") {
+		return value;
+	}
+	return "fresh";
+}
+
 function validateMiniAppFrontmatter(frontmatter: Record<string, FrontmatterValue>, body: string, appId: string): void {
 	const missing = getMissingRequiredFields(frontmatter as Record<string, unknown>, ["id"]);
 	if (missing.length > 0) {
@@ -129,6 +147,23 @@ function validateMiniAppFrontmatter(frontmatter: Record<string, FrontmatterValue
 
 	if (!body.trim()) {
 		throw new Error(`Mini-app "${appId}" body is empty`);
+	}
+
+	const executionEngine = frontmatter.execution_engine;
+	if (
+		typeof executionEngine === "string" &&
+		executionEngine !== "claude_container" &&
+		executionEngine !== "claude_host" &&
+		executionEngine !== "codex_host"
+	) {
+		throw new Error(
+			`Mini-app "${appId}" has invalid "execution_engine": ${executionEngine} (expected claude_container|claude_host|codex_host)`,
+		);
+	}
+
+	const contextMode = frontmatter.context_mode;
+	if (typeof contextMode === "string" && contextMode !== "existing" && contextMode !== "fresh") {
+		throw new Error(`Mini-app "${appId}" has invalid "context_mode": ${contextMode} (expected existing|fresh)`);
 	}
 }
 
@@ -289,7 +324,7 @@ export class MiniAppDriver {
 		const body = stripMarkdownFrontmatter(content);
 		validateMiniAppFrontmatter(frontmatter, body, appId);
 
-		const id = frontmatter.id || appId;
+		const id = typeof frontmatter.id === "string" ? frontmatter.id : appId;
 		const channels = normalizeChannels(parseArray(frontmatter.channels));
 		const chatIds = parseArray(frontmatter.chat_ids);
 		const templateVars = parseArray(frontmatter.template_vars);
@@ -300,8 +335,12 @@ export class MiniAppDriver {
 			name: String(frontmatter.name || id),
 			description: String(frontmatter.description || ""),
 			enabled: parseBool(typeof frontmatter.enabled === "string" ? frontmatter.enabled : undefined, true),
+			executionEngine: parseExecutionEngine(frontmatter.execution_engine),
+			contextMode: parseContextMode(frontmatter.context_mode),
 			instance: typeof frontmatter.instance === "string" ? frontmatter.instance : undefined,
 			workspace: typeof frontmatter.workspace === "string" ? frontmatter.workspace : undefined,
+			engineCommand: typeof frontmatter.engine_command === "string" ? frontmatter.engine_command : undefined,
+			engineArgs: parseArray(frontmatter.engine_args),
 			execTimeoutMs: parsePositiveInt(
 				typeof frontmatter.exec_timeout_ms === "string" ? frontmatter.exec_timeout_ms : undefined,
 			),
@@ -365,12 +404,59 @@ export class MiniAppDriver {
 
 		const timeoutMs =
 			options?.timeoutMs || app.execTimeoutMs || Number.parseInt(process.env.MINI_APP_EXEC_TIMEOUT_MS || "300000", 10);
-		const executionTarget = targets.find((target) => {
-			const instanceName = target.instanceName || app.instance;
-			if (!instanceName) return false;
-			const instance = instanceManager.getInstance(instanceName);
-			return !!instance && instance.status === "running";
-		});
+		const executionEngine = app.executionEngine;
+		const workspaceFallback = app.workspace || "cc-bridge";
+
+		let executionTarget: BroadcastTarget | undefined = targets[0];
+		let instanceName: string | undefined;
+		let instance: AgentInstance | undefined;
+
+		if (executionEngine === "claude_container") {
+			executionTarget = targets.find((target) => {
+				const name = target.instanceName || app.instance;
+				if (!name) return false;
+				const current = instanceManager.getInstance(name);
+				return !!current && current.status === "running";
+			});
+
+			if (!executionTarget) {
+				return {
+					appId: app.id,
+					totalTargets: targets.length,
+					dispatched: 0,
+					succeeded: 0,
+					failed: 0,
+					skipped: targets.length,
+					queued: 0,
+				};
+			}
+
+			instanceName = executionTarget.instanceName || app.instance;
+			if (!instanceName) {
+				throw new Error(`Mini-app "${appId}" has no instance configured`);
+			}
+
+			instance = instanceManager.getInstance(instanceName);
+			if ((!instance || instance.status !== "running") && app.instance && app.instance !== instanceName) {
+				const fallback = instanceManager.getInstance(app.instance);
+				if (fallback && fallback.status === "running") {
+					instanceName = app.instance;
+					instance = fallback;
+				}
+			}
+
+			if (!instance || instance.status !== "running") {
+				return {
+					appId: app.id,
+					totalTargets: targets.length,
+					dispatched: 0,
+					succeeded: 0,
+					failed: 0,
+					skipped: targets.length,
+					queued: 0,
+				};
+			}
+		}
 
 		if (!executionTarget) {
 			return {
@@ -384,35 +470,23 @@ export class MiniAppDriver {
 			};
 		}
 
-		let instanceName = executionTarget.instanceName || app.instance;
-		if (!instanceName) {
-			throw new Error(`Mini-app "${appId}" has no instance configured`);
-		}
-		const workspace = executionTarget.workspace || app.workspace || "cc-bridge";
-		let instance = instanceManager.getInstance(instanceName);
-		if ((!instance || instance.status !== "running") && app.instance && app.instance !== instanceName) {
-			const fallback = instanceManager.getInstance(app.instance);
-			if (fallback && fallback.status === "running") {
-				instanceName = app.instance;
-				instance = fallback;
-			}
-		}
-		if (!instance || instance.status !== "running") {
-			return {
-				appId: app.id,
-				totalTargets: targets.length,
-				dispatched: 0,
-				succeeded: 0,
-				failed: 0,
-				skipped: targets.length,
-				queued: 0,
-			};
+		const workspace = executionTarget.workspace || workspaceFallback;
+		let history: Array<{ sender: string; text: string; timestamp: string }> = [];
+		if (app.contextMode === "existing") {
+			history = await persistence.getHistory(executionTarget.chatId, 11, workspace);
 		}
 
-		const generation = await executeClaudeRaw(instance.containerId, instanceName, launcherPrompt, {
+		const generation = await executeMiniAppPrompt({
+			engine: executionEngine,
+			contextMode: app.contextMode,
+			basePrompt: launcherPrompt,
 			workspace,
 			chatId: executionTarget.chatId,
-			timeout: timeoutMs,
+			history,
+			timeoutMs,
+			instance,
+			engineCommand: app.engineCommand,
+			engineArgs: app.engineArgs?.length ? app.engineArgs : undefined,
 		});
 		if (!generation.success) {
 			throw new Error(generation.error || `Mini-app "${appId}" generation failed`);
@@ -436,10 +510,16 @@ export class MiniAppDriver {
 				"- Every story item must include one source line exactly in this form: 来源：[<媒体简称>](<原始新闻URL>).",
 				"- Source links must be valid article URLs, not dead links or generic pages.",
 			].join("\n");
-			const retryGeneration = await executeClaudeRaw(instance.containerId, instanceName, retryPrompt, {
+			const retryGeneration = await executeMiniAppPrompt({
+				engine: executionEngine,
+				contextMode: "fresh",
+				basePrompt: retryPrompt,
 				workspace,
 				chatId: executionTarget.chatId,
-				timeout: timeoutMs,
+				timeoutMs,
+				instance,
+				engineCommand: app.engineCommand,
+				engineArgs: app.engineArgs?.length ? app.engineArgs : undefined,
 			});
 			if (!retryGeneration.success) {
 				throw new Error(retryGeneration.error || `Mini-app "${appId}" retry generation failed`);
