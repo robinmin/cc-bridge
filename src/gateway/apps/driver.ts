@@ -1,4 +1,4 @@
-import { readdir, readFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { FeishuChannel } from "@/gateway/channels/feishu";
 import { TelegramChannel } from "@/gateway/channels/telegram";
@@ -62,6 +62,7 @@ export interface MiniAppRunResult {
 }
 
 const TELEGRAM_SAFE_CHUNK_SIZE = 3500;
+const MINI_APP_DEBUG_DIR = path.resolve("data/debug/mini-apps");
 const DAILY_NEWS_BOILERPLATE_PATTERNS = [
 	/^based on (my |the )?search results/i,
 	/^based on my retrieval/i,
@@ -218,6 +219,60 @@ function sanitizeMiniAppOutput(appId: string, rawOutput: string): string {
 	}
 
 	return lines.join("\n").trim();
+}
+
+async function persistMiniAppDebugArtifact(params: {
+	appId: string;
+	stage: "generation" | "retry";
+	launcherPrompt?: string;
+	retryPrompt?: string;
+	rawOutput: string;
+	sanitizedOutput: string;
+}): Promise<string | null> {
+	try {
+		await mkdir(MINI_APP_DEBUG_DIR, { recursive: true });
+		const ts = new Date().toISOString().replace(/[:.]/g, "-");
+		const filePath = path.join(MINI_APP_DEBUG_DIR, `${params.appId}-${params.stage}-${ts}.md`);
+		const content = [
+			`# Mini-App Debug Artifact`,
+			`app_id: ${params.appId}`,
+			`stage: ${params.stage}`,
+			`timestamp: ${new Date().toISOString()}`,
+			"",
+			"## Launcher Prompt",
+			"```text",
+			params.launcherPrompt || "",
+			"```",
+			"",
+			"## Retry Prompt",
+			"```text",
+			params.retryPrompt || "",
+			"```",
+			"",
+			"## Raw Output",
+			"```text",
+			params.rawOutput || "",
+			"```",
+			"",
+			"## Sanitized Output",
+			"```text",
+			params.sanitizedOutput || "",
+			"```",
+			"",
+		].join("\n");
+		await writeFile(filePath, content, "utf-8");
+		return filePath;
+	} catch (error) {
+		logger.warn(
+			{
+				appId: params.appId,
+				stage: params.stage,
+				error: error instanceof Error ? error.message : String(error),
+			},
+			"Failed to persist mini-app debug artifact",
+		);
+		return null;
+	}
 }
 
 function isValidDailyNewsOutput(output: string): boolean {
@@ -496,7 +551,17 @@ export class MiniAppDriver {
 			throw new Error(`Mini-app "${appId}" produced empty output`);
 		}
 		if (app.id === "daily-news" && !isValidDailyNewsOutput(output)) {
+			const invalidPath = await persistMiniAppDebugArtifact({
+				appId: app.id,
+				stage: "generation",
+				launcherPrompt,
+				rawOutput: generation.output || "",
+				sanitizedOutput: output,
+			});
 			logger.warn({ appId }, "Daily-news output failed validation; retrying generation with stricter constraints");
+			if (invalidPath) {
+				logger.warn({ appId, artifact: invalidPath }, "Daily-news invalid generation artifact saved");
+			}
 			const retryPrompt = [
 				launcherPrompt,
 				"",
@@ -526,8 +591,16 @@ export class MiniAppDriver {
 			}
 			output = sanitizeMiniAppOutput(app.id, retryGeneration.output || "");
 			if (!output || !isValidDailyNewsOutput(output)) {
+				const retryInvalidPath = await persistMiniAppDebugArtifact({
+					appId: app.id,
+					stage: "retry",
+					launcherPrompt,
+					retryPrompt,
+					rawOutput: retryGeneration.output || "",
+					sanitizedOutput: output,
+				});
 				throw new Error(
-					`Mini-app "${appId}" produced invalid output: must be direct news content with valid 来源 links and no completion/meta summary`,
+					`Mini-app "${appId}" produced invalid output: must be direct news content with valid 来源 links and no completion/meta summary${retryInvalidPath ? ` (artifact: ${retryInvalidPath})` : ""}`,
 				);
 			}
 		}
