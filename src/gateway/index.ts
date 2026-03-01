@@ -14,6 +14,7 @@ import { rateLimiter } from "@/gateway/rate-limiter";
 import { handleCallbackHealth, handleClaudeCallback } from "@/gateway/routes/claude-callback";
 import { handleHealth } from "@/gateway/routes/health";
 import { handleFeishuWebhook, handleTelegramWebhook, handleWebhook } from "@/gateway/routes/webhook";
+import { createMemoryBackend, resolveMemoryConfig } from "@/gateway/memory/manager";
 import { ErrorRecoveryService } from "@/gateway/services/ErrorRecoveryService";
 import { FileCleanupService } from "@/gateway/services/file-cleanup";
 import { FileSystemIpc } from "@/gateway/services/filesystem-ipc";
@@ -54,6 +55,11 @@ setLogLevel(config.logLevel);
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
 const PORT = config.port;
 
+// Phase 1 memory bootstrap (non-invasive, default slot is `none`)
+const memoryConfig = resolveMemoryConfig(config.memory);
+const memoryBackend = createMemoryBackend(memoryConfig, config.projectsRoot || GATEWAY_CONSTANTS.CONFIG.PROJECTS_ROOT);
+logger.info({ memory: memoryBackend.status() }, "Memory backend initialized");
+
 // Feishu/Lark Configuration (from config file or env vars)
 const FEISHU_APP_ID = config.feishu.appId;
 const FEISHU_APP_SECRET = config.feishu.appSecret;
@@ -66,7 +72,7 @@ if (!BOT_TOKEN) {
 
 // Initialize Channels and Bots
 const telegram = new TelegramChannel(BOT_TOKEN);
-const bots = [new MenuBot(telegram), new HostBot(telegram), new AgentBot(telegram)];
+const bots = [new MenuBot(telegram), new HostBot(telegram), new AgentBot(telegram, persistence, config)];
 
 // Initialize Feishu Channel (optional)
 let feishu: FeishuChannel | undefined;
@@ -88,7 +94,7 @@ if (FEISHU_APP_ID && FEISHU_APP_SECRET) {
 
 // Helper function to create bots for a channel
 function createBotsForChannel(channel: TelegramChannel | FeishuChannel) {
-	return [new MenuBot(channel), new HostBot(channel), new AgentBot(channel)];
+	return [new MenuBot(channel), new HostBot(channel), new AgentBot(channel, persistence, config)];
 }
 
 // Initialize Telegram Menu
