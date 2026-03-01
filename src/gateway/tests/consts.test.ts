@@ -96,4 +96,13 @@ describe("Gateway Constants - Feishu Configuration", () => {
 			expect(urls.LARK_API_BASE).toBe("https://open.larksuite.com");
 		});
 	});
+
+	describe("Default memory config", () => {
+		test("should expose memory defaults for phased rollout", () => {
+			expect(GATEWAY_CONSTANTS.DEFAULT_CONFIG).toHaveProperty("memory");
+			expect(GATEWAY_CONSTANTS.DEFAULT_CONFIG.memory.slot).toBe("none");
+			expect(GATEWAY_CONSTANTS.DEFAULT_CONFIG.memory.citations).toBe("auto");
+			expect(GATEWAY_CONSTANTS.DEFAULT_CONFIG.memory.loadPolicy.groupLoadLongTerm).toBe(false);
+		});
+	});
 });
