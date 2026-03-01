@@ -83,6 +83,22 @@ export const GATEWAY_CONSTANTS = {
 			retentionHours: 24,
 			storageDir: "data/uploads",
 		},
+		memory: {
+			slot: "none",
+			citations: "auto",
+			loadPolicy: {
+				groupLoadLongTerm: false,
+			},
+			flush: {
+				enabled: true,
+				softThresholdTokens: 4000,
+			},
+			builtin: {
+				index: {
+					enabled: true,
+				},
+			},
+		},
 	},
 	FILESYSTEM_IPC: {
 		BASE_DIR: process.env.IPC_BASE_DIR || "data/ipc",
