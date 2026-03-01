@@ -1,7 +1,7 @@
 # CC-Bridge Architecture Specification
 
-**Version**: 2.0.0
-**Last Updated**: 2025-02-07
+**Version**: 2.2.0
+**Last Updated**: 2026-02-28
 **Status**: Production Ready
 
 ---
@@ -10,8 +10,12 @@
 
 CC-Bridge is a **Telegram/Lark-to-Claude Code bridge** built with **Bun/Hono** that enables remote interaction with Claude Code through popular messaging platforms. The system features a **decoupled, service-oriented design** with a **Gateway Service** and **Container Agent**.
 
-### Key Architectural Changes (v2.0)
+### Key Architectural Changes (v2.1)
 
+- **Pluggable Memory System**: Markdown-canonical agent memory with `.memory/SOUL.md`, `.memory/USER.md`, `.memory/MEMORY.md`, and daily `.memory/daily/YYYY-MM-DD.md` files
+- **Memory Backend Abstraction**: Slot-based backends (`builtin` | `none` | `external`) with automatic fallback on failure
+- **Policy-Driven Prompt Loading**: Context-aware memory injection (private vs group) with configurable overrides
+- **Memory Write Triggers**: Automatic capture of durable preferences, decisions, and pre-compaction flush hints
 - **Multi-Mode IPC**: Factory pattern supporting TCP, Unix socket, Docker exec, Host, and Remote backends
 - **Circuit Breaker**: Resilience pattern with failure tracking and automatic fallback
 - **Async Callback Mode**: Tmux-based persistent sessions for long-running operations
@@ -31,6 +35,7 @@ graph TD
     CF <--> Gateway["Gateway Service (Bun/Hono)"]
 
     Gateway ---|SQLite| DB[("Persistence Layer")]
+    Gateway ---|Memory| Mem["Memory System"]
     Gateway ---|Circuit Breaker| IPC["IPC Factory"]
 
     subgraph Host["Host Machine"]
@@ -102,6 +107,46 @@ stateDiagram-v2
 - **Open**: Circuit tripped, requests fail immediately
 - **Half-Open**: Testing if service has recovered
 
+### 2.4 Memory System
+
+The gateway includes a **pluggable memory system** that provides durable agent memory across conversations.
+
+**Memory Layers (Source of Truth = Markdown):**
+
+| File | Purpose | Load Context |
+|------|---------|-------------|
+| `.memory/SOUL.md` | Agent identity, boundaries, communication style | Private + Group |
+| `.memory/USER.md` | User profile, stable preferences | Private + Group |
+| `.memory/MEMORY.md` | Durable long-term facts/decisions | Private only (by default) |
+| `.memory/daily/YYYY-MM-DD.md` | Daily operational memory log | Private only |
+
+**Memory Backend Slots:**
+
+| Slot | Behavior |
+|------|----------|
+| `none` | Memory disabled; all operations return no-ops |
+| `builtin` | Markdown files + local grep-based search |
+| `external` | Delegates to an `ExternalMemoryProvider`; falls back to `builtin` on failure |
+
+**Load Policy:**
+- **Private/direct contexts**: Load `.memory/SOUL.md`, `.memory/USER.md`, `.memory/MEMORY.md`, today + yesterday daily files
+- **Group/shared contexts**: Load `.memory/SOUL.md`, `.memory/USER.md` only (configurable via `groupLoadLongTerm`)
+
+**Write Policy:**
+- Explicit intent triggers: "remember this", "I prefer", "always use", "decision:", etc.
+- Daily log entries for every conversation turn
+- Pre-compaction flush hint when token estimate exceeds threshold
+
+```mermaid
+graph LR
+    Config["memory.slot config"] --> Factory["createMemoryBackend()"]
+    Factory --> |builtin| Builtin["BuiltinMemoryBackend"]
+    Factory --> |none| None["NoneMemoryBackend"]
+    Factory --> |external| External["ExternalMemoryBackend"]
+    External --> |healthy| Provider["ExternalMemoryProvider"]
+    External --> |unhealthy| Fallback["BuiltinMemoryBackend (fallback)"]
+```
+
 ---
 
 ## 3. Core Components
@@ -168,6 +213,8 @@ AGENT_MODE=http HTTP_PORT=3000
 
 | Service | Purpose | Location |
 |---------|---------|----------|
+| **MemoryManager** | Pluggable agent memory (load, write, search) | `src/gateway/memory/manager.ts` |
+| **MemoryPolicy** | Context-aware load decisions | `src/gateway/memory/policy.ts` |
 | **FileSystemIpc** | Stop hook callbacks | `src/gateway/services/filesystem-ipc.ts` |
 | **FileCleanupService** | Response file cleanup | `src/gateway/services/file-cleanup.ts` |
 | **IdempotencyService** | Duplicate detection | `src/gateway/services/IdempotencyService.ts` |
@@ -369,7 +416,41 @@ FILE_CLEANUP_ENABLED=true
 ENABLE_TMUX=true
 ```
 
-### 8.2 Constants
+### 8.2 Memory Configuration
+
+Add to `data/config/gateway.jsonc`:
+
+```jsonc
+{
+  "memory": {
+    "slot": "builtin",          // "builtin" | "none" | "external"
+    "citations": "auto",        // "auto" | "on" | "off"
+    "loadPolicy": {
+      "groupLoadLongTerm": false // Allow long-term memory in group chats
+    },
+    "flush": {
+      "enabled": true,
+      "softThresholdTokens": 4000
+    },
+    "builtin": {
+      "index": { "enabled": true }
+    }
+  }
+}
+```
+
+**Workspace filesystem contract** (under each workspace root):
+```
+<workspace>/
+  .memory/
+    SOUL.md           # Agent identity
+    USER.md           # User profile
+    MEMORY.md         # Long-term durable facts
+    daily/
+      YYYY-MM-DD.md   # Daily operational memory
+```
+
+### 8.3 Constants
 
 ```typescript
 // Gateway Constants
@@ -389,6 +470,19 @@ GATEWAY_CONSTANTS = {
         BASE_DIR: "/ipc",
         MAX_FILE_SIZE_MB: 100,
         DEFAULT_FILE_TTL_MS: 3600000,
+    },
+    DEFAULT_CONFIG: {
+        memory: {
+            slot: "none",            // "builtin" | "none" | "external"
+            citations: "auto",       // "auto" | "on" | "off"
+            loadPolicy: {
+                groupLoadLongTerm: false,
+            },
+            flush: {
+                enabled: true,
+                softThresholdTokens: 4000,
+            },
+        },
     },
     TMUX: {
         SESSION_PREFIX: "claude",
@@ -503,6 +597,7 @@ make docker-restart
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 2.2.0 | 2026-02-28 | Added pluggable memory system (builtin/none/external backends), policy-driven prompt loading, memory write triggers, flush hints |
 | 2.1.0 | 2026-02-08 | Added Lark/Feishu integration, enhanced logging, and type standardization |
 | 2.0.0 | 2025-02-07 | Major update: IPC factory, circuit breaker, tmux mode, services layer |
 | 1.0.0 | 2026-02-02 | Initial architecture specification |
