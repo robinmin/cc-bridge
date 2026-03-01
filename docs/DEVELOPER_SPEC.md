@@ -1,7 +1,7 @@
 # CC-Bridge Developer Specification
 
-**Version**: 2.2.0
-**Last Updated**: 2026-02-21
+**Version**: 2.3.0
+**Last Updated**: 2026-02-28
 **Status**: Production Ready
 
 ---
@@ -45,7 +45,8 @@ CC-Bridge is a **Bun/Hono-based** Telegram bot bridge that enables remote intera
 2. **Circuit Breaker**: Resilience pattern for fault tolerance
 3. **Chain of Responsibility**: Bot pipeline for request routing
 4. **Service Layer**: Modular services for cross-cutting concerns
-5. **Plaintext Logging**: Clean log format for better DX
+5. **Pluggable Memory System**: Slot-based agent memory with policy-driven context loading
+6. **Plaintext Logging**: Clean log format for better DX
 
 ---
 
@@ -139,6 +140,14 @@ src/
 │   ├── apps/
 │   │   ├── driver.ts           # Mini-app runtime driver
 │   │   └── new_app_template.md # Mini-app template
+│   ├── memory/                 # Agent memory system
+│   │   ├── contracts.ts        # MemoryBackend interface & types
+│   │   ├── backend-builtin.ts  # Markdown file-based backend
+│   │   ├── backend-none.ts     # Disabled/no-op backend
+│   │   ├── backend-external.ts # External provider with fallback
+│   │   ├── manager.ts          # Config resolution, bootstrap, write triggers
+│   │   ├── policy.ts           # Load policy (private vs group)
+│   │   └── tools.ts            # Memory get/search tool wrappers
 │   ├── consts.ts               # Constants
 │   ├── persistence.ts          # SQLite persistence
 │   ├── instance-manager.ts     # Docker discovery
@@ -298,7 +307,56 @@ export class CircuitBreakerIpcClient implements IIpcClient {
 }
 ```
 
-### 3.5 Persistence Layer
+### 3.5 Memory System
+
+**Location**: `src/gateway/memory/`
+
+The memory system provides durable, markdown-canonical agent memory with pluggable backends.
+
+```typescript
+// Backend interface (contracts.ts)
+interface MemoryBackend {
+    status(): MemoryStatus;
+    get(pathOrRef: string): Promise<MemoryDocument>;
+    appendDaily(entry: string): Promise<MemoryWriteResult>;
+    upsertLongTerm(entry: string): Promise<MemoryWriteResult>;
+    search(query: string, options?: MemorySearchOptions): Promise<MemorySearchHit[]>;
+    reindex(): Promise<ReindexResult>;
+}
+
+// Create backend from config (manager.ts)
+const backend = createMemoryBackend(config, workspaceRoot);
+
+// Build memory context for prompt injection (manager.ts)
+const context = await buildMemoryBootstrapContext({
+    config, workspaceRoot, isGroupContext: false,
+});
+
+// Persist conversation memory with write triggers (manager.ts)
+await persistConversationMemory({
+    config, workspaceRoot, userText, assistantText, historyForFlush,
+});
+
+// Policy-driven load decisions (policy.ts)
+const decision = getMemoryLoadDecision(isGroupContext, config);
+const isGroup = inferGroupContext("telegram", chatId);
+```
+
+**Backend Implementations:**
+
+| Class | Slot | Behavior |
+|-------|------|----------|
+| `NoneMemoryBackend` | `none` | All operations are no-ops |
+| `BuiltinMemoryBackend` | `builtin` | Reads/writes markdown files, grep-based search |
+| `ExternalMemoryBackend` | `external` | Delegates to `ExternalMemoryProvider`, falls back to builtin on failure |
+
+**Integration Points:**
+- `AgentBot.handle()`: Injects memory context into prompts via `buildMemoryBootstrapContext()`
+- `AgentBot.persistMemoryForMessage()`: Writes daily + long-term memory after each turn
+- `executeMiniAppPrompt()`: Injects memory context for mini-app execution
+- `index.ts`: Initializes memory backend at startup, logs status
+
+### 3.6 Persistence Layer
 
 **Location**: `src/gateway/persistence.ts`
 **Default DB File**: `data/gateway.db`
@@ -333,7 +391,7 @@ export class PersistenceManager {
 }
 ```
 
-### 3.6 Tmux Manager
+### 3.7 Tmux Manager
 
 **Location**: `src/gateway/services/tmux-manager.ts`
 
@@ -364,7 +422,7 @@ export class TmuxManager {
 }
 ```
 
-### 3.7 Mini-App Driver
+### 3.8 Mini-App Driver
 
 **Locations**:
 - Runtime driver: `src/gateway/apps/driver.ts`
@@ -467,7 +525,33 @@ export type { IIpcClient, IpcRequest, IpcResponse, IpcMethod } from "./types";
 export type { AnyBackend, ContainerBackend, HostBackend, RemoteBackend } from "./backends";
 ```
 
-### 5.2 Services Layer
+### 5.2 Memory Package
+
+**Exports** (`src/gateway/memory/`):
+```typescript
+// Contracts
+export type { MemoryBackend, MemoryConfig, MemorySlot, MemoryStatus,
+    MemoryDocument, MemoryWriteResult, MemorySearchHit } from "./contracts";
+
+// Backends
+export { NoneMemoryBackend } from "./backend-none";
+export { BuiltinMemoryBackend } from "./backend-builtin";
+export { ExternalMemoryBackend, StubExternalProvider } from "./backend-external";
+export type { ExternalMemoryProvider } from "./backend-external";
+
+// Manager
+export { resolveMemoryConfig, createMemoryBackend, buildMemoryBootstrapContext,
+    persistConversationMemory, shouldCaptureLongTermMemory,
+    shouldTriggerMemoryFlush } from "./manager";
+
+// Policy
+export { getMemoryLoadDecision, inferGroupContext } from "./policy";
+
+// Tools
+export { memoryGet, memorySearch } from "./tools";
+```
+
+### 5.3 Services Layer
 
 ```typescript
 // Claude Executor
@@ -592,6 +676,7 @@ src/
 │   ├── host-bot.test.ts
 │   ├── mailbox-watcher.test.ts
 │   ├── persistence.test.ts
+│   ├── memory-manager.test.ts
 │   ├── telegram.test.ts
 │   └── integration/
 │       └── ...
@@ -854,6 +939,7 @@ export class MyService {
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 2.3.0 | 2026-02-28 | Added memory system documentation: contracts, backends (builtin/none/external), policy, manager, tools, write triggers |
 | 2.2.0 | 2026-02-21 | Updated architecture/module docs for mini-app driver, package refactors, webhook routing, and current make targets |
 | 2.0.0 | 2025-02-07 | Complete rewrite for Bun/Hono architecture, IPC factory, circuit breaker |
 | 1.0.0 | 2026-02-02 | Initial developer spec |
