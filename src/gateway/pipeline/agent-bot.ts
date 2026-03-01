@@ -1,9 +1,13 @@
+import path from "node:path";
 import type { Channel } from "@/gateway/channels";
 import { instanceManager } from "@/gateway/instance-manager";
 import { persistence } from "@/gateway/persistence";
 import { discoveryCache } from "@/gateway/services/discovery-cache";
 import { SessionPoolService } from "@/gateway/services/SessionPoolService";
 import { TmuxManager } from "@/gateway/services/tmux-manager";
+import { GATEWAY_CONSTANTS } from "@/gateway/consts";
+import { buildMemoryBootstrapContext, persistConversationMemory, resolveMemoryConfig } from "@/gateway/memory/manager";
+import { inferGroupContext } from "@/gateway/memory/policy";
 import { logger } from "@/packages/logger";
 import { renderTemplate } from "@/packages/template";
 import {
@@ -34,11 +38,21 @@ export class AgentBot implements Bot {
 	// Per-container session pools (key: containerId)
 	private sessionPools: Map<string, SessionPoolService> = new Map();
 	private tmuxManager = new TmuxManager();
+	private memoryConfig = resolveMemoryConfig(GATEWAY_CONSTANTS.DEFAULT_CONFIG.memory);
+	private projectsRoot = GATEWAY_CONSTANTS.CONFIG.PROJECTS_ROOT;
 
 	constructor(
 		private channel: Channel,
 		private persistenceManager = persistence,
-	) {}
+		options?: { projectsRoot?: string; memory?: unknown },
+	) {
+		if (options?.projectsRoot) {
+			this.projectsRoot = options.projectsRoot;
+		}
+		if (options?.memory) {
+			this.memoryConfig = resolveMemoryConfig(options.memory);
+		}
+	}
 
 	getMenus() {
 		return AgentBot.MENU_COMMANDS;
@@ -233,6 +247,7 @@ export class AgentBot implements Bot {
 
 			// Store user message (workspace-specific) - response will be stored via callback
 			await this.persistenceManager.storeMessage(message.chatId, "user", message.text, workspace);
+			await this.persistMemoryForMessage(message, workspace, history);
 
 			return true;
 		}
@@ -243,6 +258,7 @@ export class AgentBot implements Bot {
 
 			// Store agent response (workspace-specific)
 			await this.persistenceManager.storeMessage(message.chatId, "agent", result.output, workspace);
+			await this.persistMemoryForMessage(message, workspace, history, result.output);
 			return true;
 		}
 
@@ -251,6 +267,41 @@ export class AgentBot implements Bot {
 		await this.channel.sendMessage(message.chatId, `❌ Error: ${errorMsg}`);
 
 		return true;
+	}
+
+	private async persistMemoryForMessage(
+		message: Message,
+		workspace: string,
+		history: Array<{ sender: string; text: string; timestamp: string }>,
+		assistantText?: string,
+	): Promise<void> {
+		try {
+			const workspacePath = path.join(this.projectsRoot, workspace);
+			const stats = await persistConversationMemory({
+				config: this.memoryConfig,
+				workspaceRoot: workspacePath,
+				userText: message.text,
+				assistantText,
+				historyForFlush: history,
+			});
+			logger.debug(
+				{
+					chatId: message.chatId,
+					workspace,
+					memory: stats,
+				},
+				"Conversation memory persistence processed",
+			);
+		} catch (error) {
+			logger.warn(
+				{
+					chatId: message.chatId,
+					workspace,
+					error: error instanceof Error ? error.message : String(error),
+				},
+				"Conversation memory persistence failed (non-fatal)",
+			);
+		}
 	}
 
 	/**
@@ -385,6 +436,15 @@ export class AgentBot implements Bot {
 		history: Array<{ sender: string; text: string; timestamp: string }>,
 		workspace: string,
 	): Promise<ClaudeExecutionResultOrAsync> {
+		const workspacePath = path.join(this.projectsRoot, workspace);
+		const isGroupContext = inferGroupContext(message.channelId, message.chatId);
+		const memoryContext = await buildMemoryBootstrapContext({
+			config: this.memoryConfig,
+			workspaceRoot: workspacePath,
+			isGroupContext,
+		});
+		const effectivePrompt = memoryContext ? `${memoryContext}\n\nUser request:\n${message.text}` : message.text;
+
 		const config: ClaudeExecutionConfigExtended = {
 			allowDangerouslySkipPermissions: true,
 			allowedTools: "*",
@@ -400,7 +460,7 @@ export class AgentBot implements Bot {
 		);
 
 		// Execute Claude (sync or async mode based on ENABLE_TMUX)
-		let result = await executeClaude(instance.containerId, instance.name, message.text, config);
+		let result = await executeClaude(instance.containerId, instance.name, effectivePrompt, config);
 
 		// For async mode, return immediately (no retry logic needed)
 		if (isAsyncResult(result)) {
@@ -420,7 +480,7 @@ export class AgentBot implements Bot {
 			const refreshedInstance = instances.find((i) => i.name === instance.name);
 
 			if (refreshedInstance && refreshedInstance.status === "running") {
-				result = await executeClaude(refreshedInstance.containerId, refreshedInstance.name, message.text, config);
+				result = await executeClaude(refreshedInstance.containerId, refreshedInstance.name, effectivePrompt, config);
 			}
 		}
 
