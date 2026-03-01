@@ -1,7 +1,7 @@
 # CC-Bridge User Manual
 
-**Version**: 2.2.0
-**Last Updated**: 2026-02-21
+**Version**: 2.3.0
+**Last Updated**: 2026-02-28
 **Status**: Production Ready
 
 ---
@@ -36,6 +36,7 @@ CC-Bridge is a **Telegram/Lark(Feishu) bot bridge** that enables you to interact
 - ✅ **Multiple Workspaces**: Switch between different projects seamlessly
 - ✅ **Async Mode**: Long-running operations via tmux sessions
 - ✅ **File Operations**: Full read/write/edit capabilities through Claude Code
+- ✅ **Agent Memory**: Durable memory system with SOUL/USER/MEMORY files and daily logs
 - ✅ **Session Management**: Persistent sessions with conversation history
 - ✅ **Cross-platform**: Works on macOS, Linux, and Windows (via Docker)
 
@@ -142,7 +143,20 @@ The gateway uses a JSONC configuration file:
   // Services
   "ipcPollInterval": 1000,
   "refreshInterval": 30000,
-  "projectsRoot": "/Users/yourname/xprojects"
+  "projectsRoot": "/Users/yourname/xprojects",
+
+  // Agent Memory System
+  "memory": {
+    "slot": "none",              // "builtin" | "none" | "external"
+    "citations": "auto",         // "auto" | "on" | "off"
+    "loadPolicy": {
+      "groupLoadLongTerm": false // Include .memory/MEMORY.md in group chats
+    },
+    "flush": {
+      "enabled": true,
+      "softThresholdTokens": 4000
+    }
+  }
 }
 ```
 
@@ -505,7 +519,53 @@ mkdir -p workspaces/another-project
 /ws_switch another-project
 ```
 
-### 7.3 Direct Docker Execution
+### 7.3 Agent Memory System
+
+CC-Bridge includes a pluggable memory system that allows the agent to remember context across conversations.
+
+**Enabling Memory:**
+
+Set `memory.slot` to `"builtin"` in your `data/config/gateway.jsonc`:
+
+```jsonc
+{
+  "memory": {
+    "slot": "builtin"
+  }
+}
+```
+
+**Memory Files (per workspace):**
+
+| File | Purpose |
+|------|---------|
+| `.memory/SOUL.md` | Agent identity and communication style |
+| `.memory/USER.md` | Your profile and stable preferences |
+| `.memory/MEMORY.md` | Long-term facts and decisions |
+| `.memory/daily/YYYY-MM-DD.md` | Daily conversation log |
+
+**Automatic Write Triggers:**
+
+The agent automatically saves to memory when you say things like:
+- "Remember this..."
+- "I prefer..."
+- "Always use..."
+- "Never use..."
+- "Decision: ..."
+
+**Private vs Group Chats:**
+- **Private chats**: Full memory loaded (SOUL, USER, MEMORY, daily files)
+- **Group chats**: Only SOUL and USER loaded by default (configurable via `groupLoadLongTerm`)
+
+**Memory Backends:**
+
+| Slot | Description |
+|------|-------------|
+| `none` | Memory disabled (default) |
+| `builtin` | Markdown files with local search |
+| `external` | Custom external provider with automatic fallback |
+
+### 7.4 Direct Docker Execution
 
 Test without Telegram:
 
@@ -513,7 +573,7 @@ Test without Telegram:
 make talk MSG="Explain the IPC architecture"
 ```
 
-### 7.4 Container Shell Access
+### 7.5 Container Shell Access
 
 ```bash
 # Show container status and running processes
@@ -523,7 +583,7 @@ make docker-status
 make docker-logs
 ```
 
-### 7.5 Performance Tuning
+### 7.6 Performance Tuning
 
 **IPC Method Selection:**
 
@@ -657,6 +717,7 @@ make lint
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 2.3.0 | 2026-02-28 | Added agent memory system documentation: configuration, memory files, write triggers, backend slots |
 | 2.2.0 | 2026-02-21 | Updated make/command reference, added mini-app lifecycle workflow, aligned slash commands with current bot behavior |
 | 2.1.0 | 2026-02-08 | Added Lark/Feishu support, configuration guide, and environment reference |
 | 2.0.0 | 2025-02-07 | Complete rewrite for Docker-first workflow, TCP IPC, make commands |
