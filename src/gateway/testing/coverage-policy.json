@@ -4,6 +4,7 @@
     "src/packages/",
     "src/gateway/channels/index.ts",
     "src/gateway/consts.ts",
+    "src/gateway/memory/",
     "src/gateway/output/common.tsx",
     "src/gateway/pipeline/host-bot.ts",
     "src/gateway/pipeline/bot-router.ts",
