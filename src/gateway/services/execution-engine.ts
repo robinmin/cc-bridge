@@ -2,6 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import type { AgentInstance } from "@/gateway/instance-manager";
 import { GATEWAY_CONSTANTS } from "@/gateway/consts";
+import { buildMemoryBootstrapContext, resolveMemoryConfig } from "@/gateway/memory/manager";
+import { inferGroupContext } from "@/gateway/memory/policy";
 import {
 	type ClaudeExecutionConfig,
 	type ClaudeExecutionResult,
@@ -171,6 +173,14 @@ function buildCodexHostCommandArgs(prompt: string, request: MiniAppExecutionRequ
 
 export async function executeMiniAppPrompt(request: MiniAppExecutionRequest): Promise<ClaudeExecutionResult> {
 	const prompt = buildEnginePrompt(request.engine, request.contextMode, request.basePrompt, request.history);
+	const memoryConfig = resolveMemoryConfig(GATEWAY_CONSTANTS.DEFAULT_CONFIG.memory);
+	const isGroupContext = inferGroupContext("telegram", request.chatId ?? "");
+	const memoryContext = await buildMemoryBootstrapContext({
+		config: memoryConfig,
+		workspaceRoot: path.join(GATEWAY_CONSTANTS.CONFIG.PROJECTS_ROOT, request.workspace),
+		isGroupContext,
+	});
+	const effectivePrompt = memoryContext ? `${memoryContext}\n\nUser request:\n${prompt}` : prompt;
 
 	if (request.engine === "claude_container") {
 		if (!request.instance) {
@@ -189,11 +199,11 @@ export async function executeMiniAppPrompt(request: MiniAppExecutionRequest): Pr
 			args: request.engineArgs,
 		};
 
-		return executeClaudeRaw(request.instance.containerId, request.instance.name, prompt, config);
+		return executeClaudeRaw(request.instance.containerId, request.instance.name, effectivePrompt, config);
 	}
 
 	if (request.engine === "claude_host") {
-		const { command, args } = buildClaudeHostCommandArgs(prompt, request);
+		const { command, args } = buildClaudeHostCommandArgs(effectivePrompt, request);
 		return executeHostCommand({
 			command,
 			args,
@@ -202,7 +212,7 @@ export async function executeMiniAppPrompt(request: MiniAppExecutionRequest): Pr
 		});
 	}
 
-	const { command, args } = buildCodexHostCommandArgs(prompt, request);
+	const { command, args } = buildCodexHostCommandArgs(effectivePrompt, request);
 	return executeHostCommand({
 		command,
 		args,
