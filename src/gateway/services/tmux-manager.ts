@@ -1,4 +1,5 @@
 import { GATEWAY_CONSTANTS } from "@/gateway/consts";
+import { sessionMetadataTracker } from "@/gateway/engine/context-strategy";
 import { logger } from "@/packages/logger";
 
 /**
@@ -317,7 +318,7 @@ export class TmuxManager {
 	}
 
 	/**
-	 * Clear a chat/workspace tmux session if it exists
+	 * Clear a chat/workspace tmux session if it exists (hard reset)
 	 */
 	async clearSession(containerId: string, workspace: string, chatId: string | number): Promise<boolean> {
 		const sessionName = this.generateSessionName(workspace, chatId);
@@ -325,7 +326,69 @@ export class TmuxManager {
 			return false;
 		}
 		await this.killSession(containerId, sessionName);
+		// Clean up metadata
+		sessionMetadataTracker.remove(sessionName);
 		return true;
+	}
+
+	/**
+	 * Soft reset - send /compact to AI and clear tmux scrollback without killing session
+	 * This preserves the session while reducing context
+	 */
+	async softReset(containerId: string, workspace: string, chatId: string | number): Promise<boolean> {
+		const sessionName = this.generateSessionName(workspace, chatId);
+		if (!(await this.sessionExists(containerId, sessionName))) {
+			return false;
+		}
+
+		logger.info({ containerId, sessionName, workspace, chatId }, "Performing soft reset (compact)");
+
+		// Send /compact command to the AI in the session
+		const compactCommand = this.quoteForShell("/compact");
+		const { exitCode: sendExitCode } = await this.execInContainer(containerId, [
+			"tmux",
+			"send-keys",
+			"-t",
+			sessionName,
+			compactCommand,
+			"Enter",
+		]);
+
+		if (sendExitCode !== 0) {
+			logger.warn({ containerId, sessionName }, "Failed to send /compact command during soft reset");
+		}
+
+		// Clear tmux scrollback buffer
+		const { exitCode: clearExitCode } = await this.execInContainer(containerId, [
+			"tmux",
+			"clear-history",
+			"-t",
+			sessionName,
+		]);
+
+		if (clearExitCode !== 0) {
+			logger.warn({ containerId, sessionName }, "Failed to clear tmux history during soft reset");
+		}
+
+		// Mark metadata as reset
+		sessionMetadataTracker.markReset(sessionName);
+
+		logger.info({ containerId, sessionName }, "Soft reset completed");
+		return true;
+	}
+
+	/**
+	 * Get session metadata for context management
+	 */
+	getSessionMetadata(sessionName: string, containerId: string) {
+		return sessionMetadataTracker.getOrCreate(sessionName, containerId);
+	}
+
+	/**
+	 * Increment turn count for a session
+	 */
+	incrementTurnCount(sessionName: string, containerId: string, promptLength: number) {
+		return sessionMetadataTracker.incrementTurnCount(sessionName, containerId, promptLength);
 	}
 
 	/**
