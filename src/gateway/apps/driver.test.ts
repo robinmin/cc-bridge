@@ -2,13 +2,13 @@ import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import * as broadcast from "@/gateway/services/broadcast";
-import * as claudeExecutor from "@/gateway/services/claude-executor";
+import { MiniAppDriver, miniAppDriver, runCli } from "@/gateway/apps/driver";
 import { FeishuChannel } from "@/gateway/channels/feishu";
 import { TelegramChannel } from "@/gateway/channels/telegram";
-import { MiniAppDriver, miniAppDriver, runCli } from "@/gateway/apps/driver";
+import { getExecutionOrchestrator } from "@/gateway/engine/orchestrator";
 import { instanceManager } from "@/gateway/instance-manager";
 import { persistence } from "@/gateway/persistence";
+import * as broadcast from "@/gateway/services/broadcast";
 import { ConfigLoader } from "@/packages/config";
 
 describe("MiniAppDriver", () => {
@@ -203,9 +203,12 @@ Prompt body {{input}}`,
 			status: "running",
 			image: "img",
 		});
-		spyOn(claudeExecutor, "executeClaudeRaw").mockResolvedValue({
-			success: true,
+		spyOn(getExecutionOrchestrator(), "execute").mockResolvedValue({
+			status: "completed",
 			output: "hello from app",
+			exitCode: 0,
+			retryable: false,
+			isTimeout: false,
 		});
 		const tgSend = spyOn(TelegramChannel.prototype, "sendMessage")
 			.mockRejectedValueOnce(new Error("bad markdown"))
@@ -256,9 +259,12 @@ Prompt body`,
 			if (name === "app-inst") return { name, containerId: "cid-app", status: "running", image: "img" };
 			return undefined;
 		});
-		const execSpy = spyOn(claudeExecutor, "executeClaudeRaw").mockResolvedValue({
-			success: true,
+		const execSpy = spyOn(getExecutionOrchestrator(), "execute").mockResolvedValue({
+			status: "completed",
 			output: "ok",
+			exitCode: 0,
+			retryable: false,
+			isTimeout: false,
 		});
 		spyOn(TelegramChannel.prototype, "sendMessage").mockResolvedValue(undefined);
 		spyOn(persistence, "storeMessage").mockResolvedValue(undefined as never);
@@ -266,7 +272,7 @@ Prompt body`,
 		const tempDriver = new MiniAppDriver(appsDir);
 		const result = await tempDriver.runApp("fallback");
 		expect(result.succeeded).toBe(1);
-		expect(execSpy.mock.calls[0]?.[1]).toBe("app-inst");
+		expect(execSpy.mock.calls[0]?.[0].instance.name).toBe("app-inst");
 	});
 
 	test("should fail when generation fails", async () => {
@@ -297,9 +303,12 @@ Prompt body`,
 			status: "running",
 			image: "img",
 		});
-		spyOn(claudeExecutor, "executeClaudeRaw").mockResolvedValue({
-			success: false,
+		spyOn(getExecutionOrchestrator(), "execute").mockResolvedValue({
+			status: "failed",
 			error: "generation failed",
+			exitCode: 1,
+			retryable: false,
+			isTimeout: false,
 		});
 
 		const tempDriver = new MiniAppDriver(appsDir);
@@ -334,14 +343,20 @@ Prompt body`,
 			status: "running",
 			image: "img",
 		});
-		const execSpy = spyOn(claudeExecutor, "executeClaudeRaw")
+		const execSpy = spyOn(getExecutionOrchestrator(), "execute")
 			.mockResolvedValueOnce({
-				success: true,
+				status: "completed",
 				output: "Story without source line",
+				exitCode: 0,
+				retryable: false,
+				isTimeout: false,
 			})
 			.mockResolvedValueOnce({
-				success: true,
+				status: "completed",
 				output: "世界新闻\n来源：[Reuters](https://example.com/story)",
+				exitCode: 0,
+				retryable: false,
+				isTimeout: false,
 			});
 		spyOn(TelegramChannel.prototype, "sendMessage").mockResolvedValue(undefined);
 		spyOn(persistence, "storeMessage").mockResolvedValue(undefined as never);
@@ -380,9 +395,21 @@ Prompt body`,
 			status: "running",
 			image: "img",
 		});
-		spyOn(claudeExecutor, "executeClaudeRaw")
-			.mockResolvedValueOnce({ success: true, output: "first output without source" })
-			.mockResolvedValueOnce({ success: true, output: "still invalid without source links" });
+		spyOn(getExecutionOrchestrator(), "execute")
+			.mockResolvedValueOnce({
+				status: "completed",
+				output: "first output without source",
+				exitCode: 0,
+				retryable: false,
+				isTimeout: false,
+			})
+			.mockResolvedValueOnce({
+				status: "completed",
+				output: "still invalid without source links",
+				exitCode: 0,
+				retryable: false,
+				isTimeout: false,
+			});
 
 		const tempDriver = new MiniAppDriver(appsDir);
 		await expect(tempDriver.runApp("daily-news-bad")).rejects.toThrow(/invalid output/i);
@@ -417,9 +444,12 @@ Prompt body`,
 			status: "running",
 			image: "img",
 		});
-		spyOn(claudeExecutor, "executeClaudeRaw").mockResolvedValue({
-			success: true,
+		spyOn(getExecutionOrchestrator(), "execute").mockResolvedValue({
+			status: "completed",
 			output: "feishu ok",
+			exitCode: 0,
+			retryable: false,
+			isTimeout: false,
 		});
 		const feishuSend = spyOn(FeishuChannel.prototype, "sendMessage").mockResolvedValue(undefined);
 		spyOn(persistence, "storeMessage").mockResolvedValue(undefined as never);
