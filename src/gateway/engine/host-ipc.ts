@@ -183,11 +183,11 @@ export class HostIpcEngine implements IExecutionEngine {
 			// Build the full command
 			const fullCommand = this.buildCommand(params.command, params.args, params.workspace);
 
-			// Send command to tmux session
-			await this.sendToHostSession(sessionName, fullCommand);
+			// Send command to tmux session (pass requestId for temp file naming)
+			await this.sendToHostSession(sessionName, fullCommand, requestId);
 
 			logger.info(
-				{ requestId, sessionName, workspace: params.workspace, command: params.command },
+				{ requestId, sessionName, workspace: params.workspace, command: params.command, promptLength: fullCommand.length },
 				"Prompt sent via tmux to host session",
 			);
 
@@ -271,9 +271,38 @@ export class HostIpcEngine implements IExecutionEngine {
 
 	/**
 	 * Send command to host tmux session
+	 * Uses temp file for long commands to avoid "command too long" error
 	 */
-	private async sendToHostSession(sessionName: string, command: string): Promise<void> {
-		// Escape single quotes for shell
+	private async sendToHostSession(sessionName: string, command: string, requestId: string): Promise<void> {
+		// For long commands, write to temp file first to avoid "command too long"
+		const MAX_DIRECT_LENGTH = 8000; // Conservative limit for tmux send-keys
+
+		if (command.length > MAX_DIRECT_LENGTH) {
+			// Write command to temp file
+			const promptFileSafeId = requestId.replace(/[^a-zA-Z0-9_-]/g, "_");
+			const promptFile = `/tmp/cc-bridge-host-${promptFileSafeId}.sh`;
+
+			// Write file using Bun
+			await Bun.write(promptFile, command);
+
+			// Source the file in tmux
+			const proc = Bun.spawn(
+				["tmux", "send-keys", "-t", sessionName, `bash ${promptFile} && rm -f ${promptFile}`, "C-m"],
+				{
+					stdout: "pipe",
+					stderr: "pipe",
+				},
+			);
+
+			const exitCode = await proc.exited;
+			if (exitCode !== 0) {
+				const stderr = await new Response(proc.stderr).text();
+				throw new Error(`Failed to send keys to tmux session: ${stderr || "Unknown error"}`);
+			}
+			return;
+		}
+
+		// Short command: send directly
 		const escapedCommand = command.replace(/'/g, "'\\''");
 
 		const proc = Bun.spawn(
