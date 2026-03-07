@@ -118,22 +118,16 @@ function main() {
 		.filter((entry) => (include.length > 0 ? include.some((prefix) => entry.file.startsWith(prefix)) : true))
 		.filter((entry) => !exclude.some((prefix) => entry.file.startsWith(prefix)));
 
-	const failed = scoped.filter(
-		(entry) => entry.funcPct < args.threshold || entry.linePct < args.threshold,
-	);
+	const failed = scoped.filter((entry) => entry.funcPct < args.threshold || entry.linePct < args.threshold);
 
 	if (failed.length === 0) {
-		console.log(
-			`Coverage gate passed: ${scoped.length} file(s) >= ${args.threshold}% for funcs and lines.`,
-		);
+		console.log(`Coverage gate passed: ${scoped.length} file(s) >= ${args.threshold}% for funcs and lines.`);
 		return;
 	}
 
 	console.error(`Coverage gate failed: ${failed.length} file(s) below ${args.threshold}%`);
 	for (const entry of failed.sort((a, b) => a.file.localeCompare(b.file))) {
-		console.error(
-			`- ${entry.file} | funcs=${entry.funcPct.toFixed(2)}% | lines=${entry.linePct.toFixed(2)}%`,
-		);
+		console.error(`- ${entry.file} | funcs=${entry.funcPct.toFixed(2)}% | lines=${entry.linePct.toFixed(2)}%`);
 	}
 	process.exit(1);
 }
