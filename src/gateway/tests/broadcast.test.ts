@@ -56,10 +56,7 @@ describe("broadcast service", () => {
 			sendMessage: async (_chatId: string, _text: string) => {},
 		};
 
-		const withFeishu = await broadcastMessage(
-			{ telegram: telegram as never, feishu: feishu as never },
-			"hello",
-		);
+		const withFeishu = await broadcastMessage({ telegram: telegram as never, feishu: feishu as never }, "hello");
 		expect(withFeishu).toEqual({ sent: 2, failed: 1, skipped: 0 });
 
 		const withoutFeishu = await broadcastMessage({ telegram: telegram as never }, "hello");
