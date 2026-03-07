@@ -26,9 +26,8 @@ describe("logger real early coverage", () => {
 		const originalRead = fs.readFileSync;
 		(fs as unknown as { existsSync: typeof fs.existsSync }).existsSync = ((p: fs.PathLike) =>
 			String(p).includes("gateway.jsonc")) as typeof fs.existsSync;
-		(fs as unknown as { readFileSync: typeof fs.readFileSync }).readFileSync =
-			((p: fs.PathOrFileDescriptor) =>
-				String(p).includes("gateway.jsonc") ? '{"logFormat":"json"}' : "{}") as typeof fs.readFileSync;
+		(fs as unknown as { readFileSync: typeof fs.readFileSync }).readFileSync = ((p: fs.PathOrFileDescriptor) =>
+			String(p).includes("gateway.jsonc") ? '{"logFormat":"json"}' : "{}") as typeof fs.readFileSync;
 		expect(detectLogFormat()).toBe("json");
 		(fs as unknown as { existsSync: typeof fs.existsSync }).existsSync = (() => {
 			throw new Error("boom");
