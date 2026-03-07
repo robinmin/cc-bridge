@@ -178,10 +178,10 @@ describe("End-to-End tmux Workflow Integration Tests", () => {
 
 	test("should handle async result detection", async () => {
 		// Verify we can detect async vs sync results
-		const { isAsyncResult } = await import("@/gateway/services/claude-executor");
+		const { isAsyncResult } = await import("@/gateway/engine");
 
-		const asyncResult = { requestId: randomUUID(), mode: "tmux" as const };
-		const syncResult = { success: true, output: "test" };
+		const asyncResult = { requestId: randomUUID(), mode: "tmux" as const, status: "completed" };
+		const syncResult = { success: true, output: "test", status: "completed" };
 
 		expect(isAsyncResult(asyncResult)).toBe(true);
 		expect(isAsyncResult(syncResult)).toBe(false);
