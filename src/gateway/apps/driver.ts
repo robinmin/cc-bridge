@@ -3,10 +3,13 @@ import path from "node:path";
 import { FeishuChannel } from "@/gateway/channels/feishu";
 import { TelegramChannel } from "@/gateway/channels/telegram";
 import { GATEWAY_CONSTANTS } from "@/gateway/consts";
+import type { ExecutionRequest } from "@/gateway/engine/contracts";
+import { getExecutionOrchestrator } from "@/gateway/engine/orchestrator";
 import { type AgentInstance, instanceManager } from "@/gateway/instance-manager";
+import { buildMemoryBootstrapContext, resolveMemoryConfig } from "@/gateway/memory/manager";
+import { inferGroupContext } from "@/gateway/memory/policy";
 import { persistence } from "@/gateway/persistence";
 import { type BroadcastChannel, type BroadcastTarget, resolveBroadcastTargets } from "@/gateway/services/broadcast";
-import { executeMiniAppPrompt, type ContextMode, type MiniAppExecutionEngine } from "@/gateway/services/execution-engine";
 import { mapWithConcurrency } from "@/packages/async";
 import { ConfigLoader } from "@/packages/config";
 import { logger } from "@/packages/logger";
@@ -14,6 +17,12 @@ import { type FrontmatterValue, parseMarkdownFrontmatter, stripMarkdownFrontmatt
 import { renderTemplate } from "@/packages/template";
 import { splitTextChunks } from "@/packages/text";
 import { getMissingRequiredFields } from "@/packages/validation";
+
+// Types previously from execution-engine.ts
+/** Execution engine type for mini-apps */
+export type MiniAppExecutionEngine = "claude_container" | "claude_host" | "codex_host";
+/** Context mode for mini-app execution */
+export type ContextMode = "existing" | "fresh";
 
 const APPS_DIR = path.resolve("src/apps");
 const MINI_APP_TASK_PREFIX = "@miniapp:";
@@ -531,18 +540,41 @@ export class MiniAppDriver {
 			history = await persistence.getHistory(executionTarget.chatId, 11, workspace);
 		}
 
-		const generation = await executeMiniAppPrompt({
-			engine: executionEngine,
-			contextMode: app.contextMode,
-			basePrompt: launcherPrompt,
-			workspace,
-			chatId: executionTarget.chatId,
-			history,
-			timeoutMs,
-			instance,
-			engineCommand: app.engineCommand,
-			engineArgs: app.engineArgs?.length ? app.engineArgs : undefined,
+		// Build effective prompt with memory context
+		const memoryConfig = resolveMemoryConfig(GATEWAY_CONSTANTS.DEFAULT_CONFIG.memory);
+		const isGroupContext = inferGroupContext("telegram", executionTarget.chatId ?? "");
+		const memoryContext = await buildMemoryBootstrapContext({
+			config: memoryConfig,
+			workspaceRoot: path.join(GATEWAY_CONSTANTS.CONFIG.PROJECTS_ROOT, workspace),
+			isGroupContext,
 		});
+		const effectivePrompt = memoryContext ? `${memoryContext}\n\nUser request:\n${launcherPrompt}` : launcherPrompt;
+
+		// Execute via unified orchestrator
+		const request: ExecutionRequest = {
+			prompt: effectivePrompt,
+			options: {
+				timeout: timeoutMs,
+				workspace,
+				chatId: executionTarget.chatId,
+				history,
+				command: app.engineCommand,
+				args: app.engineArgs,
+			},
+			instance,
+		};
+
+		const orchestratorResult = await getExecutionOrchestrator().execute(request);
+
+		// Convert to expected format
+		const generation = {
+			success: orchestratorResult.status === "completed",
+			output: orchestratorResult.output,
+			error: orchestratorResult.error,
+			exitCode: orchestratorResult.exitCode,
+			retryable: orchestratorResult.retryable,
+			isTimeout: orchestratorResult.isTimeout,
+		};
 		if (!generation.success) {
 			throw new Error(generation.error || `Mini-app "${appId}" generation failed`);
 		}
@@ -575,17 +607,27 @@ export class MiniAppDriver {
 				"- Every story item must include one source line exactly in this form: 来源：[<媒体简称>](<原始新闻URL>).",
 				"- Source links must be valid article URLs, not dead links or generic pages.",
 			].join("\n");
-			const retryGeneration = await executeMiniAppPrompt({
-				engine: executionEngine,
-				contextMode: "fresh",
-				basePrompt: retryPrompt,
-				workspace,
-				chatId: executionTarget.chatId,
-				timeoutMs,
+			// Retry with fresh context using orchestrator
+			const retryEffectivePrompt = retryPrompt;
+			const retryRequest: ExecutionRequest = {
+				prompt: retryEffectivePrompt,
+				options: {
+					timeout: timeoutMs,
+					workspace,
+					chatId: executionTarget.chatId,
+				},
 				instance,
-				engineCommand: app.engineCommand,
-				engineArgs: app.engineArgs?.length ? app.engineArgs : undefined,
-			});
+			};
+
+			const retryOrchestratorResult = await getExecutionOrchestrator().execute(retryRequest);
+			const retryGeneration = {
+				success: retryOrchestratorResult.status === "completed",
+				output: retryOrchestratorResult.output,
+				error: retryOrchestratorResult.error,
+				exitCode: retryOrchestratorResult.exitCode,
+				retryable: retryOrchestratorResult.retryable,
+				isTimeout: retryOrchestratorResult.isTimeout,
+			};
 			if (!retryGeneration.success) {
 				throw new Error(retryGeneration.error || `Mini-app "${appId}" retry generation failed`);
 			}
