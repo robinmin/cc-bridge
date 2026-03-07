@@ -1,22 +1,25 @@
+import crypto from "node:crypto";
 import path from "node:path";
 import type { Channel } from "@/gateway/channels";
+import { GATEWAY_CONSTANTS } from "@/gateway/consts";
+import {
+	type ClaudeAsyncExecutionResult,
+	type ClaudeExecutionConfigExtended,
+	type ClaudeExecutionResultOrAsync,
+	isAsyncResult,
+	validateAndSanitizePrompt,
+} from "@/gateway/engine";
+import type { ExecutionRequest } from "@/gateway/engine/contracts";
+import { getExecutionOrchestrator } from "@/gateway/engine/orchestrator";
 import { instanceManager } from "@/gateway/instance-manager";
+import { buildMemoryBootstrapContext, persistConversationMemory, resolveMemoryConfig } from "@/gateway/memory/manager";
+import { inferGroupContext } from "@/gateway/memory/policy";
 import { persistence } from "@/gateway/persistence";
 import { discoveryCache } from "@/gateway/services/discovery-cache";
 import { SessionPoolService } from "@/gateway/services/SessionPoolService";
 import { TmuxManager } from "@/gateway/services/tmux-manager";
-import { GATEWAY_CONSTANTS } from "@/gateway/consts";
-import { buildMemoryBootstrapContext, persistConversationMemory, resolveMemoryConfig } from "@/gateway/memory/manager";
-import { inferGroupContext } from "@/gateway/memory/policy";
 import { logger } from "@/packages/logger";
 import { renderTemplate } from "@/packages/template";
-import {
-	type ClaudeExecutionConfigExtended,
-	type ClaudeExecutionResultOrAsync,
-	executeClaude,
-	isAsyncResult,
-	validateAndSanitizePrompt,
-} from "../services/claude-executor";
 import type { Bot, Message } from "./index";
 
 export class AgentBot implements Bot {
@@ -459,16 +462,43 @@ export class AgentBot implements Bot {
 			"Using workspace for Claude execution",
 		);
 
-		// Execute Claude (sync or async mode based on ENABLE_TMUX)
-		let result = await executeClaude(instance.containerId, instance.name, effectivePrompt, config);
+		// Execute via unified orchestrator
+		const request: ExecutionRequest = {
+			prompt: effectivePrompt,
+			options: {
+				timeout: config.timeout,
+				workspace: config.workspace,
+				chatId: config.chatId,
+				history: config.history,
+				allowDangerouslySkipPermissions: config.allowDangerouslySkipPermissions,
+				allowedTools: config.allowedTools,
+			},
+			containerId: instance.containerId,
+		};
 
-		// For async mode, return immediately (no retry logic needed)
-		if (isAsyncResult(result)) {
+		let orchestratorResult = await getExecutionOrchestrator().execute(request);
+
+		// Convert ExecutionResult to ClaudeExecutionResult format
+		let result: ClaudeExecutionResultOrAsync = {
+			success: orchestratorResult.status === "completed",
+			output: orchestratorResult.output,
+			error: orchestratorResult.error,
+			exitCode: orchestratorResult.exitCode,
+			retryable: orchestratorResult.retryable,
+			isTimeout: orchestratorResult.isTimeout,
+			requestId: orchestratorResult.requestId,
+		};
+
+		// For tmux async mode, return in async format
+		if (orchestratorResult.mode === "tmux") {
+			const asyncResult = result as ClaudeAsyncExecutionResult;
+			asyncResult.requestId = orchestratorResult.requestId || crypto.randomUUID();
+			asyncResult.mode = "tmux";
 			logger.info(
-				{ requestId: result.requestId, chatId: message.chatId },
+				{ requestId: asyncResult.requestId, chatId: message.chatId },
 				"Async request submitted, waiting for callback",
 			);
-			return result;
+			return asyncResult;
 		}
 
 		// Sync mode: handle retry logic for stale containers
@@ -480,7 +510,16 @@ export class AgentBot implements Bot {
 			const refreshedInstance = instances.find((i) => i.name === instance.name);
 
 			if (refreshedInstance && refreshedInstance.status === "running") {
-				result = await executeClaude(refreshedInstance.containerId, refreshedInstance.name, effectivePrompt, config);
+				request.containerId = refreshedInstance.containerId;
+				orchestratorResult = await getExecutionOrchestrator().execute(request);
+				result = {
+					success: orchestratorResult.status === "completed",
+					output: orchestratorResult.output,
+					error: orchestratorResult.error,
+					exitCode: orchestratorResult.exitCode,
+					retryable: orchestratorResult.retryable,
+					isTimeout: orchestratorResult.isTimeout,
+				};
 			}
 		}
 
