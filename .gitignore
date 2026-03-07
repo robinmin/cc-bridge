@@ -162,4 +162,4 @@ vite.config.ts.timestamp-*
 /data/debug/
 /data/config/gateway.jsonc
 /data/config/discovery-cache.jsonc
-
+/src/gateway/tests/data/
