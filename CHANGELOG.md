@@ -5,6 +5,48 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.4] - 2026-03-06
+
+### ✨ New Features
+
+- **Unified Execution Engine**:
+  - Implemented 3-layer execution architecture: In-Process (worker thread), Host IPC (tmux → CLI), Container (tmux → docker exec)
+  - Added `src/gateway/engine/` module with `HostIpcEngine`, `ContainerEngine`, and `InProcessEngine`
+  - Added execution orchestrator with automatic fallback chain between layers
+  - Pluggable engine interface (`IExecutionEngine`) for extensibility
+
+- **Pluggable Memory System**:
+  - Added markdown-canonical agent memory with `.memory/SOUL.md`, `.memory/USER.md`, `.memory/MEMORY.md`, and daily logs
+  - Implemented slot-based backends: `builtin`, `none`, `external`
+  - Added policy-driven prompt loading (private vs group contexts)
+  - Added memory write triggers for automatic capture of preferences and decisions
+
+- **Async Callback Mode**:
+  - Tmux-based persistent sessions for long-running operations
+  - Request tracking with correlation IDs
+  - Callback-based response delivery
+
+### 🔧 Improvements
+
+- **Execution Flow Unification**:
+  - Both Host IPC and Container layers now consistently use tmux sessions
+  - Removed sync execution path from ContainerEngine
+  - Removed IPC package (no longer needed with tmux-based architecture)
+
+- **Architecture Refinements**:
+  - Added cc-bridge box in architecture diagram containing Persistence Layer, Memory System, and Execution Engine
+  - Updated architecture documentation to reflect 3-layer design
+  - Removed redundant diagram linkages
+
+### 🐛 Fixes
+
+- Fixed test coverage issues in execution engine modules
+- Fixed architecture diagram mermaid syntax issues
+- Fixed Host IPC engine to use tmux sessions instead of direct spawn
+- Fixed ContainerEngine constructor signature (removed unused useTmux parameter)
+
+---
+
 ## [0.6.3] - 2026-02-21
 
 ### ✨ New Features
