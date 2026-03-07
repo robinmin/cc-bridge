@@ -46,4 +46,3 @@ export function extractMarkdownDescription(content: string): string {
 
 	return "";
 }
-
