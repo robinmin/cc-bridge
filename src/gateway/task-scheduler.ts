@@ -1,9 +1,10 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { miniAppDriver } from "@/gateway/apps/driver";
+import type { ExecutionRequest } from "@/gateway/engine/contracts";
+import { getExecutionOrchestrator } from "@/gateway/engine/orchestrator";
 import { instanceManager } from "@/gateway/instance-manager";
 import { persistence } from "@/gateway/persistence";
-import { IpcFactory } from "@/packages/ipc";
 import { logger } from "@/packages/logger";
 import { calculateNextRun } from "@/packages/scheduler";
 
@@ -157,21 +158,20 @@ export class TaskScheduler {
 				return;
 			}
 
-			const client = IpcFactory.create("auto", {
-				containerId: instance.containerId,
-				instanceName: task.instance_name,
-			});
-			const response = await client.sendRequest({
-				id: `task-${task.id}-${Date.now()}`,
-				method: "POST",
-				path: "/execute",
-				body: {
-					command: task.prompt,
+			// Execute via unified orchestrator
+			const request: ExecutionRequest = {
+				prompt: task.prompt,
+				options: {
+					timeout: 60000, // 1 minute default for tasks
+					workspace: "cc-bridge",
 				},
-			});
+				instance,
+			};
 
-			if (response.error) {
-				logger.error({ taskId: task.id, error: response.error }, "Task execution failed");
+			const result = await getExecutionOrchestrator().execute(request);
+
+			if (result.error || result.status === "failed") {
+				logger.error({ taskId: task.id, error: result.error }, "Task execution failed");
 			} else {
 				logger.info({ taskId: task.id }, "Task executed successfully");
 			}
