@@ -31,7 +31,7 @@ CC-Bridge is a **Telegram/Lark(Feishu) bot bridge** that enables you to interact
 ### 1.2 Key Features
 
 - ✅ **Remote Access**: Interact with Claude Code from anywhere via Telegram
-- ✅ **Fast Response**: TCP-based IPC for low-latency communication (~10ms)
+- ✅ **Fast Response**: Direct docker exec for low-latency communication
 - ✅ **Docker Optimized**: First-class container support with automatic discovery
 - ✅ **Multiple Workspaces**: Switch between different projects seamlessly
 - ✅ **Async Mode**: Long-running operations via tmux sessions
@@ -422,12 +422,15 @@ docker ps -a | grep cc-bridge
 make docker-restart
 ```
 
-#### Issue: "IPC timeout"
+#### Issue: "Container timeout"
 
 **Solution**:
 ```bash
-# Check AGENT_MODE is set to tcp
-docker exec cc-bridge-agent env | grep AGENT_MODE
+# Check if container is running
+docker ps | grep claude
+
+# Check container logs
+make docker-logs
 
 # Restart container
 make docker-restart
@@ -585,22 +588,25 @@ make docker-logs
 
 ### 7.6 Performance Tuning
 
-**IPC Method Selection:**
+**Execution Layer Selection:**
 
-| Method | Latency | Use Case |
-|--------|---------|----------|
-| TCP | ~10ms | Production (default) |
-| Unix Socket | ~5ms | Host-based |
-| Docker Exec | ~50s | Fallback only |
+| Layer | Latency | Use Case |
+|-------|---------|----------|
+| Container (docker exec) | ~100-500ms | Production (default) |
+| Host IPC | ~100-500ms | Dev/Fallback |
+| In-Process | ~0ms | Fast queries (feature-flagged) |
 
 **Environment Variables:**
 
 ```bash
-# Force TCP mode
-AGENT_MODE=tcp
+# Enable tmux async mode
+ENABLE_TMUX=true
 
-# Adjust timeout
+# Adjust default timeout (ms)
 REQUEST_TIMEOUT=120000
+
+# Default execution layer
+DEFAULT_LAYER=container
 ```
 
 ---

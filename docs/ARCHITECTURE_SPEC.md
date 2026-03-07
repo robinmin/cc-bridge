@@ -16,8 +16,8 @@ CC-Bridge is a **Telegram/Lark-to-Claude Code bridge** built with **Bun/Hono** t
 - **Memory Backend Abstraction**: Slot-based backends (`builtin` | `none` | `external`) with automatic fallback on failure
 - **Policy-Driven Prompt Loading**: Context-aware memory injection (private vs group) with configurable overrides
 - **Memory Write Triggers**: Automatic capture of durable preferences, decisions, and pre-compaction flush hints
-- **Multi-Mode IPC**: Factory pattern supporting TCP, Unix socket, Docker exec, Host, and Remote backends
-- **Circuit Breaker**: Resilience pattern with failure tracking and automatic fallback
+- **Unified Execution Engine**: 3-layer architecture (in-process, host-ipc, container) with automatic fallback
+- **    Gateway ---|Orchestrator| Engine["Execution Engine"]**: Resilience pattern with failure tracking and automatic fallback
 - **Async Callback Mode**: Tmux-based persistent sessions for long-running operations
 - **Enhanced Services Layer**: File cleanup, rate limiting, idempotency, request tracking
 - **Plaintext Logging**: Clean log format for better developer experience
@@ -32,80 +32,107 @@ graph TD
     User <--> Lark["Lark/Feishu Open Platform"]
     Telegram <--> CF["Cloudflare Tunnel (cloudflared)"]
     Lark <--> CF
-    CF <--> Gateway["Gateway Service (Bun/Hono)"]
-
-    Gateway ---|SQLite| DB[("Persistence Layer")]
-    Gateway ---|Memory| Mem["Memory System"]
-    Gateway ---|Circuit Breaker| IPC["IPC Factory"]
 
     subgraph Host["Host Machine"]
-        Gateway
-        DB
-        IPC
+        Gateway["Gateway Service (Bun/Hono)"]
+
+        subgraph ccbridge["cc-bridge" #e1f5fe]
+            DB["Persistence Layer"]
+            Mem["Memory System"]
+            subgraph EngineLayers["Execution Engine Layers"]
+                direction LR
+                InProcess["In-Process"]
+                HostIPC["Host IPC"]
+                ContainerExec["Container"]
+            end
+        end
+
+        HostCLI["claude/codex/gemini"]
+        HostTmux["Tmux Sessions"]
     end
 
     subgraph Container["Docker Container"]
         Agent["Agent Runtime (Bun/Hono)"]
-        Tmux["Tmux Sessions"]
-        Claude["Claude Code CLI"]
+        ContainerClaude["claude/codex/gemini"]
     end
 
-    subgraph IPC_Methods["IPC Transport Layer"]
-        TCP["TCP (Primary)"]
-        Unix["Unix Socket"]
-        Exec["Docker Exec"]
-        Host["Host Mode"]
-    end
+    CF <--> Gateway
+    Gateway ---|SQLite| DB
+    Gateway ---|Memory| Mem
 
-    Gateway -.->|TCP 3001| Agent
-    Gateway -.->|Unix Socket| Agent
-    Gateway -.->|Docker Exec| Agent
-    Agent -->|Execute| Claude
-    Agent -->|Manage| Tmux
+    Gateway -.->|Execute| EngineLayers
+
+    %% Host IPC: CLI spawn via tmux on host
+    HostIPC -->|tmux| HostTmux
+    HostTmux -->|spawn| HostCLI
+
+    %% Container Async: tmux on host → docker exec
+    ContainerExec -->|tmux| HostTmux
+    HostTmux -->|docker exec| Agent
+
+    Agent -->|Execute| ContainerClaude
 ```
 
-### 2.1 IPC Transport Layer
+### 2.1 Unified Execution Engine
 
-The system uses a **multi-mode IPC architecture** with automatic fallback:
+The system uses a **3-layer execution engine** with automatic fallback:
 
-| Method | Latency | Use Case | Priority |
-|--------|---------|----------|----------|
-| **TCP** | ~10ms | Production (containerized) | 1 |
-| **Unix Socket** | ~5ms | Production (host-based) | 2 |
-| **Docker Exec** | ~50s | Development fallback | 3 |
-| **Host** | ~5ms | No Docker (dev) | - |
-| **Remote** | Variable | Distributed systems | - |
+| Layer | Latency | Isolation | Use Case | Priority |
+|-------|---------|-----------|----------|----------|
+| **In-Process** | ~0ms | Worker thread | Fast lightweight queries | 1 (if enabled) |
+| **Host IPC** | ~100-500ms | Subprocess | Standard execution, dev | 2 |
+| **Container** | ~1-5s cold | Docker container | Untrusted prompts, production | 3 (default) |
 
-### 2.2 Factory Pattern
+### 2.2 Layer Selection
 
 ```typescript
-// Auto-select best available IPC method
-const client = IpcFactory.create("auto", { instanceName: "cc-bridge" });
+import { getExecutionOrchestrator, ExecutionRequest } from "@/gateway/engine";
 
-// Explicit method selection
-const tcpClient = IpcFactory.create("tcp", { instanceName: "cc-bridge" });
-const unixClient = IpcFactory.create("unix", { socketPath: "/tmp/agent.sock" });
-const dockerClient = IpcFactory.create("docker-exec", { containerId: "abc123" });
+// Execute with default layer selection
+const result = await orchestrator.execute({
+  id: "req-001",
+  prompt: "Analyze this code",
+  workspace: "/project",
+  timeout: 60000
+});
+
+// Force specific layer
+const result = await orchestrator.execute({
+  id: "req-002",
+  prompt: "Quick read-only query",
+  workspace: "/project",
+  timeout: 10000,
+  layer: "host-ipc"
+});
 ```
 
-### 2.3 Circuit Breaker Pattern
+### 2.3 Fallback Chain
 
-All IPC clients are wrapped with a circuit breaker for resilience:
+The orchestrator automatically falls back to the next available layer if execution fails:
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Closed
-    Closed --> Open: Failures > Threshold
-    Open --> HalfOpen: Timeout expires
-    HalfOpen --> Closed: Success
-    HalfOpen --> Open: Failure
-    HalfOpen --> Closed: Success
+    [*] --> InProcess
+    InProcess --> HostIPC: Not available / Failed
+    HostIPC --> Container: Not available / Failed
+    Container --> [*]: All layers failed
 ```
 
-**States:**
-- **Closed**: Normal operation, requests pass through
-- **Open**: Circuit tripped, requests fail immediately
-- **Half-Open**: Testing if service has recovered
+**Fallback Configuration:**
+```typescript
+const config: EngineConfig = {
+  defaultLayer: "container",
+  fallbackOrder: ["container", "host-ipc"],
+  container: {
+    useTmux: true
+  },
+  hostIpc: {
+    command: "claude",
+    args: ["-p", "{{prompt}}"]
+  }
+  // inProcess: omitted = disabled by default
+};
+```
 
 ### 2.4 Memory System
 
@@ -195,19 +222,45 @@ AGENT_MODE=stdio
 AGENT_MODE=http HTTP_PORT=3000
 ```
 
-### 3.3 IPC Package
+### 3.3 Execution Engine
 
-**Location**: `src/packages/ipc/`
+**Location**: `src/gateway/engine/`
 
-**Key Classes:**
-- `IpcFactory`: Creates IPC clients based on method
-- `TcpIpcClient`: TCP socket communication
-- `UnixSocketIpcClient`: Unix domain socket
-- `DockerExecIpcClient`: Docker exec fallback
-- `HostIpcClient`: No-Docker host mode
-- `RemoteIpcClient`: Remote/distributed systems
-- `CircuitBreakerIpcClient`: Resilience wrapper
-- `StdioIpcAdapter`: Agent-side stdio handler
+The Execution Engine provides a unified interface for executing LLM prompts across multiple execution layers.
+
+**Key Components:**
+- `contracts.ts`: Core interfaces (ExecutionEngine, ExecutionRequest, ExecutionResult, ExecutionLayer)
+- `orchestrator.ts`: Layer selection, fallback chain, health monitoring
+- `in-process.ts`: Worker-thread-based execution (stub, feature-flagged)
+- `host-ipc.ts`: Host CLI subprocess execution (claude, codex)
+- `container.ts`: Docker exec + tmux execution
+- `prompt-utils.ts`: Shared prompt validation/sanitization
+
+**Layer Implementations:**
+
+| Engine | File | Description |
+|--------|------|-------------|
+| **InProcessEngine** | `in-process.ts` | Stub for pi-mono in-worker execution (disabled by default) |
+| **HostIpcEngine** | `host-ipc.ts` | CLI execution via tmux sessions on host OS |
+| **ContainerEngine** | `container.ts` | Docker execution via tmux sessions (async) |
+
+**Configuration (gateway.jsonc):**
+```jsonc
+{
+  "engine": {
+    "defaultLayer": "container",
+    "fallbackOrder": ["container", "host-ipc"],
+    "hostIpc": {
+      "command": "claude",
+      "args": ["-p", "{{prompt}}", "--dangerously-skip-permissions"]
+    },
+    "container": {
+      "useTmux": true,
+      "discoveryLabel": "cc-bridge.workspace"
+    }
+  }
+}
+```
 
 ### 3.4 Services Layer
 
@@ -235,7 +288,7 @@ sequenceDiagram
     participant U as User
     participant T as Telegram
     participant G as Gateway
-    participant I as IPC Factory
+    participant E as Execution Engine
     participant A as Agent
     participant C as Claude Code
 
@@ -243,13 +296,12 @@ sequenceDiagram
     T->>G: Webhook POST
     G->>G: Validate & Deduplicate
     G->>G: Rate Limit Check
-    G->>I: Create IPC Client
-    I->>I: Circuit Breaker Check
-    I->>A: TCP/Unix/Docker Request
+    G->>E: Execute prompt
+    E->>A: Container/Host execution
     A->>C: Execute Command
     C-->>A: Output
-    A-->>I: Response
-    I-->>G: Result
+    A-->>E: Response
+    E-->>G: Result
     G->>T: sendMessage
     T-->>U: Response
 ```
@@ -557,9 +609,9 @@ const result = await executeClaudeViaTmux(
 
 | Metric | Value | Notes |
 |--------|-------|-------|
-| **TCP IPC Latency** | ~10ms | Production mode |
-| **Unix Socket Latency** | ~5ms | Host mode |
-| **Docker Exec Latency** | ~50s | Fallback only |
+| **Docker Exec Latency** | ~100-500ms | Container execution |
+| **Host IPC Latency** | ~100-500ms | CLI subprocess |
+| **In-Process Latency** | ~0ms | Worker thread (feature-flagged) |
 | **Max Output Size** | 10MB | Per request |
 | **Request Timeout** | 120s | Webhook processing |
 | **File Cleanup TTL** | 1 hour | Response files |
@@ -572,15 +624,22 @@ const result = await executeClaudeViaTmux(
 
 | Issue | Solution |
 |-------|----------|
-| IPC timeout | Check `AGENT_MODE=tcp` is set |
-| Circuit breaker open | Wait for timeout or reset manually |
+| Container timeout | Check container is running: `docker ps` |
 | Container not discovered | Verify `cc-bridge.workspace` label |
 | Session not found | Check TmuxManager logs |
+| Execution failed | Check engine layer in logs |
 
 ### 12.2 Debug Commands
 
 ```bash
-# Check IPC connectivity
+# Check container status
+docker ps | grep claude
+
+# Check gateway logs
+make logs-monitor
+
+# Check engine health
+curl http://localhost:8080/health
 make docker-talk msg="ping"
 
 # View logs

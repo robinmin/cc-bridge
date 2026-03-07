@@ -127,7 +127,6 @@ src/
 │   │   ├── host-bot.ts         # Host management
 │   │   └── menu-bot.ts         # Slash commands
 │   ├── services/               # Business services
-│   │   ├── claude-executor.ts  # Claude execution logic
 │   │   ├── discovery-cache.ts  # Plugin discovery cache
 │   │   ├── broadcast.ts        # Multi-channel target resolution
 │   │   ├── tmux-manager.ts     # Tmux session management
@@ -137,6 +136,14 @@ src/
 │   │   ├── SessionPoolService.ts
 │   │   ├── IdempotencyService.ts
 │   │   └── RateLimitService.ts
+│   ├── engine/                 # Unified execution engine
+│   │   ├── index.ts            # Main exports
+│   │   ├── contracts.ts       # Core interfaces
+│   │   ├── orchestrator.ts    # Layer selection & fallback
+│   │   ├── container.ts       # Container execution layer
+│   │   ├── host-ipc.ts        # Host IPC execution layer
+│   │   ├── in-process.ts       # In-process execution layer
+│   │   └── prompt-utils.ts     # Prompt validation utilities
 │   ├── apps/
 │   │   ├── driver.ts           # Mini-app runtime driver
 │   │   └── new_app_template.md # Mini-app template
@@ -170,18 +177,6 @@ src/
 │   │   └── index.ts
 │   ├── async/                  # Concurrency utilities
 │   ├── markdown/               # Markdown/frontmatter helpers
-│   ├── ipc/                    # IPC transport layer
-│   │   ├── factory.ts          # IPC factory
-│   │   ├── tcp-client.ts       # TCP client
-│   │   ├── unix-client.ts      # Unix socket client
-│   │   ├── docker-exec-client.ts
-│   │   ├── host-client.ts      # Host mode client
-│   │   ├── remote-client.ts    # Remote client
-│   │   ├── circuit-breaker.ts  # Circuit breaker
-│   │   ├── stdio-adapter.ts    # Stdio adapter
-│   │   ├── backends.ts         # Backend types
-│   │   ├── response-utils.ts   # Robust HTTP/JSON parsing helpers
-│   │   └── types.ts            # Common types
 │   ├── logger/                 # Logging package
 │   ├── config/                 # Configuration
 │   ├── scheduler/              # Schedule parsing/next-run logic
@@ -247,64 +242,54 @@ for (const bot of bots) {
 - `HostBot`: Manages host operations (`/host`, `/host_uptime`, `/host_ps`)
 - `AgentBot`: Executes Claude Code commands
 
-### 3.3 IPC Factory
+### 3.3 Unified Execution Engine
 
-**Location**: `src/packages/ipc/factory.ts`
+**Location**: `src/gateway/engine/`
+
+The system uses a 3-layer execution engine with automatic fallback:
+
+| Layer | Implementation | Description |
+|-------|---------------|-------------|
+| **In-Process** | `in-process.ts` | Worker-thread execution (feature-flagged, stub) |
+| **Host IPC** | `host-ipc.ts` | CLI subprocess execution (claude, codex) |
+| **Container** | `container.ts` | Docker exec (sync) or tmux (async) |
 
 ```typescript
-export class IpcFactory {
-    static create(method: IpcMethod, config: IpcClientConfig): IIpcClient {
-        let client: IIpcClient;
+import { getExecutionOrchestrator, ExecutionRequest } from "@/gateway/engine";
 
-        switch (method) {
-            case "tcp":
-                client = new TcpIpcClient(config);
-                break;
-            case "unix":
-                client = new UnixSocketIpcClient(config);
-                break;
-            case "docker-exec":
-                client = new DockerExecIpcClient(config);
-                break;
-            case "host":
-                client = new HostIpcClient(backend);
-                break;
-            case "auto":
-                client = this.createAuto(config);
-                break;
-        }
+const orchestrator = getExecutionOrchestrator();
 
-        return new CircuitBreakerIpcClient(client);
-    }
+// Execute with default layer selection
+const result = await orchestrator.execute({
+  prompt: "Analyze this code",
+  workspace: "my-project",
+  timeout: 60000
+});
+```
+
+### 3.4 Engine Configuration
+
+**Location**: `src/gateway/consts.ts`
+
+```typescript
+ORCHESTRATOR: {
+  DEFAULT_LAYER: "container",
+  ENABLED_LAYERS: ["container", "host-ipc"],
+  FALLBACK_ORDER: ["container", "host-ipc"],
+  IN_PROCESS: { ENABLED: false },
+  HOST_IPC: { ... },
+  CONTAINER: { ... },
+  TMUX: { ENABLED: process.env.ENABLE_TMUX === "true" }
 }
 ```
 
-### 3.4 Circuit Breaker
+### 3.5 (DEPRECATED) IPC Factory
 
-**Location**: `src/packages/ipc/circuit-breaker.ts`
+> **Note**: The IPC package (`src/packages/ipc/`) has been removed. Use the unified execution engine instead.
 
-```typescript
-export class CircuitBreakerIpcClient implements IIpcClient {
-    private circuitState: CircuitState = {
-        failures: 0,
-        lastFailureTime: 0,
-        state: "closed",
-    };
+The old IPC factory provided multiple transport methods (TCP, Unix socket, Docker exec, Host). These are now replaced by the 3-layer execution engine.
 
-    async sendRequest(request: IpcRequest, timeout?: number): Promise<IpcResponse> {
-        if (!this.isCircuitAvailable()) {
-            return {
-                id: request.id,
-                status: 503,
-                error: { message: "Service temporarily unavailable (circuit breaker open)" }
-            };
-        }
-
-        const result = await this.client.sendRequest(request, timeout);
-        this.recordResult(result);
-        return result;
-    }
-}
+### 3.6 (DEPRECATED) Circuit Breaker
 ```
 
 ### 3.5 Memory System
@@ -500,32 +485,39 @@ Circuit breaker state updated
 
 ## 5. Module Reference
 
-### 5.1 IPC Package
+### 5.1 (REMOVED) IPC Package
+
+> **Status**: Removed in favor of Unified Execution Engine
+
+The IPC package (`src/packages/ipc/`) has been removed. Use the unified execution engine instead:
+
+| Old | New |
+|-----|-----|
+| `IpcFactory.create("docker-exec", ...)` | `ContainerEngine` in `@/gateway/engine` |
+| `IpcFactory.create("host", ...)` | `HostIpcEngine` in `@/gateway/engine` |
+| `StdioIpcAdapter` | Moved to `src/agent/ipc-adapter.ts` |
+| Circuit breaker | Per-engine retry logic in orchestrator |
+
+### 5.2 Execution Engine Package
+
+**Location**: `src/gateway/engine/`
 
 **Exports**:
 ```typescript
-// Factory
-export { IpcFactory } from "./factory";
+// Engines
+export { ContainerEngine, createContainerEngine } from "./container";
+export { HostIpcEngine, createHostIpcEngine } from "./host-ipc";
+export { InProcessEngine } from "./in-process";
 
-// Clients
-export { TcpIpcClient } from "./tcp-client";
-export { UnixSocketIpcClient } from "./unix-client";
-export { DockerExecIpcClient } from "./docker-exec-client";
-export { HostIpcClient } from "./host-client";
-export { RemoteIpcClient } from "./remote-client";
+// Orchestrator
+export { ExecutionOrchestrator, getExecutionOrchestrator, createOrchestrator } from "./orchestrator";
+export type { ExecutionEngine, ExecutionRequest, ExecutionResult, ExecutionLayer, ExecutionOptions } from "./contracts";
 
-// Circuit breaker
-export { CircuitBreakerIpcClient } from "./circuit-breaker";
-
-// Agent-side
-export { StdioIpcAdapter } from "./stdio-adapter";
-
-// Types
-export type { IIpcClient, IpcRequest, IpcResponse, IpcMethod } from "./types";
-export type { AnyBackend, ContainerBackend, HostBackend, RemoteBackend } from "./backends";
+// Utilities
+export { validateAndSanitizePrompt, buildClaudePrompt, buildPlainContextPrompt } from "./prompt-utils";
 ```
 
-### 5.2 Memory Package
+### 5.3 Memory Package
 
 **Exports** (`src/gateway/memory/`):
 ```typescript
