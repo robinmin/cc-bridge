@@ -97,7 +97,9 @@ const serviceName = detectServiceName();
 const logFormat = detectLogFormat();
 export const logger = createLogger(serviceName, logFormat);
 
-export function setLogLevel(level: string): void { logger.level = level; }
+export function setLogLevel(level: string): void {
+	logger.level = level;
+}
 setLogLevel(process.env.LOG_LEVEL || logger.level);
 
 export default logger;
