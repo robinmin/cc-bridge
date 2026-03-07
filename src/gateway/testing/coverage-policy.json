@@ -1,19 +1,17 @@
 {
-  "includePrefixes": [
-    "src/agent/",
-    "src/packages/",
-    "src/gateway/channels/index.ts",
-    "src/gateway/consts.ts",
-    "src/gateway/memory/",
-    "src/gateway/output/common.tsx",
-    "src/gateway/pipeline/host-bot.ts",
-    "src/gateway/pipeline/bot-router.ts",
-    "src/gateway/services/RateLimitService.ts",
-    "src/gateway/services/ResponseFileReader.ts",
-    "src/gateway/utils/request-utils.ts"
-  ],
-  "excludePrefixes": [
-    "src/gateway/tests/",
-    "src/packages/tests/"
-  ]
+	"includePrefixes": [
+		"src/agent/",
+		"src/packages/",
+		"src/gateway/channels/index.ts",
+		"src/gateway/consts.ts",
+		"src/gateway/memory/",
+		"src/gateway/output/common.tsx",
+		"src/gateway/pipeline/host-bot.ts",
+		"src/gateway/pipeline/bot-router.ts",
+		"src/gateway/services/RateLimitService.ts",
+		"src/gateway/services/ResponseFileReader.ts",
+		"src/gateway/utils/request-utils.ts",
+		"src/gateway/engine/"
+	],
+	"excludePrefixes": ["src/gateway/tests/", "src/packages/tests/"]
 }
