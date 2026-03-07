@@ -1,21 +1,8 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import fs from "node:fs";
-import {
-	ConfigLoader,
-	deepMerge,
-	isRecord,
-} from "@/packages/config";
-import {
-	AuthError,
-	ConflictError,
-	HTTPError,
-	NotFoundError,
-	ValidationError,
-} from "@/packages/errors";
-import {
-	createLogger,
-	detectLogFormat,
-} from "@/packages/logger";
+import { ConfigLoader, deepMerge, isRecord } from "@/packages/config";
+import { AuthError, ConflictError, HTTPError, NotFoundError, ValidationError } from "@/packages/errors";
+import { createLogger, detectLogFormat } from "@/packages/logger";
 
 const restoreEnv = {
 	LOG_FORMAT: process.env.LOG_FORMAT,
@@ -33,12 +20,9 @@ describe("package coverage bridge", () => {
 
 		expect(deepMerge("default", "parsed")).toBe("parsed");
 		expect(deepMerge("default", null)).toBe("default");
-		expect(
-			deepMerge(
-				{ nested: { keep: 1, override: 0 } },
-				{ nested: { override: 2 } },
-			),
-		).toEqual({ nested: { keep: 1, override: 2 } });
+		expect(deepMerge({ nested: { keep: 1, override: 0 } }, { nested: { override: 2 } })).toEqual({
+			nested: { keep: 1, override: 2 },
+		});
 
 		expect(ConfigLoader.load("/tmp/does-not-exist-config.jsonc", { key: "v" })).toEqual({ key: "v" });
 
