@@ -199,7 +199,10 @@ export function calculateNextCronRun(expr: string, from = new Date()): string | 
 	return null;
 }
 
-export function calculateNextRun(task: { schedule_type: ScheduleType; schedule_value: string }, from = new Date()): string | null {
+export function calculateNextRun(
+	task: { schedule_type: ScheduleType; schedule_value: string },
+	from = new Date(),
+): string | null {
 	if (task.schedule_type === "once") return null;
 	if (task.schedule_type === "cron") return calculateNextCronRun(task.schedule_value, from);
 
