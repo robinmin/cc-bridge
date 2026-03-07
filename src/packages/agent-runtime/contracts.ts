@@ -61,4 +61,3 @@ export interface TmuxManagerContract {
 	): Promise<void>;
 	listAllSessions(containerId: string): Promise<string[]>;
 }
-
