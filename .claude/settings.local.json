@@ -5,7 +5,8 @@
       "WebFetch(domain:json.schemastore.org)",
       "WebFetch(domain:www.schemastore.org)",
       "Skill(rd2:tasks-unit)",
-      "Bash(make:*)"
+      "Bash(make:*)",
+      "Skill(rd2:tasks-changelog)"
     ]
   }
 }
