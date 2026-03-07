@@ -36,6 +36,9 @@ export class AgentBot implements Bot {
 			description: "Explicitly create workspace session",
 		},
 		{ command: "ws_del", description: "Delete workspace session" },
+		{ command: "clear", description: "Hard reset - kill session entirely" },
+		{ command: "compact", description: "Soft reset - reduce context, keep session" },
+		{ command: "context_status", description: "Show session context metadata" },
 	];
 
 	// Per-container session pools (key: containerId)
@@ -132,6 +135,14 @@ export class AgentBot implements Bot {
 		}
 		if (text === "/clear") {
 			await this.handleClear(message, instance, workspace);
+			return true;
+		}
+		if (text === "/compact") {
+			await this.handleCompact(message, instance, workspace);
+			return true;
+		}
+		if (text === "/context_status") {
+			await this.handleContextStatus(message, instance, workspace);
 			return true;
 		}
 		if (text.startsWith("/scheduler_add ")) {
@@ -427,6 +438,86 @@ export class AgentBot implements Bot {
 			logger.error({ error: error instanceof Error ? error.message : String(error) }, "Failed to clear session");
 			await this.channel.sendMessage(message.chatId, "⚠️ Failed to clear session.");
 		}
+	}
+
+	/**
+	 * Handle /compact command - soft reset (preserves session, reduces context)
+	 */
+	private async handleCompact(
+		message: Message,
+		instance: { name: string; containerId: string; status: string },
+		workspace: string,
+	): Promise<void> {
+		try {
+			const compacted = await this.tmuxManager.softReset(instance.containerId, workspace, message.chatId);
+			if (compacted) {
+				await this.channel.sendMessage(
+					message.chatId,
+					"✅ Compacted session context. The AI will respond with reduced context.",
+				);
+			} else {
+				await this.channel.sendMessage(message.chatId, "ℹ️ No active session to compact.");
+			}
+		} catch (error) {
+			logger.error({ error: error instanceof Error ? error.message : String(error) }, "Failed to compact session");
+			await this.channel.sendMessage(message.chatId, "⚠️ Failed to compact session.");
+		}
+	}
+
+	/**
+	 * Handle /context_status command - show session context metadata
+	 */
+	private async handleContextStatus(
+		message: Message,
+		instance: { name: string; containerId: string; status: string },
+		workspace: string,
+	): Promise<void> {
+		try {
+			const sessionName = `claude-${workspace}-${message.chatId}`;
+			const metadata = this.tmuxManager.getSessionMetadata(sessionName, instance.containerId);
+
+			const createdAt = new Date(metadata.createdAt);
+			const lastActivity = new Date(metadata.lastActivityAt);
+			const lastReset = new Date(metadata.lastResetAt);
+			const now = new Date();
+
+			const sessionAge = this.formatDuration(now.getTime() - createdAt.getTime());
+			const idleTime = this.formatDuration(now.getTime() - lastActivity.getTime());
+			const timeSinceReset = this.formatDuration(now.getTime() - lastReset.getTime());
+
+			const statusMessage = [
+				"📊 **Session Context Status**",
+				``,
+				`• **Turns**: ${metadata.turnCount}`,
+				`• **Est. Context Size**: ~${Math.round(metadata.estimatedContextSize / 1000)}k tokens`,
+				`• **Session Age**: ${sessionAge}`,
+				`• **Idle Time**: ${idleTime}`,
+				`• **Last Reset**: ${timeSinceReset} ago`,
+				``,
+				`💡 Use \`/compact\` to reduce context without losing session`,
+				`💡 Use \`/clear\` to hard reset (kills session)`,
+			].join("\n");
+
+			await this.channel.sendMessage(message.chatId, statusMessage);
+		} catch (error) {
+			logger.error({ error: error instanceof Error ? error.message : String(error) }, "Failed to get context status");
+			await this.channel.sendMessage(message.chatId, "⚠️ Failed to get context status.");
+		}
+	}
+
+	/**
+	 * Format duration in human-readable form
+	 */
+	private formatDuration(ms: number): string {
+		const seconds = Math.floor(ms / 1000);
+		const minutes = Math.floor(seconds / 60);
+		const hours = Math.floor(minutes / 60);
+		const days = Math.floor(hours / 24);
+
+		if (days > 0) return `${days}d ${hours % 24}h`;
+		if (hours > 0) return `${hours}h ${minutes % 60}m`;
+		if (minutes > 0) return `${minutes}m ${seconds % 60}s`;
+		return `${seconds}s`;
 	}
 
 	/**
