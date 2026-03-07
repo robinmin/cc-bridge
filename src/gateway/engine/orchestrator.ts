@@ -101,8 +101,9 @@ export class ExecutionOrchestrator {
 				const result = await engine.execute(request);
 				const durationMs = Date.now() - layerStartTime;
 
-				if (result.status === "completed") {
-					logger.info({ requestId, layer, durationMs, exitCode: result.exitCode }, "Execution succeeded on layer");
+				// Both "completed" (sync) and "running" (async/tmux) are success states
+				if (result.status === "completed" || result.status === "running") {
+					logger.info({ requestId, layer, durationMs, status: result.status, exitCode: result.exitCode }, "Execution succeeded on layer");
 					return {
 						...result,
 						requestId,
@@ -126,8 +127,9 @@ export class ExecutionOrchestrator {
 					logger.info({ requestId, layer, retry: retry + 1 }, "Retrying layer");
 					const retryResult = await engine.execute(request);
 
-					if (retryResult.status === "completed") {
-						logger.info({ requestId, layer, retry: retry + 1 }, "Retry succeeded");
+					// Both "completed" (sync) and "running" (async/tmux) are success states
+					if (retryResult.status === "completed" || retryResult.status === "running") {
+						logger.info({ requestId, layer, retry: retry + 1, status: retryResult.status }, "Retry succeeded");
 						return {
 							...retryResult,
 							requestId,
