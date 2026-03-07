@@ -123,4 +123,18 @@ export const GATEWAY_CONSTANTS = {
 		SESSION_NAME_SEPARATOR: "-",
 		ENABLED: process.env.ENABLE_TMUX === "true", // Global tmux mode flag
 	},
+	ORCHESTRATOR: {
+		// Default timeout for execution
+		defaultTimeoutMs: 120000,
+		// Max retries per layer
+		maxRetries: 1,
+		// Health check interval in ms
+		healthCheckIntervalMs: 30000,
+		// Layer order (tried in order until one succeeds)
+		layerOrder: ["in-process", "host-ipc", "container"] as const,
+		// Feature flags
+		enableInProcess: false, // Feature-flagged, disabled by default
+		enableHostIpc: true,
+		enableContainer: true,
+	},
 };
