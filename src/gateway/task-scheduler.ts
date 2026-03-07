@@ -183,7 +183,8 @@ export class TaskScheduler {
 				next_run: this.calculateNextRun(task),
 			});
 		} catch (error) {
-			logger.error({ taskId: task.id, error }, "Error executing task");
+			const errorMsg = error instanceof Error ? error.message : String(error);
+			logger.error({ taskId: task.id, error: errorMsg }, "Error executing task");
 		}
 	}
 
