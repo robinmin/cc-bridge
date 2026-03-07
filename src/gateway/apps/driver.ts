@@ -725,14 +725,14 @@ export class MiniAppDriver {
 
 		const orchestratorResult = await getExecutionOrchestrator().execute(request);
 
+		// Generate session name for tmux operations (must match host-ipc.ts generateSessionName)
+		const sanitizedWorkspace = workspace.replace(/[^a-zA-Z0-9_-]/g, "_");
+		const sanitizedChatId = String(executionTarget.chatId || "default").replace(/[^a-zA-Z0-9_-]/g, "_");
+		const sessionName = `claude-${sanitizedWorkspace}-${sanitizedChatId}`;
+
 		// Handle async execution - wait for tmux completion and capture output
 		let finalResult = orchestratorResult;
 		if (orchestratorResult.mode === "tmux" && orchestratorResult.status === "running") {
-			// Generate session name (must match host-ipc.ts generateSessionName)
-			const sanitizedWorkspace = workspace.replace(/[^a-zA-Z0-9_-]/g, "_");
-			const sanitizedChatId = String(executionTarget.chatId || "default").replace(/[^a-zA-Z0-9_-]/g, "_");
-			const sessionName = `claude-${sanitizedWorkspace}-${sanitizedChatId}`;
-
 			logger.info({ sessionName, workspace, timeoutMs }, "Execution is async via tmux, waiting for completion...");
 			finalResult = await waitForTmuxCompletion({
 				sessionName,
