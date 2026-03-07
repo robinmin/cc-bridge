@@ -3,7 +3,7 @@ import { AgentHttpServer } from "@/agent/api/server";
 import { app } from "@/agent/app";
 import { AGENT_CONSTANTS } from "@/agent/consts";
 import { createGatewayBackedAgentRuntime } from "@/agent/runtime/gateway-adapter";
-import { StdioIpcAdapter } from "@/packages/ipc";
+import { StdioIpcAdapter } from "./ipc-adapter";
 
 // IPC Startup
 if (import.meta.main) {
