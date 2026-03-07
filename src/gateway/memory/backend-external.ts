@@ -1,3 +1,5 @@
+import { BuiltinMemoryBackend } from "@/gateway/memory/backend-builtin";
+import { NoneMemoryBackend } from "@/gateway/memory/backend-none";
 import type {
 	MemoryBackend,
 	MemoryDocument,
@@ -7,8 +9,6 @@ import type {
 	MemoryWriteResult,
 	ReindexResult,
 } from "@/gateway/memory/contracts";
-import { BuiltinMemoryBackend } from "@/gateway/memory/backend-builtin";
-import { NoneMemoryBackend } from "@/gateway/memory/backend-none";
 
 export interface ExternalMemoryProvider {
 	name: string;
@@ -28,9 +28,7 @@ export class ExternalMemoryBackend implements MemoryBackend {
 		private readonly provider: ExternalMemoryProvider,
 		fallbackWorkspaceRoot?: string,
 	) {
-		this.fallback = fallbackWorkspaceRoot
-			? new BuiltinMemoryBackend(fallbackWorkspaceRoot)
-			: new NoneMemoryBackend();
+		this.fallback = fallbackWorkspaceRoot ? new BuiltinMemoryBackend(fallbackWorkspaceRoot) : new NoneMemoryBackend();
 	}
 
 	status(): MemoryStatus {
