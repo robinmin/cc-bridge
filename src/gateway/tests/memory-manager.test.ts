@@ -5,8 +5,8 @@ import path from "node:path";
 import { BuiltinMemoryBackend } from "@/gateway/memory/backend-builtin";
 import {
 	ExternalMemoryBackend,
-	StubExternalProvider,
 	type ExternalMemoryProvider,
+	StubExternalProvider,
 } from "@/gateway/memory/backend-external";
 import { NoneMemoryBackend } from "@/gateway/memory/backend-none";
 import {
@@ -185,7 +185,11 @@ describe("memory manager scaffolding", () => {
 		const backend = new BuiltinMemoryBackend(tmpDir);
 		await fs.mkdir(path.join(tmpDir, ".memory", "daily"), { recursive: true });
 		await fs.writeFile(path.join(tmpDir, ".memory", "MEMORY.md"), "Project uses Rust\\nNo match", "utf-8");
-		await fs.writeFile(path.join(tmpDir, ".memory", "daily", "2026-03-01.md"), "Rust toolchain update\\nAnother line", "utf-8");
+		await fs.writeFile(
+			path.join(tmpDir, ".memory", "daily", "2026-03-01.md"),
+			"Rust toolchain update\\nAnother line",
+			"utf-8",
+		);
 		await fs.writeFile(path.join(tmpDir, ".memory", "daily", "note.txt"), "rust but ignored extension", "utf-8");
 
 		const hits = await backend.search("rust", { limit: 1 });
@@ -198,7 +202,11 @@ describe("memory manager scaffolding", () => {
 	test("builtin backend search returns multiple results across files", async () => {
 		const backend = new BuiltinMemoryBackend(tmpDir);
 		await fs.mkdir(path.join(tmpDir, ".memory", "daily"), { recursive: true });
-		await fs.writeFile(path.join(tmpDir, ".memory", "MEMORY.md"), "TypeScript is great\nTypeScript 5.0 released", "utf-8");
+		await fs.writeFile(
+			path.join(tmpDir, ".memory", "MEMORY.md"),
+			"TypeScript is great\nTypeScript 5.0 released",
+			"utf-8",
+		);
 		await fs.writeFile(path.join(tmpDir, ".memory", "daily", "2026-01-01.md"), "TypeScript migration done", "utf-8");
 
 		const hits = await backend.search("typescript", { limit: 10 });
@@ -783,7 +791,11 @@ describe("Phase 6: stabilization and hardening", () => {
 
 		for (let i = 0; i < 30; i++) {
 			const day = String(i + 1).padStart(2, "0");
-			await fs.writeFile(path.join(tmpDir, ".memory", "daily", `2026-01-${day}.md`), `Log entry ${i}: typescript`, "utf-8");
+			await fs.writeFile(
+				path.join(tmpDir, ".memory", "daily", `2026-01-${day}.md`),
+				`Log entry ${i}: typescript`,
+				"utf-8",
+			);
 		}
 		await fs.writeFile(path.join(tmpDir, ".memory", "MEMORY.md"), "typescript project", "utf-8");
 

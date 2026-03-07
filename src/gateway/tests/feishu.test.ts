@@ -1,6 +1,6 @@
-import { createCipheriv, createHash, randomBytes } from "node:crypto";
 import { afterAll, beforeEach, describe, expect, test } from "bun:test";
-import { FeishuChannel, decryptFeishuWebhook } from "@/gateway/channels/feishu";
+import { createCipheriv, createHash, randomBytes } from "node:crypto";
+import { decryptFeishuWebhook, FeishuChannel } from "@/gateway/channels/feishu";
 
 // Mock fetch globally
 const originalFetch = globalThis.fetch;
@@ -447,7 +447,9 @@ describe("FeishuChannel", () => {
 					text: async () => "send-down",
 				} as Response;
 			};
-			await expect(feishu.sendMessage("oc_test12345", "x")).rejects.toThrow("Feishu API error (sendMessage): send-down");
+			await expect(feishu.sendMessage("oc_test12345", "x")).rejects.toThrow(
+				"Feishu API error (sendMessage): send-down",
+			);
 		});
 
 		test("should throw when sendMessage payload code is non-zero", async () => {

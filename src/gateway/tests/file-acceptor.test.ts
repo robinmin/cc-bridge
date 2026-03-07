@@ -87,11 +87,10 @@ describe("file-acceptor", () => {
 			}),
 		} as unknown as FeishuChannel;
 
-		const result = await acceptAttachments(
-			{ ...makeMsg([att]), channelId: "feishu" },
-			feishu,
-			{ ...cfg, allowedMimeTypes: [...cfg.allowedMimeTypes, "application/octet-stream"] },
-		);
+		const result = await acceptAttachments({ ...makeMsg([att]), channelId: "feishu" }, feishu, {
+			...cfg,
+			allowedMimeTypes: [...cfg.allowedMimeTypes, "application/octet-stream"],
+		});
 		expect(result.attachments).toHaveLength(1);
 		expect(result.attachments[0].mimeType).toBe("image/png");
 		expect(result.textAppend).toContain("saved to");
@@ -130,11 +129,10 @@ describe("file-acceptor", () => {
 			}),
 		} as unknown as FeishuChannel;
 
-		const res = await acceptAttachments(
-			{ ...makeMsg([jpegAtt, webpAtt]), channelId: "feishu" },
-			feishu,
-			{ ...cfg, allowedMimeTypes: [...cfg.allowedMimeTypes, "application/octet-stream"] },
-		);
+		const res = await acceptAttachments({ ...makeMsg([jpegAtt, webpAtt]), channelId: "feishu" }, feishu, {
+			...cfg,
+			allowedMimeTypes: [...cfg.allowedMimeTypes, "application/octet-stream"],
+		});
 		expect(res.attachments).toHaveLength(2);
 		expect(res.attachments.find((a) => a.fileId === "img-jpeg")?.mimeType).toBe("image/jpeg");
 		expect(res.attachments.find((a) => a.fileId === "img-webp")?.mimeType).toBe("image/webp");
@@ -191,11 +189,7 @@ describe("file-acceptor", () => {
 			name: "feishu",
 			getClient: () => ({ downloadResource: async () => new Response("x") }),
 		} as unknown as FeishuChannel;
-		const missing = await acceptAttachments(
-			{ ...makeMsg([missingFeishuMeta]), channelId: "feishu" },
-			feishu,
-			cfg,
-		);
+		const missing = await acceptAttachments({ ...makeMsg([missingFeishuMeta]), channelId: "feishu" }, feishu, cfg);
 		expect(missing.attachments).toHaveLength(0);
 	});
 

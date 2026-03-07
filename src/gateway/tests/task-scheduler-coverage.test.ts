@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:
 import fs from "node:fs/promises";
 import path from "node:path";
 import { miniAppDriver } from "@/gateway/apps/driver";
-import { IpcFactory } from "@/packages/ipc";
+import { getExecutionOrchestrator } from "@/gateway/engine/orchestrator";
 import { TaskScheduler } from "@/gateway/task-scheduler";
 
 type Task = {
@@ -197,10 +197,11 @@ describe("TaskScheduler coverage", () => {
 
 		const miniSpy = spyOn(miniAppDriver, "isMiniAppTaskPrompt").mockReturnValue(false);
 
-		const createSpy = spyOn(IpcFactory, "create").mockReturnValue({
-			sendRequest: async () => ({ id: "x", status: 500, error: { message: "failed" } }),
-			isAvailable: () => true,
-			getMethod: () => "mock",
+		const createSpy = spyOn(getExecutionOrchestrator(), "execute").mockReturnValue({
+			status: "failed",
+			error: "failed",
+			retryable: false,
+			isTimeout: false,
 		} as never);
 		await scheduler.executeTask({
 			id: "t3",
@@ -215,8 +216,8 @@ describe("TaskScheduler coverage", () => {
 		expect(saveTask).toHaveBeenCalled();
 
 		createSpy.mockRestore();
-		const throwSpy = spyOn(IpcFactory, "create").mockImplementation(() => {
-			throw new Error("ipc-fail");
+		const throwSpy = spyOn(getExecutionOrchestrator(), "execute").mockImplementation(() => {
+			throw new Error("execution-fail");
 		});
 		await scheduler.executeTask({
 			id: "t4",

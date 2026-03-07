@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import fs from "node:fs";
-import { InstanceManager } from "@/gateway/instance-manager";
 import { GATEWAY_CONSTANTS } from "@/gateway/consts";
+import { InstanceManager } from "@/gateway/instance-manager";
 
 describe("InstanceManager", () => {
 	let manager: InstanceManager;
@@ -90,13 +90,11 @@ describe("InstanceManager", () => {
 			.mockImplementationOnce((p) => String(p) === root)
 			.mockImplementationOnce(() => true);
 		const readdirSpy = spyOn(fs.promises, "readdir")
-			.mockResolvedValueOnce(
-				[
-					{ name: "alpha", isDirectory: () => true },
-					{ name: ".hidden", isDirectory: () => true },
-					{ name: "not-dir", isDirectory: () => false },
-				] as unknown as Awaited<ReturnType<typeof fs.promises.readdir>>,
-			)
+			.mockResolvedValueOnce([
+				{ name: "alpha", isDirectory: () => true },
+				{ name: ".hidden", isDirectory: () => true },
+				{ name: "not-dir", isDirectory: () => false },
+			] as unknown as Awaited<ReturnType<typeof fs.promises.readdir>>)
 			.mockRejectedValueOnce(new Error("readdir failed"));
 
 		const folders = await manager.getWorkspaceFolders();

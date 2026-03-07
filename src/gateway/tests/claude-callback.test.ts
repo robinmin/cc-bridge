@@ -5,8 +5,12 @@ import { Hono } from "hono";
 import { setChannelForChat } from "@/gateway/channels/chat-channel-map";
 import { TelegramChannel } from "@/gateway/channels/telegram";
 import { handleCallbackHealth, handleClaudeCallback } from "@/gateway/routes/claude-callback";
-import { CallbackErrorResponseSchema, CallbackHealthResponseSchema, CallbackSuccessResponseSchema } from "@/gateway/schemas/callback";
 import type { ResponseFile } from "@/gateway/schemas/callback";
+import {
+	CallbackErrorResponseSchema,
+	CallbackHealthResponseSchema,
+	CallbackSuccessResponseSchema,
+} from "@/gateway/schemas/callback";
 import { IdempotencyService } from "@/gateway/services/IdempotencyService";
 import { RateLimitService } from "@/gateway/services/RateLimitService";
 import { FileReadError, FileReadErrorType, ResponseFileReader } from "@/gateway/services/ResponseFileReader";
@@ -609,7 +613,10 @@ describe("handleClaudeCallback (Hardened)", () => {
 				output: "Hello XFF",
 				exitCode: 0,
 			};
-			await writeFile(path.join(testIpcDir, "test-workspace", "responses", "req-xff.json"), JSON.stringify(mockResponse));
+			await writeFile(
+				path.join(testIpcDir, "test-workspace", "responses", "req-xff.json"),
+				JSON.stringify(mockResponse),
+			);
 			const infoSpy = spyOn(logger, "info");
 
 			const response = await app.request("/claude-callback", {

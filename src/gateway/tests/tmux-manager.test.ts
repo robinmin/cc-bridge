@@ -49,7 +49,7 @@ describe("TmuxManager", () => {
 	let originalSpawn: typeof Bun.spawn;
 
 	const streamFrom = (text: string): ReadableStream<Uint8Array> =>
-		(new Response(text).body as ReadableStream<Uint8Array>);
+		new Response(text).body as ReadableStream<Uint8Array>;
 
 	const spawnResult = (stdout: string, stderr: string, exitCode: number) =>
 		({
@@ -783,10 +783,7 @@ describe("TmuxManager", () => {
 
 			const rawManager = new TmuxManager();
 			const rawManagerInternals = rawManager as unknown as TmuxManagerInternals;
-			const execResult = await rawManagerInternals.execInContainer("cid", [
-				"echo",
-				"hello",
-			]);
+			const execResult = await rawManagerInternals.execInContainer("cid", ["echo", "hello"]);
 			expect(execResult).toEqual({ stdout: "ok-stdout", stderr: "ok-stderr", exitCode: 7 });
 
 			const execStdinResult = await rawManagerInternals.execInContainerWithStdin("cid", ["cat"], "payload");

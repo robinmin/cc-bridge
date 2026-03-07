@@ -30,12 +30,7 @@ describe("packages bridge coverage (gateway run)", () => {
 		expect(splitTextChunks("x".repeat(10), 3).every((chunk) => chunk.length <= 3)).toBe(true);
 		expect(splitTextChunks("   ", 5)).toEqual([]);
 
-		expect(
-			getMissingRequiredFields(
-				{ a: "ok", b: "", c: "   ", d: 1 },
-				["a", "b", "c", "d"],
-			),
-		).toEqual(["b", "c", "d"]);
+		expect(getMissingRequiredFields({ a: "ok", b: "", c: "   ", d: 1 }, ["a", "b", "c", "d"])).toEqual(["b", "c", "d"]);
 	});
 
 	test("covers config helpers and loading branches", () => {
@@ -43,12 +38,10 @@ describe("packages bridge coverage (gateway run)", () => {
 		expect(isRecord(null)).toBe(false);
 		expect(isRecord([])).toBe(false);
 		expect(deepMerge("default", "parsed")).toBe("parsed");
-		expect(
-			deepMerge(
-				{ nested: { keep: 1, override: 0 }, top: "x" },
-				{ nested: { override: 2 } },
-			),
-		).toEqual({ nested: { keep: 1, override: 2 }, top: "x" });
+		expect(deepMerge({ nested: { keep: 1, override: 0 }, top: "x" }, { nested: { override: 2 } })).toEqual({
+			nested: { keep: 1, override: 2 },
+			top: "x",
+		});
 
 		const existsSpy = spyOn(fs, "existsSync").mockImplementation((p) => String(p).includes("exists"));
 		const readSpy = spyOn(fs, "readFileSync")
@@ -120,11 +113,7 @@ describe("packages bridge coverage (gateway run)", () => {
 		expect(calculateNextCronRun("0,,5 * * * *", from)).toBeNull();
 		expect(calculateNextCronRun("0 0 31 2 *", from)).toBeNull();
 		expect(calculateNextRun({ schedule_type: "once", schedule_value: "1m" }, from)).toBeNull();
-		expect(calculateNextRun({ schedule_type: "recurring", schedule_value: "30m" }, from)).toBe(
-			"2026-02-21 08:00:00",
-		);
-		expect(calculateNextRun({ schedule_type: "cron", schedule_value: "0 8 * * *" }, from)).toBe(
-			"2026-02-21 08:00:00",
-		);
+		expect(calculateNextRun({ schedule_type: "recurring", schedule_value: "30m" }, from)).toBe("2026-02-21 08:00:00");
+		expect(calculateNextRun({ schedule_type: "cron", schedule_value: "0 8 * * *" }, from)).toBe("2026-02-21 08:00:00");
 	});
 });

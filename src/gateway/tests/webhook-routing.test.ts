@@ -3,8 +3,8 @@ import { createCipheriv, createHash, randomBytes } from "node:crypto";
 import { Hono } from "hono";
 import type { FeishuChannel } from "@/gateway/channels/feishu";
 import type { TelegramChannel } from "@/gateway/channels/telegram";
-import type { Bot } from "@/gateway/pipeline";
 import { persistence } from "@/gateway/persistence";
+import type { Bot } from "@/gateway/pipeline";
 import { rateLimiter } from "@/gateway/rate-limiter";
 import { handleFeishuWebhook, handleTelegramWebhook, handleWebhook } from "@/gateway/routes/webhook";
 import { updateTracker } from "@/gateway/tracker";
@@ -1118,11 +1118,11 @@ describe("Webhook Routing - handleWebhook", () => {
 		});
 	});
 });
-	const encryptFeishuPayload = (payload: unknown, encryptKey: string): string => {
-		const key = createHash("sha256").update(encryptKey).digest();
-		const iv = randomBytes(16);
-		const cipher = createCipheriv("aes-256-cbc", key, iv);
-		const data = Buffer.from(JSON.stringify(payload), "utf8");
-		const encrypted = Buffer.concat([cipher.update(data), cipher.final()]);
-		return Buffer.concat([iv, encrypted]).toString("base64");
-	};
+const encryptFeishuPayload = (payload: unknown, encryptKey: string): string => {
+	const key = createHash("sha256").update(encryptKey).digest();
+	const iv = randomBytes(16);
+	const cipher = createCipheriv("aes-256-cbc", key, iv);
+	const data = Buffer.from(JSON.stringify(payload), "utf8");
+	const encrypted = Buffer.concat([cipher.update(data), cipher.final()]);
+	return Buffer.concat([iv, encrypted]).toString("base64");
+};

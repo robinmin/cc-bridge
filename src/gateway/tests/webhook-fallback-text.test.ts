@@ -1,9 +1,8 @@
 import { describe, expect, mock, spyOn, test } from "bun:test";
 import { Hono } from "hono";
-import * as fileAcceptor from "@/gateway/services/file-acceptor";
 import type { TelegramChannel } from "@/gateway/channels/telegram";
-import type { Message } from "@/gateway/pipeline";
-import type { Bot } from "@/gateway/pipeline";
+import type { Bot, Message } from "@/gateway/pipeline";
+import * as fileAcceptor from "@/gateway/services/file-acceptor";
 
 describe("webhook fallback text", () => {
 	test("sets fallback text when accepted attachments produce empty text append", async () => {

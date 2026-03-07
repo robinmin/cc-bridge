@@ -717,9 +717,7 @@ describe("ErrorRecoveryService", () => {
 				failureCount: 5,
 			});
 
-			(service as unknown as { resetFailureCounter: (t: ErrorType) => void }).resetFailureCounter(
-				ErrorType.PERMISSION,
-			);
+			(service as unknown as { resetFailureCounter: (t: ErrorType) => void }).resetFailureCounter(ErrorType.PERMISSION);
 			(service as unknown as { resetCircuitBreakers: () => void }).resetCircuitBreakers();
 
 			const state = breakers.get(ErrorType.PERMISSION);

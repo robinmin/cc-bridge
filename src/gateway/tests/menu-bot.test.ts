@@ -39,9 +39,7 @@ describe("MenuBot", () => {
 		refreshSpy.mockResolvedValue([]);
 		foldersSpy.mockReset();
 		foldersSpy.mockResolvedValue([]);
-		spawnSpy = spyOn(Bun, "spawn").mockImplementation(
-			(() => ({ exited: Promise.resolve(0) })) as typeof Bun.spawn,
-		);
+		spawnSpy = spyOn(Bun, "spawn").mockImplementation((() => ({ exited: Promise.resolve(0) })) as typeof Bun.spawn);
 		(globalThis as { fetch: typeof fetch }).fetch = fetchMock as unknown as typeof fetch;
 		fetchMock.mockReset();
 		fetchMock.mockResolvedValue(new Response("OK", { status: 200 }));
@@ -158,10 +156,7 @@ describe("MenuBot", () => {
 		const bot = new MenuBot(mockChannel, persistenceMock as never);
 		const chatId = "123";
 		expect(await bot.handle({ channelId: "test", chatId, text: "/ws_switch" })).toBe(true);
-		expect(spy).toHaveBeenCalledWith(
-			chatId,
-			"❓ Please specify a workspace name.\nExample: `/ws_switch cc-bridge`.",
-		);
+		expect(spy).toHaveBeenCalledWith(chatId, "❓ Please specify a workspace name.\nExample: `/ws_switch cc-bridge`.");
 
 		refreshSpy.mockResolvedValueOnce([{ name: "alpha", containerId: "1", status: "running", image: "img" }]);
 		expect(await bot.handle({ channelId: "test", chatId, text: "/ws_switch beta" })).toBe(true);
@@ -188,10 +183,7 @@ describe("MenuBot", () => {
 		);
 
 		expect(await bot.handle({ channelId: "test", chatId, text: "/ws_add" })).toBe(true);
-		expect(spy).toHaveBeenCalledWith(
-			chatId,
-			"❓ Please specify a workspace name.\nExample: `/ws_add my-project`.",
-		);
+		expect(spy).toHaveBeenCalledWith(chatId, "❓ Please specify a workspace name.\nExample: `/ws_add my-project`.");
 
 		expect(await bot.handle({ channelId: "test", chatId, text: "/ws_add bad$name" })).toBe(true);
 		expect(spy).toHaveBeenCalledWith(chatId, expect.stringContaining("Invalid workspace name"));

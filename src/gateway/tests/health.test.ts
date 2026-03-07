@@ -57,8 +57,10 @@ describe("Health Route", () => {
 			return new Response("ok", { status: 429 });
 		}) as typeof fetch;
 
-		const tgStatusSpy = spyOn((await import("@/gateway/channels/telegram")).TelegramChannel.prototype, "getStatus")
-			.mockResolvedValue({ result: { url: "https://t.me/hook", pending_update_count: 2 } } as never);
+		const tgStatusSpy = spyOn(
+			(await import("@/gateway/channels/telegram")).TelegramChannel.prototype,
+			"getStatus",
+		).mockResolvedValue({ result: { url: "https://t.me/hook", pending_update_count: 2 } } as never);
 
 		const spawnSpy = spyOn(Bun, "spawn").mockImplementation((args: string[]) => {
 			if (args[0] === "docker") {
