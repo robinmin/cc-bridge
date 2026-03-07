@@ -1,8 +1,7 @@
 import fastifyCors from "@fastify/cors";
 import { fastifyRateLimit } from "@fastify/rate-limit";
 import { randomUUIDv7 } from "bun";
-import type { InjectOptions } from "fastify";
-import type { FastifyInstance, FastifyServerOptions } from "fastify";
+import type { FastifyInstance, FastifyServerOptions, InjectOptions } from "fastify";
 import fastify from "fastify";
 import { z } from "zod";
 import type { RequestTrackerContract, SessionPoolContract, TmuxManagerContract } from "@/packages/agent-runtime";
@@ -672,15 +671,15 @@ export class AgentHttpServer {
 								"application/json": {
 									schema: {
 										type: "object",
-									required: ["workspace", "command"],
-									properties: {
-										workspace: { type: "string" },
-										command: { type: "string" },
-										chatId: { oneOf: [{ type: "string" }, { type: "number" }] },
-										timeoutMs: { type: "number" },
+										required: ["workspace", "command"],
+										properties: {
+											workspace: { type: "string" },
+											command: { type: "string" },
+											chatId: { oneOf: [{ type: "string" }, { type: "number" }] },
+											timeoutMs: { type: "number" },
+										},
 									},
 								},
-							},
 							},
 						},
 						responses: {
