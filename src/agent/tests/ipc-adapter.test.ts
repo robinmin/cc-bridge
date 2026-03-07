@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { Hono } from "hono";
-import { StdioIpcAdapter } from "@/packages/ipc";
+import { StdioIpcAdapter } from "@/agent/ipc-adapter";
 
 describe("StdioIpcAdapter", () => {
 	test("should process commands from input stream and write to output", async () => {
