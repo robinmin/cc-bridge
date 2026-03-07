@@ -3,8 +3,10 @@ import { pinoLogger } from "hono-pino";
 import { FeishuChannel } from "@/gateway/channels/feishu";
 import { TelegramChannel } from "@/gateway/channels/telegram";
 import { GATEWAY_CONSTANTS } from "@/gateway/consts";
+import { getExecutionOrchestrator } from "@/gateway/engine/orchestrator";
 import { instanceManager } from "@/gateway/instance-manager";
 import { MailboxWatcher } from "@/gateway/mailbox-watcher";
+import { createMemoryBackend, resolveMemoryConfig } from "@/gateway/memory/manager";
 import { authMiddleware } from "@/gateway/middleware/auth";
 import { persistence } from "@/gateway/persistence";
 import { AgentBot } from "@/gateway/pipeline/agent-bot";
@@ -14,7 +16,6 @@ import { rateLimiter } from "@/gateway/rate-limiter";
 import { handleCallbackHealth, handleClaudeCallback } from "@/gateway/routes/claude-callback";
 import { handleHealth } from "@/gateway/routes/health";
 import { handleFeishuWebhook, handleTelegramWebhook, handleWebhook } from "@/gateway/routes/webhook";
-import { createMemoryBackend, resolveMemoryConfig } from "@/gateway/memory/manager";
 import { ErrorRecoveryService } from "@/gateway/services/ErrorRecoveryService";
 import { FileCleanupService } from "@/gateway/services/file-cleanup";
 import { FileSystemIpc } from "@/gateway/services/filesystem-ipc";
@@ -26,6 +27,9 @@ import { ConfigLoader } from "@/packages/config";
 import { logger, setLogLevel } from "@/packages/logger";
 
 const app = new Hono();
+
+// Initialize Execution Orchestrator - unified 3-layer execution engine
+export const executionOrchestrator = getExecutionOrchestrator();
 
 // Custom HTTP logging for better readability (plaintext mode)
 app.use("*", async (c, next) => {
