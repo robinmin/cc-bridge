@@ -23,4 +23,3 @@ describe("async package", () => {
 		expect(out).toEqual([2, 3]);
 	});
 });
-

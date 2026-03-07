@@ -16,4 +16,3 @@ describe("text package", () => {
 		expect(splitTextChunks("   ", 10)).toEqual([]);
 	});
 });
-

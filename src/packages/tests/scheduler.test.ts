@@ -63,12 +63,8 @@ describe("scheduler package", () => {
 	test("calculates next run for recurring and once", () => {
 		const from = new Date("2026-02-21T07:30:00.000Z");
 		expect(calculateNextRun({ schedule_type: "once", schedule_value: "0s" }, from)).toBeNull();
-		expect(calculateNextRun({ schedule_type: "recurring", schedule_value: "30m" }, from)).toBe(
-			"2026-02-21 08:00:00",
-		);
+		expect(calculateNextRun({ schedule_type: "recurring", schedule_value: "30m" }, from)).toBe("2026-02-21 08:00:00");
 		expect(calculateNextRun({ schedule_type: "recurring", schedule_value: "bad" }, from)).toBeNull();
-		expect(calculateNextRun({ schedule_type: "cron", schedule_value: "0 8 * * *" }, from)).toBe(
-			"2026-02-21 08:00:00",
-		);
+		expect(calculateNextRun({ schedule_type: "cron", schedule_value: "0 8 * * *" }, from)).toBe("2026-02-21 08:00:00");
 	});
 });

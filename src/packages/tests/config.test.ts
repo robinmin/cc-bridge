@@ -103,10 +103,7 @@ describe("ConfigLoader", () => {
 	});
 
 	test("should deepMerge recursively for nested records", () => {
-		const result = deepMerge(
-			{ nested: { keep: 1, override: 0 }, scalar: "a" },
-			{ nested: { override: 2 } },
-		);
+		const result = deepMerge({ nested: { keep: 1, override: 0 }, scalar: "a" }, { nested: { override: 2 } });
 		expect(result).toEqual({ nested: { keep: 1, override: 2 }, scalar: "a" });
 	});
 
