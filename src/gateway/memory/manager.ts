@@ -176,7 +176,10 @@ export function shouldCaptureLongTermMemory(userText: string): boolean {
 export function estimateTokenCountFromHistory(
 	history: Array<{ sender: string; text: string; timestamp: string }>,
 ): number {
-	const totalChars = history.reduce((sum, item) => sum + item.sender.length + item.timestamp.length + item.text.length, 0);
+	const totalChars = history.reduce(
+		(sum, item) => sum + item.sender.length + item.timestamp.length + item.text.length,
+		0,
+	);
 	return Math.ceil(totalChars / 4);
 }
 
