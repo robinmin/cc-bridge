@@ -3,7 +3,7 @@ import path from "node:path";
 import { FeishuChannel } from "@/gateway/channels/feishu";
 import { TelegramChannel } from "@/gateway/channels/telegram";
 import { GATEWAY_CONSTANTS } from "@/gateway/consts";
-import type { ExecutionRequest } from "@/gateway/engine/contracts";
+import type { ExecutionRequest, ExecutionResult } from "@/gateway/engine/contracts";
 import { getExecutionOrchestrator } from "@/gateway/engine/orchestrator";
 import { type AgentInstance, instanceManager } from "@/gateway/instance-manager";
 import { buildMemoryBootstrapContext, resolveMemoryConfig } from "@/gateway/memory/manager";
@@ -89,6 +89,165 @@ const DAILY_NEWS_FORBIDDEN_META_PATTERNS = [
 	/(知识截止|知识库|无法获取.*尚未到来)/i,
 ];
 const DAILY_NEWS_SOURCE_LINE_PATTERN = /来源：\[[^\]]+\]\(https?:\/\/[^\s)]+\)/;
+
+/**
+ * Wait for tmux command completion and capture output
+ * Uses tmux capture-pane to get the output after command completes
+ */
+async function waitForTmuxCompletion(params: {
+	sessionName: string;
+	timeoutMs: number;
+	promptSentAt: number;
+}): Promise<ExecutionResult> {
+	const { sessionName, timeoutMs, promptSentAt } = params;
+	const pollIntervalMs = 2000; // Check every 2 seconds
+	const startTime = Date.now();
+	const minExecutionTimeMs = 5000; // Minimum time to wait before checking completion
+
+	logger.info({ sessionName, timeoutMs }, "Waiting for tmux command completion");
+
+	// Wait minimum execution time first
+	await new Promise((resolve) => setTimeout(resolve, minExecutionTimeMs));
+
+	let lastLineCount = 0;
+	let stableCount = 0;
+	const requiredStableChecks = 3; // Output must be stable for 3 consecutive checks
+
+	while (Date.now() - startTime < timeoutMs) {
+		try {
+			// Capture the current pane content
+			const proc = Bun.spawn(
+				["tmux", "capture-pane", "-t", sessionName, "-p", "-S", "-1000"],
+				{
+					stdout: "pipe",
+					stderr: "pipe",
+				},
+			);
+
+			const output = await new Response(proc.stdout).text();
+			await proc.exited;
+
+			if (proc.exitCode !== 0) {
+				logger.debug({ sessionName, exitCode: proc.exitCode }, "tmux capture-pane failed, session may have ended");
+				// Session might have ended - this could mean completion or error
+				// Try to get any remaining output
+				if (output.trim()) {
+					return {
+						status: "completed",
+						output: output.trim(),
+						exitCode: 0,
+						retryable: false,
+					};
+				}
+				return {
+					status: "failed",
+					error: "tmux session ended unexpectedly",
+					retryable: true,
+				};
+			}
+
+			// Check if output has stabilized (command completed)
+			const lines = output.split("\n").filter((l) => l.trim());
+			const currentLineCount = lines.length;
+
+			if (currentLineCount === lastLineCount && currentLineCount > 0) {
+				stableCount++;
+				if (stableCount >= requiredStableChecks) {
+					// Output has been stable - command likely completed
+					// Extract the output after our prompt was sent
+					logger.info(
+						{ sessionName, lineCount: currentLineCount, elapsedMs: Date.now() - startTime },
+						"tmux command output stabilized, assuming completion",
+					);
+
+					// Find where our output starts (after the prompt we sent)
+					// We look for common completion indicators or just return all recent output
+					const cleanOutput = extractRecentOutput(output, promptSentAt);
+
+					return {
+						status: "completed",
+						output: cleanOutput,
+						exitCode: 0,
+						retryable: false,
+					};
+				}
+			} else {
+				stableCount = 0;
+				lastLineCount = currentLineCount;
+			}
+
+			logger.debug(
+				{ sessionName, lineCount: currentLineCount, stableCount, elapsedMs: Date.now() - startTime },
+				"Checking tmux output stability...",
+			);
+		} catch (error) {
+			logger.debug({ sessionName, error: String(error) }, "tmux check failed, continuing...");
+		}
+
+		// Wait before next poll
+		await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+	}
+
+	// Timeout - return whatever output we have
+	logger.warn({ sessionName, elapsedMs: Date.now() - startTime }, "tmux command timed out, returning current output");
+
+	// Try to capture current output
+	try {
+		const proc = Bun.spawn(["tmux", "capture-pane", "-t", sessionName, "-p", "-S", "-1000"], {
+			stdout: "pipe",
+			stderr: "pipe",
+		});
+		const output = await new Response(proc.stdout).text();
+		await proc.exited;
+
+		return {
+			status: "timeout",
+			output: output.trim(),
+			error: `tmux command timed out after ${timeoutMs}ms`,
+			retryable: true,
+			isTimeout: true,
+		};
+	} catch {
+		return {
+			status: "timeout",
+			error: `tmux command timed out after ${timeoutMs}ms`,
+			retryable: true,
+			isTimeout: true,
+		};
+	}
+}
+
+/**
+ * Extract recent output from tmux capture, filtering out old content
+ */
+function extractRecentOutput(fullOutput: string, _promptSentAt: number): string {
+	const lines = fullOutput.split("\n");
+
+	// Look for Claude output markers or just return the last portion
+	// Common patterns that indicate start of response
+	const startMarkers = [/^Claude:/i, /^Here['']s/i, /^Based on/i, /^I['']ll/i, /^Let me/i];
+
+	let startIndex = -1;
+	for (let i = lines.length - 1; i >= 0; i--) {
+		const line = lines[i];
+		for (const marker of startMarkers) {
+			if (marker.test(line)) {
+				startIndex = i;
+				break;
+			}
+		}
+		if (startIndex !== -1) break;
+	}
+
+	// If we found a start marker, return from there
+	if (startIndex !== -1) {
+		return lines.slice(startIndex).join("\n").trim();
+	}
+
+	// Otherwise return the last 80% of output (heuristic)
+	const keepLines = Math.floor(lines.length * 0.8);
+	return lines.slice(-keepLines).join("\n").trim();
+}
 
 function parseBool(value: string | undefined, defaultValue: boolean): boolean {
 	if (!value) return defaultValue;
@@ -566,14 +725,30 @@ export class MiniAppDriver {
 
 		const orchestratorResult = await getExecutionOrchestrator().execute(request);
 
+		// Handle async execution - wait for tmux completion and capture output
+		let finalResult = orchestratorResult;
+		if (orchestratorResult.mode === "tmux" && orchestratorResult.status === "running") {
+			// Generate session name (must match host-ipc.ts generateSessionName)
+			const sanitizedWorkspace = workspace.replace(/[^a-zA-Z0-9_-]/g, "_");
+			const sanitizedChatId = String(executionTarget.chatId || "default").replace(/[^a-zA-Z0-9_-]/g, "_");
+			const sessionName = `claude-${sanitizedWorkspace}-${sanitizedChatId}`;
+
+			logger.info({ sessionName, workspace, timeoutMs }, "Execution is async via tmux, waiting for completion...");
+			finalResult = await waitForTmuxCompletion({
+				sessionName,
+				timeoutMs,
+				promptSentAt: Date.now(),
+			});
+		}
+
 		// Convert to expected format
 		const generation = {
-			success: orchestratorResult.status === "completed",
-			output: orchestratorResult.output,
-			error: orchestratorResult.error,
-			exitCode: orchestratorResult.exitCode,
-			retryable: orchestratorResult.retryable,
-			isTimeout: orchestratorResult.isTimeout,
+			success: finalResult.status === "completed",
+			output: finalResult.output,
+			error: finalResult.error,
+			exitCode: finalResult.exitCode,
+			retryable: finalResult.retryable,
+			isTimeout: finalResult.isTimeout,
 		};
 		if (!generation.success) {
 			throw new Error(generation.error || `Mini-app "${appId}" generation failed`);
@@ -620,13 +795,25 @@ export class MiniAppDriver {
 			};
 
 			const retryOrchestratorResult = await getExecutionOrchestrator().execute(retryRequest);
+
+			// Handle async execution - wait for tmux completion and capture output
+			let retryFinalResult = retryOrchestratorResult;
+			if (retryOrchestratorResult.mode === "tmux" && retryOrchestratorResult.status === "running") {
+				logger.info({ sessionName, workspace, timeoutMs }, "Retry execution is async via tmux, waiting for completion...");
+				retryFinalResult = await waitForTmuxCompletion({
+					sessionName,
+					timeoutMs,
+					promptSentAt: Date.now(),
+				});
+			}
+
 			const retryGeneration = {
-				success: retryOrchestratorResult.status === "completed",
-				output: retryOrchestratorResult.output,
-				error: retryOrchestratorResult.error,
-				exitCode: retryOrchestratorResult.exitCode,
-				retryable: retryOrchestratorResult.retryable,
-				isTimeout: retryOrchestratorResult.isTimeout,
+				success: retryFinalResult.status === "completed",
+				output: retryFinalResult.output,
+				error: retryFinalResult.error,
+				exitCode: retryFinalResult.exitCode,
+				retryable: retryFinalResult.retryable,
+				isTimeout: retryFinalResult.isTimeout,
 			};
 			if (!retryGeneration.success) {
 				throw new Error(retryGeneration.error || `Mini-app "${appId}" retry generation failed`);
