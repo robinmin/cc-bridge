@@ -89,7 +89,9 @@ export class DiscoveryCacheService {
 
 		let pluginsData: { plugins?: Record<string, unknown> };
 		try {
-			pluginsData = JSON.parse(fs.readFileSync(this.pluginsCachePath, "utf-8")) as { plugins?: Record<string, unknown> };
+			pluginsData = JSON.parse(fs.readFileSync(this.pluginsCachePath, "utf-8")) as {
+				plugins?: Record<string, unknown>;
+			};
 		} catch (error) {
 			logger.warn({ path: this.pluginsCachePath, error }, "Failed to parse installed plugins cache");
 			return { agents, commands, skills };
