@@ -43,6 +43,10 @@ export interface ExecutionOptions {
 	useTmux?: boolean;
 	/** Conversation history */
 	history?: Array<{ sender: string; text: string; timestamp: string }>;
+	/** Wait for completion and return output (synchronous mode) */
+	sync?: boolean;
+	/** Kill tmux session after execution completes (for one-off runs) */
+	ephemeralSession?: boolean;
 }
 
 /** Request for execution */
