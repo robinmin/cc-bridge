@@ -191,6 +191,37 @@ describe("TmuxManager", () => {
 			);
 		});
 
+		test("should reclaim leaked miniapp sessions before enforcing limit", async () => {
+			tmuxManager.mockExecInContainer
+				.mockResolvedValueOnce({ stdout: "", stderr: "", exitCode: 1 })
+				.mockResolvedValueOnce({
+					stdout: Array.from({ length: 10 }, (_value, index) => `claude-test-workspace-miniapp-${index}`).join("\n"),
+					stderr: "",
+					exitCode: 0,
+				})
+				.mockResolvedValueOnce({ stdout: "", stderr: "", exitCode: 0 })
+				.mockResolvedValueOnce({ stdout: "", stderr: "", exitCode: 0 })
+				.mockResolvedValueOnce({ stdout: "", stderr: "", exitCode: 0 })
+				.mockResolvedValueOnce({ stdout: "", stderr: "", exitCode: 0 })
+				.mockResolvedValueOnce({ stdout: "", stderr: "", exitCode: 0 })
+				.mockResolvedValueOnce({ stdout: "", stderr: "", exitCode: 0 })
+				.mockResolvedValueOnce({ stdout: "", stderr: "", exitCode: 0 })
+				.mockResolvedValueOnce({ stdout: "", stderr: "", exitCode: 0 })
+				.mockResolvedValueOnce({ stdout: "", stderr: "", exitCode: 0 })
+				.mockResolvedValueOnce({ stdout: "", stderr: "", exitCode: 0 })
+				.mockResolvedValueOnce({ stdout: "", stderr: "", exitCode: 0 })
+				.mockResolvedValueOnce({ stdout: "", stderr: "", exitCode: 0 })
+				.mockResolvedValueOnce({ stdout: "", stderr: "", exitCode: 0 });
+
+			const sessionName = await tmuxManager.getOrCreateSession(TEST_CONTAINER_ID, TEST_WORKSPACE, "miniapp-new");
+
+			expect(sessionName).toBe("claude-test-workspace-miniapp-new");
+			const killCalls = tmuxManager.mockExecInContainer.mock.calls.filter(
+				(call) => call[1][0] === "tmux" && call[1][1] === "kill-session",
+			);
+			expect(killCalls).toHaveLength(10);
+		});
+
 		test("should handle tmux create failure", async () => {
 			tmuxManager.mockExecInContainer
 				.mockResolvedValueOnce({ stdout: "", stderr: "", exitCode: 1 }) // has-session: not exists
