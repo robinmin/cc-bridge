@@ -60,24 +60,13 @@ export { InProcessEngine } from "./in-process";
 // Orchestrator
 // =============================================================================
 
-import { createOrchestrator as _createOrchestrator, type ExecutionOrchestrator } from "./orchestrator";
-
 export {
 	createOrchestrator,
 	ExecutionOrchestrator,
 	getDefaultOrchestrator,
+	getExecutionOrchestrator,
 	setDefaultOrchestrator,
 } from "./orchestrator";
-
-// Lazy-loaded default orchestrator instance - use getExecutionOrchestrator() to access
-let _orchestrator: ExecutionOrchestrator | null = null;
-
-export function getExecutionOrchestrator(): ExecutionOrchestrator {
-	if (!_orchestrator) {
-		_orchestrator = _createOrchestrator();
-	}
-	return _orchestrator;
-}
 
 // =============================================================================
 // Utilities
