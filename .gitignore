@@ -163,3 +163,5 @@ vite.config.ts.timestamp-*
 /data/config/gateway.jsonc
 /data/config/discovery-cache.jsonc
 /src/gateway/tests/data/
+/data/gateway.db-shm
+/data/gateway.db-wal
