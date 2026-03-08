@@ -13,7 +13,7 @@ Example:
 
 ```text
 src/apps/daily-news.md
-src/apps/daily-news/validate_links.ts
+src/apps/daily-news/
 ```
 
 ## Quick Start
@@ -30,6 +30,11 @@ New execution controls in frontmatter:
 - `execution_engine`: `claude_container` | `claude_host` | `codex_host`
 - `context_mode`: `existing` | `fresh`
 - `engine_command` / `engine_args`: optional command/args override for host engines (`{{prompt}}` placeholder supported)
+
+Mini-app execution defaults:
+- Mini-app runs always use a fresh ephemeral tmux session per execution.
+- `context_mode: fresh` means no persisted conversation history is sent to the engine.
+- `context_mode: existing` means recent persisted chat history is included, but the tmux session is still fresh for that run.
 
 ## Documentation
 
