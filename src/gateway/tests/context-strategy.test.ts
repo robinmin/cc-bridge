@@ -2,19 +2,19 @@
  * Tests for Context Management Strategy
  */
 
-import { describe, expect, test, beforeEach } from "bun:test";
+import { beforeEach, describe, expect, test } from "bun:test";
 import {
 	type ContextManagementConfig,
 	type ContextTrigger,
-	type SessionMetadata,
-	SessionMetadataTracker,
-	ManualStrategy,
-	TurnLimitStrategy,
-	IdleTimeoutStrategy,
-	SizeLimitStrategy,
-	HybridStrategy,
 	createContextStrategy,
 	DEFAULT_CONTEXT_MANAGEMENT_CONFIG,
+	HybridStrategy,
+	IdleTimeoutStrategy,
+	ManualStrategy,
+	type SessionMetadata,
+	SessionMetadataTracker,
+	SizeLimitStrategy,
+	TurnLimitStrategy,
 } from "@/gateway/engine/context-strategy";
 
 // Helper to create test metadata
@@ -358,9 +358,7 @@ describe("HybridStrategy", () => {
 	});
 
 	test("single turnLimit trigger works", () => {
-		const triggers: ContextTrigger[] = [
-			{ type: "turnLimit", value: 10, action: "soft" },
-		];
+		const triggers: ContextTrigger[] = [{ type: "turnLimit", value: 10, action: "soft" }];
 		const strategy = new HybridStrategy(triggers);
 
 		const meta1 = createTestMetadata({ turnCount: 9 });
@@ -372,9 +370,7 @@ describe("HybridStrategy", () => {
 	});
 
 	test("single idleTimeout trigger works", () => {
-		const triggers: ContextTrigger[] = [
-			{ type: "idleTimeout", value: 1, action: "hard" },
-		];
+		const triggers: ContextTrigger[] = [{ type: "idleTimeout", value: 1, action: "hard" }];
 		const strategy = new HybridStrategy(triggers);
 
 		const oldTime = new Date(Date.now() - 2000).toISOString();
@@ -385,9 +381,7 @@ describe("HybridStrategy", () => {
 	});
 
 	test("single sizeLimit trigger works", () => {
-		const triggers: ContextTrigger[] = [
-			{ type: "sizeLimit", value: 1000, action: "soft" },
-		];
+		const triggers: ContextTrigger[] = [{ type: "sizeLimit", value: 1000, action: "soft" }];
 		const strategy = new HybridStrategy(triggers);
 
 		const meta = createTestMetadata({ estimatedContextSize: 1000 });
@@ -422,9 +416,7 @@ describe("HybridStrategy", () => {
 	});
 
 	test("unknown trigger type uses manual strategy (never resets)", () => {
-		const triggers: ContextTrigger[] = [
-			{ type: "unknown" as "turnLimit", value: 1, action: "soft" },
-		];
+		const triggers: ContextTrigger[] = [{ type: "unknown" as "turnLimit", value: 1, action: "soft" }];
 		const strategy = new HybridStrategy(triggers);
 
 		const meta = createTestMetadata({ turnCount: 1000 });
