@@ -80,6 +80,11 @@ export class ExecutionOrchestrator {
 
 		// Try each layer in order
 		for (const layer of this.config.layerOrder) {
+			if (request.options?.sync === true && layer === "container") {
+				logger.debug({ requestId, layer }, "Layer does not support sync mode, skipping");
+				continue;
+			}
+
 			const engine = this.engines.get(layer);
 
 			if (!engine) {
@@ -101,9 +106,13 @@ export class ExecutionOrchestrator {
 				const result = await engine.execute(request);
 				const durationMs = Date.now() - layerStartTime;
 
-				// Both "completed" (sync) and "running" (async/tmux) are success states
-				if (result.status === "completed" || result.status === "running") {
-					logger.info({ requestId, layer, durationMs, status: result.status, exitCode: result.exitCode }, "Execution succeeded on layer");
+				// For sync requests, "running" is not a success state.
+				const allowAsyncRunning = request.options?.sync !== true;
+				if (result.status === "completed" || (allowAsyncRunning && result.status === "running")) {
+					logger.info(
+						{ requestId, layer, durationMs, status: result.status, exitCode: result.exitCode },
+						"Execution succeeded on layer",
+					);
 					return {
 						...result,
 						requestId,
@@ -127,8 +136,8 @@ export class ExecutionOrchestrator {
 					logger.info({ requestId, layer, retry: retry + 1 }, "Retrying layer");
 					const retryResult = await engine.execute(request);
 
-					// Both "completed" (sync) and "running" (async/tmux) are success states
-					if (retryResult.status === "completed" || retryResult.status === "running") {
+					const allowRetryAsyncRunning = request.options?.sync !== true;
+					if (retryResult.status === "completed" || (allowRetryAsyncRunning && retryResult.status === "running")) {
 						logger.info({ requestId, layer, retry: retry + 1, status: retryResult.status }, "Retry succeeded");
 						return {
 							...retryResult,
@@ -262,19 +271,6 @@ export function createOrchestrator(config?: Partial<OrchestratorConfig>): Execut
 	return new ExecutionOrchestrator(config);
 }
 
-// Lazy-loaded default orchestrator instance
-let _defaultOrchestrator: ExecutionOrchestrator | null = null;
-
-export function getExecutionOrchestrator(): ExecutionOrchestrator {
-	if (!_defaultOrchestrator) {
-		_defaultOrchestrator = createOrchestrator();
-	}
-	return _defaultOrchestrator;
-}
-
-/**
- * Default orchestrator instance (singleton)
- */
 let defaultOrchestrator: ExecutionOrchestrator | null = null;
 
 export function getDefaultOrchestrator(): ExecutionOrchestrator {
@@ -282,6 +278,10 @@ export function getDefaultOrchestrator(): ExecutionOrchestrator {
 		defaultOrchestrator = createOrchestrator();
 	}
 	return defaultOrchestrator;
+}
+
+export function getExecutionOrchestrator(): ExecutionOrchestrator {
+	return getDefaultOrchestrator();
 }
 
 export function setDefaultOrchestrator(orchestrator: ExecutionOrchestrator): void {
