@@ -161,6 +161,9 @@ export class PersistenceManager {
 			fs.mkdirSync(dir, { recursive: true });
 		}
 		this.db = new Database(dbPath);
+		this.db.exec("PRAGMA journal_mode = WAL;");
+		this.db.exec("PRAGMA synchronous = NORMAL;");
+		this.db.exec("PRAGMA busy_timeout = 5000;");
 
 		// Check ENABLE_LRU_HISTORY environment variable (default: false)
 		const enableLruHistory = process.env.ENABLE_LRU_HISTORY === "true" || process.env.ENABLE_LRU_HISTORY === "1";
