@@ -65,6 +65,8 @@ export class HostIpcEngine implements IExecutionEngine {
 		const workspace = options.workspace || "cc-bridge";
 		const timeoutMs = options.timeout || GATEWAY_CONSTANTS.ORCHESTRATOR?.defaultTimeoutMs || 120000;
 		const chatId = options.chatId;
+		const sync = options.sync ?? false;
+		const ephemeralSession = options.ephemeralSession ?? false;
 
 		// Build prompt based on history
 		const { prompt, buildArgs } = this.prepareExecution(request.prompt, options);
@@ -79,6 +81,8 @@ export class HostIpcEngine implements IExecutionEngine {
 				workspace,
 				chatId: String(chatId || "default"),
 				timeoutMs,
+				sync,
+				ephemeralSession,
 			});
 
 			return result;
@@ -135,16 +139,28 @@ export class HostIpcEngine implements IExecutionEngine {
 		}
 
 		if (this.config.engineType === "codex_host") {
+			const requestArgs = options.args && options.args.length > 0 ? options.args : undefined;
+			const configArgs = this.config.args && this.config.args.length > 0 ? this.config.args : undefined;
 			buildArgs = (p: string, w: string, c?: string | number) => ({
-				command: this.config.command || process.env.CODEX_HOST_COMMAND || "codex",
-				args: (this.config.args || ["{{prompt}}"]).map((t: string) => interpolateArg(t, p, w, c)),
+				command: options.command || this.config.command || process.env.CODEX_HOST_COMMAND || "codex",
+				args: (requestArgs || configArgs || ["{{prompt}}"]).map((t: string) => interpolateArg(t, p, w, c)),
 			});
 		} else {
+			const allowDangerous = options.allowDangerouslySkipPermissions ?? true;
+			const allowedTools = options.allowedTools || "*";
+			const defaultArgs = ["-p", "{{prompt}}"];
+			if (allowDangerous) {
+				defaultArgs.push("--dangerously-skip-permissions");
+			}
+			if (allowedTools) {
+				defaultArgs.push(`--allowedTools=${allowedTools}`);
+			}
+
+			const requestArgs = options.args && options.args.length > 0 ? options.args : undefined;
+			const configArgs = this.config.args && this.config.args.length > 0 ? this.config.args : undefined;
 			buildArgs = (p: string, w: string, c?: string | number) => ({
-				command: this.config.command || process.env.CLAUDE_HOST_COMMAND || "claude",
-				args: (this.config.args || ["-p", "{{prompt}}", "--dangerously-skip-permissions", "--allowedTools=*"]).map(
-					(t: string) => interpolateArg(t, p, w, c),
-				),
+				command: options.command || this.config.command || process.env.CLAUDE_HOST_COMMAND || "claude",
+				args: (requestArgs || configArgs || defaultArgs).map((t: string) => interpolateArg(t, p, w, c)),
 			});
 		}
 
@@ -172,6 +188,8 @@ export class HostIpcEngine implements IExecutionEngine {
 		workspace: string;
 		chatId: string;
 		timeoutMs: number;
+		sync?: boolean;
+		ephemeralSession?: boolean;
 	}): Promise<ExecutionResult> {
 		const requestId = crypto.randomUUID();
 		const sessionName = this.generateSessionName(params.workspace, params.chatId);
@@ -181,15 +199,44 @@ export class HostIpcEngine implements IExecutionEngine {
 			await this.ensureHostSession(params.workspace, params.chatId, sessionName);
 
 			// Build the full command
-			const fullCommand = this.buildCommand(params.command, params.args, params.workspace);
+			const completionToken = `CC_BRIDGE_DONE_${requestId.replace(/-/g, "_")}`;
+			const fullCommand = this.buildCommand(
+				params.command,
+				params.args,
+				params.workspace,
+				completionToken,
+				params.timeoutMs,
+			);
 
 			// Send command to tmux session (pass requestId for temp file naming)
 			await this.sendToHostSession(sessionName, fullCommand, requestId);
 
 			logger.info(
-				{ requestId, sessionName, workspace: params.workspace, command: params.command, promptLength: fullCommand.length },
+				{
+					requestId,
+					sessionName,
+					workspace: params.workspace,
+					command: params.command,
+					promptLength: fullCommand.length,
+				},
 				"Prompt sent via tmux to host session",
 			);
+
+			// If sync mode, wait for completion and capture output
+			if (params.sync) {
+				const result = await this.waitForTmuxCompletion(sessionName, params.timeoutMs, completionToken);
+
+				// Avoid leaving long-running CLI processes behind after sync timeout/failure.
+				if (result.status !== "completed") {
+					await this.interruptHostSession(sessionName);
+				}
+
+				if (params.ephemeralSession) {
+					await this.killHostSession(sessionName);
+				}
+
+				return result;
+			}
 
 			// Return async result - response comes via callback
 			return {
@@ -204,6 +251,176 @@ export class HostIpcEngine implements IExecutionEngine {
 				retryable: false,
 			};
 		}
+	}
+
+	/**
+	 * Wait for tmux command completion and capture output
+	 */
+	private async waitForTmuxCompletion(
+		sessionName: string,
+		timeoutMs: number,
+		completionToken: string,
+	): Promise<ExecutionResult> {
+		const pollIntervalMs = 2000;
+		const startTime = Date.now();
+
+		logger.info({ sessionName, timeoutMs }, "Waiting for tmux command completion");
+
+		while (Date.now() - startTime < timeoutMs) {
+			try {
+				const output = await this.capturePane(sessionName);
+				const completionRegex = new RegExp(`${completionToken}:(\\d+)`, "g");
+				let completionMatch: RegExpExecArray | null = null;
+				for (const match of output.matchAll(completionRegex)) {
+					completionMatch = match as RegExpExecArray;
+				}
+
+				if (completionMatch && completionMatch.index !== undefined) {
+					const completionIndex = completionMatch.index;
+					const paneBeforeToken = output.slice(0, completionIndex);
+					const shellErrorPattern = /(command not found|syntax error|No such file or directory)/i;
+					if (shellErrorPattern.test(paneBeforeToken)) {
+						return {
+							status: "failed",
+							error: "Host tmux command failed before completion",
+							output: this.extractRecentOutput(paneBeforeToken),
+							retryable: false,
+						};
+					}
+					const exitCode = Number.parseInt(completionMatch[1] || "1", 10);
+					const normalizedExitCode = Number.isFinite(exitCode) ? exitCode : 0;
+					if (normalizedExitCode === 124) {
+						return {
+							status: "timeout",
+							output: this.extractRecentOutput(paneBeforeToken, completionToken),
+							exitCode: normalizedExitCode,
+							error: `tmux command timed out after ${timeoutMs}ms`,
+							retryable: true,
+							isTimeout: true,
+						};
+					}
+					return {
+						status: "completed",
+						output: this.extractRecentOutput(paneBeforeToken, completionToken),
+						exitCode: normalizedExitCode,
+						retryable: false,
+					};
+				}
+			} catch (error) {
+				logger.debug({ sessionName, error: String(error) }, "tmux check failed, continuing...");
+			}
+
+			await this.sleep(pollIntervalMs);
+		}
+
+		// Timeout - return whatever output we have
+		logger.warn({ sessionName, elapsedMs: Date.now() - startTime }, "tmux command timed out");
+
+		try {
+			const output = await this.capturePane(sessionName);
+
+			return {
+				status: "timeout",
+				output: this.extractRecentOutput(output, completionToken),
+				error: `tmux command timed out after ${timeoutMs}ms`,
+				retryable: true,
+				isTimeout: true,
+			};
+		} catch {
+			return {
+				status: "timeout",
+				error: `tmux command timed out after ${timeoutMs}ms`,
+				retryable: true,
+				isTimeout: true,
+			};
+		}
+	}
+
+	/**
+	 * Extract recent output from tmux capture, filtering out echoed commands and old content
+	 */
+	private extractRecentOutput(fullOutput: string, completionToken?: string): string {
+		const normalizedOutput = completionToken ? fullOutput.replaceAll(completionToken, "") : fullOutput;
+		const lines = normalizedOutput.split("\n");
+
+		// First, filter out lines that are clearly part of the echoed command
+		// These typically start with > (tmux send-keys echo) or are command fragments
+		const filteredLines: string[] = [];
+		let inCommandEcho = true; // Start assuming we're in command echo section
+
+		for (const line of lines) {
+			// Skip empty lines at the start
+			if (inCommandEcho && !line.trim()) {
+				continue;
+			}
+
+			// Lines starting with > are typically tmux command echo
+			if (line.startsWith("> ")) {
+				inCommandEcho = true;
+				continue;
+			}
+
+			// Lines that look like the prompt/command (contain common patterns)
+			if (
+				line.includes("Execute mini-app") ||
+				line.includes("Instructions:") ||
+				line.includes("Runtime variables:") ||
+				line.startsWith("bash -c ")
+			) {
+				inCommandEcho = true;
+				continue;
+			}
+
+			// Once we see actual response content, stop filtering
+			if (line.match(/^#{1,2}\s+\w+/)) {
+				// Markdown headers are response content
+				inCommandEcho = false;
+				filteredLines.push(line);
+			} else if (!inCommandEcho && line.trim()) {
+				// After we've exited echo mode, include all non-empty lines
+				filteredLines.push(line);
+			}
+		}
+
+		// If we have filtered content, return it
+		if (filteredLines.length > 0) {
+			return filteredLines.join("\n").trim();
+		}
+
+		// Fallback: look for response start markers in original lines
+		const startMarkers = [/^Claude:/i, /^Here['']s/i, /^Based on/i, /^I['']ll/i, /^Let me/i, /^## /i, /^# /i];
+
+		for (let i = lines.length - 1; i >= 0; i--) {
+			const line = lines[i];
+			for (const marker of startMarkers) {
+				if (marker.test(line)) {
+					return lines.slice(i).join("\n").trim();
+				}
+			}
+		}
+
+		// Last resort: return last 60% of output
+		const keepLines = Math.floor(lines.length * 0.6);
+		return lines.slice(-keepLines).join("\n").trim();
+	}
+
+	private sleep(ms: number): Promise<void> {
+		return new Promise((resolve) => setTimeout(resolve, ms));
+	}
+
+	private shellQuote(value: string): string {
+		return `'${value.replace(/'/g, "'\\''")}'`;
+	}
+
+	private async capturePane(sessionName: string): Promise<string> {
+		const proc = Bun.spawn(["tmux", "capture-pane", "-t", sessionName, "-p", "-S", "-2000"], {
+			stdout: "pipe",
+			stderr: "pipe",
+		});
+
+		const output = await new Response(proc.stdout).text();
+		await proc.exited;
+		return output;
 	}
 
 	/**
@@ -228,13 +445,10 @@ export class HostIpcEngine implements IExecutionEngine {
 
 		// Create new tmux session on host
 		const cwd = this.resolveWorkspacePath(workspace);
-		const proc = Bun.spawn(
-			["tmux", "new-session", "-d", "-s", sessionName, "-c", cwd || ".", "bash"],
-			{
-				stdout: "pipe",
-				stderr: "pipe",
-			},
-		);
+		const proc = Bun.spawn(["tmux", "new-session", "-d", "-s", sessionName, "-c", cwd || ".", "bash"], {
+			stdout: "pipe",
+			stderr: "pipe",
+		});
 
 		const exitCode = await proc.exited;
 		if (exitCode !== 0) {
@@ -258,15 +472,63 @@ export class HostIpcEngine implements IExecutionEngine {
 		return proc.exitCode === 0;
 	}
 
+	private async killHostSession(sessionName: string): Promise<void> {
+		const proc = Bun.spawn(["tmux", "kill-session", "-t", sessionName], {
+			stdout: "pipe",
+			stderr: "pipe",
+		});
+		await proc.exited;
+	}
+
+	private async interruptHostSession(sessionName: string): Promise<void> {
+		const proc = Bun.spawn(["tmux", "send-keys", "-t", sessionName, "C-c"], {
+			stdout: "pipe",
+			stderr: "pipe",
+		});
+		await proc.exited;
+	}
+
 	/**
 	 * Build full command with workspace context
+	 * Unsets CLAUDECODE to allow running claude inside Claude Code sessions
 	 */
-	private buildCommand(command: string, args: string[], workspace: string): string {
+	private buildCommand(
+		command: string,
+		args: string[],
+		workspace: string,
+		completionToken: string,
+		timeoutMs: number,
+	): string {
 		const workspacePath = this.resolveWorkspacePath(workspace) || ".";
-		const fullCommand = [command, ...args].join(" ");
+		const quotedCommand = [command, ...args].map((item) => this.shellQuote(item)).join(" ");
+		// Fire the watchdog slightly before the engine timeout so completion token can be captured in time.
+		const timeoutSeconds = Math.max(1, Math.ceil(timeoutMs / 1000) - 3);
+		const timeoutMarker = `/tmp/cc-bridge-timeout-${completionToken}.flag`;
+		const quotedTimeoutMarker = this.shellQuote(timeoutMarker);
 
-		// Escape for shell
-		return `cd ${workspacePath} && ${fullCommand}`;
+		// Unset CLAUDECODE to allow running claude inside Claude Code sessions
+		// Also unset any other Claude Code related env vars
+		return (
+			`cd ${this.shellQuote(workspacePath)} && ` +
+			"unset CLAUDECODE CLAUDE_API_KEY CLAUDE_API_URL && " +
+			`rm -f ${quotedTimeoutMarker}; ` +
+			`${quotedCommand} & ` +
+			"__cc_bridge_target_pid=$!; " +
+			"( sleep " +
+			`${timeoutSeconds}; ` +
+			"if kill -0 $__cc_bridge_target_pid 2>/dev/null; then " +
+			`echo timeout > ${quotedTimeoutMarker}; ` +
+			"kill -TERM $__cc_bridge_target_pid 2>/dev/null || true; " +
+			"sleep 2; " +
+			"kill -KILL $__cc_bridge_target_pid 2>/dev/null || true; " +
+			"fi ) & " +
+			"__cc_bridge_watchdog_pid=$!; " +
+			"wait $__cc_bridge_target_pid; " +
+			"__cc_bridge_rc=$?; " +
+			"kill $__cc_bridge_watchdog_pid 2>/dev/null || true; " +
+			`if [ -f ${quotedTimeoutMarker} ]; then __cc_bridge_rc=124; rm -f ${quotedTimeoutMarker}; fi; ` +
+			`printf '\\n${completionToken}:%s\\n' "$__cc_bridge_rc"`
+		);
 	}
 
 	/**
@@ -277,7 +539,7 @@ export class HostIpcEngine implements IExecutionEngine {
 		// For long commands, write to temp file first to avoid "command too long"
 		const MAX_DIRECT_LENGTH = 8000; // Conservative limit for tmux send-keys
 
-		if (command.length > MAX_DIRECT_LENGTH) {
+		if (command.length > MAX_DIRECT_LENGTH || command.includes("\n")) {
 			// Write command to temp file
 			const promptFileSafeId = requestId.replace(/[^a-zA-Z0-9_-]/g, "_");
 			const promptFile = `/tmp/cc-bridge-host-${promptFileSafeId}.sh`;
@@ -287,7 +549,14 @@ export class HostIpcEngine implements IExecutionEngine {
 
 			// Source the file in tmux
 			const proc = Bun.spawn(
-				["tmux", "send-keys", "-t", sessionName, `bash ${promptFile} && rm -f ${promptFile}`, "C-m"],
+				[
+					"tmux",
+					"send-keys",
+					"-t",
+					sessionName,
+					`bash ${this.shellQuote(promptFile)}; __cc_bridge_rc=$?; rm -f ${this.shellQuote(promptFile)}`,
+					"C-m",
+				],
 				{
 					stdout: "pipe",
 					stderr: "pipe",
@@ -303,15 +572,10 @@ export class HostIpcEngine implements IExecutionEngine {
 		}
 
 		// Short command: send directly
-		const escapedCommand = command.replace(/'/g, "'\\''");
-
-		const proc = Bun.spawn(
-			["tmux", "send-keys", "-t", sessionName, `bash -c '${escapedCommand}'`, "C-m"],
-			{
-				stdout: "pipe",
-				stderr: "pipe",
-			},
-		);
+		const proc = Bun.spawn(["tmux", "send-keys", "-t", sessionName, command, "C-m"], {
+			stdout: "pipe",
+			stderr: "pipe",
+		});
 
 		const exitCode = await proc.exited;
 		if (exitCode !== 0) {
