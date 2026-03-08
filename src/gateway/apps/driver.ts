@@ -1,9 +1,12 @@
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import crypto from "node:crypto";
+import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { FeishuChannel } from "@/gateway/channels/feishu";
 import { TelegramChannel } from "@/gateway/channels/telegram";
 import { GATEWAY_CONSTANTS } from "@/gateway/consts";
-import type { ExecutionRequest, ExecutionResult } from "@/gateway/engine/contracts";
+import { createContainerEngine } from "@/gateway/engine/container";
+import type { ExecutionRequest } from "@/gateway/engine/contracts";
+import { createHostIpcEngine } from "@/gateway/engine/host-ipc";
 import { getExecutionOrchestrator } from "@/gateway/engine/orchestrator";
 import { type AgentInstance, instanceManager } from "@/gateway/instance-manager";
 import { buildMemoryBootstrapContext, resolveMemoryConfig } from "@/gateway/memory/manager";
@@ -14,7 +17,6 @@ import { mapWithConcurrency } from "@/packages/async";
 import { ConfigLoader } from "@/packages/config";
 import { logger } from "@/packages/logger";
 import { type FrontmatterValue, parseMarkdownFrontmatter, stripMarkdownFrontmatter } from "@/packages/markdown";
-import { renderTemplate } from "@/packages/template";
 import { splitTextChunks } from "@/packages/text";
 import { getMissingRequiredFields } from "@/packages/validation";
 
@@ -71,184 +73,6 @@ export interface MiniAppRunResult {
 }
 
 const TELEGRAM_SAFE_CHUNK_SIZE = 3500;
-const MINI_APP_DEBUG_DIR = path.resolve("data/debug/mini-apps");
-const DAILY_NEWS_BOILERPLATE_PATTERNS = [
-	/^based on (my |the )?search results/i,
-	/^based on my retrieval/i,
-	/^based on (my |the )?retrieval from/i,
-	/^根据(?:我的)?(?:搜索|检索)结果/i,
-	/^以下是.*(?:每日|今天).*(?:新闻|简报|摘要)/i,
-	/^daily news summary completed/i,
-	/^日报(?:已)?(?:完成|生成|发送)/i,
-	/^新闻简报(?:已)?(?:完成|生成|发送)/i,
-];
-const DAILY_NEWS_FORBIDDEN_META_PATTERNS = [
-	/daily news summary completed/i,
-	/\b(the brief includes|includes \d+ stories)\b/i,
-	/(based on|from) (my |the )?(knowledge|knowledge cutoff)/i,
-	/(知识截止|知识库|无法获取.*尚未到来)/i,
-];
-const DAILY_NEWS_SOURCE_LINE_PATTERN = /来源：\[[^\]]+\]\(https?:\/\/[^\s)]+\)/;
-
-/**
- * Wait for tmux command completion and capture output
- * Uses tmux capture-pane to get the output after command completes
- */
-async function waitForTmuxCompletion(params: {
-	sessionName: string;
-	timeoutMs: number;
-	promptSentAt: number;
-}): Promise<ExecutionResult> {
-	const { sessionName, timeoutMs, promptSentAt } = params;
-	const pollIntervalMs = 2000; // Check every 2 seconds
-	const startTime = Date.now();
-	const minExecutionTimeMs = 5000; // Minimum time to wait before checking completion
-
-	logger.info({ sessionName, timeoutMs }, "Waiting for tmux command completion");
-
-	// Wait minimum execution time first
-	await new Promise((resolve) => setTimeout(resolve, minExecutionTimeMs));
-
-	let lastLineCount = 0;
-	let stableCount = 0;
-	const requiredStableChecks = 3; // Output must be stable for 3 consecutive checks
-
-	while (Date.now() - startTime < timeoutMs) {
-		try {
-			// Capture the current pane content
-			const proc = Bun.spawn(
-				["tmux", "capture-pane", "-t", sessionName, "-p", "-S", "-1000"],
-				{
-					stdout: "pipe",
-					stderr: "pipe",
-				},
-			);
-
-			const output = await new Response(proc.stdout).text();
-			await proc.exited;
-
-			if (proc.exitCode !== 0) {
-				logger.debug({ sessionName, exitCode: proc.exitCode }, "tmux capture-pane failed, session may have ended");
-				// Session might have ended - this could mean completion or error
-				// Try to get any remaining output
-				if (output.trim()) {
-					return {
-						status: "completed",
-						output: output.trim(),
-						exitCode: 0,
-						retryable: false,
-					};
-				}
-				return {
-					status: "failed",
-					error: "tmux session ended unexpectedly",
-					retryable: true,
-				};
-			}
-
-			// Check if output has stabilized (command completed)
-			const lines = output.split("\n").filter((l) => l.trim());
-			const currentLineCount = lines.length;
-
-			if (currentLineCount === lastLineCount && currentLineCount > 0) {
-				stableCount++;
-				if (stableCount >= requiredStableChecks) {
-					// Output has been stable - command likely completed
-					// Extract the output after our prompt was sent
-					logger.info(
-						{ sessionName, lineCount: currentLineCount, elapsedMs: Date.now() - startTime },
-						"tmux command output stabilized, assuming completion",
-					);
-
-					// Find where our output starts (after the prompt we sent)
-					// We look for common completion indicators or just return all recent output
-					const cleanOutput = extractRecentOutput(output, promptSentAt);
-
-					return {
-						status: "completed",
-						output: cleanOutput,
-						exitCode: 0,
-						retryable: false,
-					};
-				}
-			} else {
-				stableCount = 0;
-				lastLineCount = currentLineCount;
-			}
-
-			logger.debug(
-				{ sessionName, lineCount: currentLineCount, stableCount, elapsedMs: Date.now() - startTime },
-				"Checking tmux output stability...",
-			);
-		} catch (error) {
-			logger.debug({ sessionName, error: String(error) }, "tmux check failed, continuing...");
-		}
-
-		// Wait before next poll
-		await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
-	}
-
-	// Timeout - return whatever output we have
-	logger.warn({ sessionName, elapsedMs: Date.now() - startTime }, "tmux command timed out, returning current output");
-
-	// Try to capture current output
-	try {
-		const proc = Bun.spawn(["tmux", "capture-pane", "-t", sessionName, "-p", "-S", "-1000"], {
-			stdout: "pipe",
-			stderr: "pipe",
-		});
-		const output = await new Response(proc.stdout).text();
-		await proc.exited;
-
-		return {
-			status: "timeout",
-			output: output.trim(),
-			error: `tmux command timed out after ${timeoutMs}ms`,
-			retryable: true,
-			isTimeout: true,
-		};
-	} catch {
-		return {
-			status: "timeout",
-			error: `tmux command timed out after ${timeoutMs}ms`,
-			retryable: true,
-			isTimeout: true,
-		};
-	}
-}
-
-/**
- * Extract recent output from tmux capture, filtering out old content
- */
-function extractRecentOutput(fullOutput: string, _promptSentAt: number): string {
-	const lines = fullOutput.split("\n");
-
-	// Look for Claude output markers or just return the last portion
-	// Common patterns that indicate start of response
-	const startMarkers = [/^Claude:/i, /^Here['']s/i, /^Based on/i, /^I['']ll/i, /^Let me/i];
-
-	let startIndex = -1;
-	for (let i = lines.length - 1; i >= 0; i--) {
-		const line = lines[i];
-		for (const marker of startMarkers) {
-			if (marker.test(line)) {
-				startIndex = i;
-				break;
-			}
-		}
-		if (startIndex !== -1) break;
-	}
-
-	// If we found a start marker, return from there
-	if (startIndex !== -1) {
-		return lines.slice(startIndex).join("\n").trim();
-	}
-
-	// Otherwise return the last 80% of output (heuristic)
-	const keepLines = Math.floor(lines.length * 0.8);
-	return lines.slice(-keepLines).join("\n").trim();
-}
-
 function parseBool(value: string | undefined, defaultValue: boolean): boolean {
 	if (!value) return defaultValue;
 	if (value === "true") return true;
@@ -359,94 +183,23 @@ function buildMiniAppFileLauncherPrompt(params: {
 	].join("\n");
 }
 
+function resolveMiniAppSpecPath(appId: string, executionEngine: MiniAppExecutionEngine, appsDir: string): string {
+	if (executionEngine === "claude_container") {
+		const specWorkspace = path.basename(path.resolve("."));
+		return `/workspaces/${specWorkspace}/src/apps/${appId}.md`;
+	}
+
+	return path.join(appsDir, `${appId}.md`);
+}
+
 function normalizeChannels(channels: string[]): BroadcastChannel[] {
 	return channels.filter((ch): ch is BroadcastChannel => ch === "telegram" || ch === "feishu");
 }
 
-function sanitizeMiniAppOutput(appId: string, rawOutput: string): string {
+function sanitizeMiniAppOutput(_appId: string, rawOutput: string): string {
 	const normalized = rawOutput.trim();
 	if (!normalized) return "";
-	if (appId !== "daily-news") return normalized;
-
-	const lines = normalized.split("\n");
-	while (lines.length > 0) {
-		const line = lines[0].trim();
-		if (!line) {
-			lines.shift();
-			continue;
-		}
-		if (line === "---" || line === "***" || /^[-*_]{3,}$/.test(line)) {
-			lines.shift();
-			continue;
-		}
-		if (DAILY_NEWS_BOILERPLATE_PATTERNS.some((pattern) => pattern.test(line))) {
-			lines.shift();
-			continue;
-		}
-		break;
-	}
-
-	return lines.join("\n").trim();
-}
-
-async function persistMiniAppDebugArtifact(params: {
-	appId: string;
-	stage: "generation" | "retry";
-	launcherPrompt?: string;
-	retryPrompt?: string;
-	rawOutput: string;
-	sanitizedOutput: string;
-}): Promise<string | null> {
-	try {
-		await mkdir(MINI_APP_DEBUG_DIR, { recursive: true });
-		const ts = new Date().toISOString().replace(/[:.]/g, "-");
-		const filePath = path.join(MINI_APP_DEBUG_DIR, `${params.appId}-${params.stage}-${ts}.md`);
-		const content = [
-			`# Mini-App Debug Artifact`,
-			`app_id: ${params.appId}`,
-			`stage: ${params.stage}`,
-			`timestamp: ${new Date().toISOString()}`,
-			"",
-			"## Launcher Prompt",
-			"```text",
-			params.launcherPrompt || "",
-			"```",
-			"",
-			"## Retry Prompt",
-			"```text",
-			params.retryPrompt || "",
-			"```",
-			"",
-			"## Raw Output",
-			"```text",
-			params.rawOutput || "",
-			"```",
-			"",
-			"## Sanitized Output",
-			"```text",
-			params.sanitizedOutput || "",
-			"```",
-			"",
-		].join("\n");
-		await writeFile(filePath, content, "utf-8");
-		return filePath;
-	} catch (error) {
-		logger.warn(
-			{
-				appId: params.appId,
-				stage: params.stage,
-				error: error instanceof Error ? error.message : String(error),
-			},
-			"Failed to persist mini-app debug artifact",
-		);
-		return null;
-	}
-}
-
-function isValidDailyNewsOutput(output: string): boolean {
-	if (!output.trim()) return false;
-	if (DAILY_NEWS_FORBIDDEN_META_PATTERNS.some((pattern) => pattern.test(output))) return false;
-	return DAILY_NEWS_SOURCE_LINE_PATTERN.test(output);
+	return normalized;
 }
 
 type DispatchChannels = {
@@ -600,6 +353,8 @@ export class MiniAppDriver {
 			throw new Error(`Mini-app "${appId}" is disabled`);
 		}
 
+		const executionEngine = app.executionEngine;
+
 		const now = new Date();
 		const vars: Record<string, string> = {
 			now_iso: now.toISOString(),
@@ -607,10 +362,7 @@ export class MiniAppDriver {
 			input: options?.input || "",
 			...(options?.variables || {}),
 		};
-		const finalPrompt = renderTemplate(app.body, vars).trim();
-		if (!finalPrompt) throw new Error(`Mini-app "${appId}" prompt body is empty`);
-		const specWorkspace = path.basename(path.resolve("."));
-		const specPath = `/workspaces/${specWorkspace}/src/apps/${app.id}.md`;
+		const specPath = resolveMiniAppSpecPath(app.id, executionEngine, this.appsDir);
 		const launcherPrompt = buildMiniAppFileLauncherPrompt({
 			appId: app.id,
 			specPath,
@@ -627,7 +379,6 @@ export class MiniAppDriver {
 
 		const timeoutMs =
 			options?.timeoutMs || app.execTimeoutMs || Number.parseInt(process.env.MINI_APP_EXEC_TIMEOUT_MS || "300000", 10);
-		const executionEngine = app.executionEngine;
 		const workspaceFallback = app.workspace || "cc-bridge";
 
 		let executionTarget: BroadcastTarget | undefined = targets[0];
@@ -699,9 +450,16 @@ export class MiniAppDriver {
 			history = await persistence.getHistory(executionTarget.chatId, 11, workspace);
 		}
 
+		// Mini-apps use a dedicated ephemeral tmux session for each run.
+		// This guarantees fresh tmux-side state regardless of context_mode.
+		const miniAppSessionId = `miniapp-${crypto.randomUUID().slice(0, 8)}`;
+
+		// Claude-side conversational context is controlled by context_mode:
+		// - fresh: empty history
+		// - existing: recent persisted chat history
 		// Build effective prompt with memory context
 		const memoryConfig = resolveMemoryConfig(GATEWAY_CONSTANTS.DEFAULT_CONFIG.memory);
-		const isGroupContext = inferGroupContext("telegram", executionTarget.chatId ?? "");
+		const isGroupContext = inferGroupContext(executionTarget.channel, executionTarget.chatId ?? "");
 		const memoryContext = await buildMemoryBootstrapContext({
 			config: memoryConfig,
 			workspaceRoot: path.join(GATEWAY_CONSTANTS.CONFIG.PROJECTS_ROOT, workspace),
@@ -709,129 +467,45 @@ export class MiniAppDriver {
 		});
 		const effectivePrompt = memoryContext ? `${memoryContext}\n\nUser request:\n${launcherPrompt}` : launcherPrompt;
 
-		// Execute via unified orchestrator
+		// Execute via unified orchestrator with sync mode for mini-apps
+		// Sync mode makes the engine wait for completion and return output directly
 		const request: ExecutionRequest = {
 			prompt: effectivePrompt,
 			options: {
 				timeout: timeoutMs,
 				workspace,
-				chatId: executionTarget.chatId,
+				chatId: miniAppSessionId, // Use unique session ID to ensure fresh tmux session
 				history,
 				command: app.engineCommand,
-				args: app.engineArgs,
+				args: app.engineArgs.length > 0 ? app.engineArgs : undefined,
+				sync: true, // Wait for completion and return output
+				ephemeralSession: true,
 			},
 			instance,
 		};
 
-		const orchestratorResult = await getExecutionOrchestrator().execute(request);
+		const orchestratorResult =
+			executionEngine === "claude_host" || executionEngine === "codex_host"
+				? await createHostIpcEngine(executionEngine).execute(request)
+				: executionEngine === "claude_container"
+					? await createContainerEngine().execute(request)
+					: await getExecutionOrchestrator().execute(request);
 
-		// Generate session name for tmux operations (must match host-ipc.ts generateSessionName)
-		const sanitizedWorkspace = workspace.replace(/[^a-zA-Z0-9_-]/g, "_");
-		const sanitizedChatId = String(executionTarget.chatId || "default").replace(/[^a-zA-Z0-9_-]/g, "_");
-		const sessionName = `claude-${sanitizedWorkspace}-${sanitizedChatId}`;
-
-		// Handle async execution - wait for tmux completion and capture output
-		let finalResult = orchestratorResult;
-		if (orchestratorResult.mode === "tmux" && orchestratorResult.status === "running") {
-			logger.info({ sessionName, workspace, timeoutMs }, "Execution is async via tmux, waiting for completion...");
-			finalResult = await waitForTmuxCompletion({
-				sessionName,
-				timeoutMs,
-				promptSentAt: Date.now(),
-			});
-		}
-
-		// Convert to expected format
+		// Convert to expected format - sync mode returns completed results directly
 		const generation = {
-			success: finalResult.status === "completed",
-			output: finalResult.output,
-			error: finalResult.error,
-			exitCode: finalResult.exitCode,
-			retryable: finalResult.retryable,
-			isTimeout: finalResult.isTimeout,
+			success: orchestratorResult.status === "completed",
+			output: orchestratorResult.output,
+			error: orchestratorResult.error,
+			exitCode: orchestratorResult.exitCode,
+			retryable: orchestratorResult.retryable,
+			isTimeout: orchestratorResult.isTimeout,
 		};
 		if (!generation.success) {
 			throw new Error(generation.error || `Mini-app "${appId}" generation failed`);
 		}
-		let output = sanitizeMiniAppOutput(app.id, generation.output || "");
+		const output = sanitizeMiniAppOutput(app.id, generation.output || "");
 		if (!output) {
 			throw new Error(`Mini-app "${appId}" produced empty output`);
-		}
-		if (app.id === "daily-news" && !isValidDailyNewsOutput(output)) {
-			const invalidPath = await persistMiniAppDebugArtifact({
-				appId: app.id,
-				stage: "generation",
-				launcherPrompt,
-				rawOutput: generation.output || "",
-				sanitizedOutput: output,
-			});
-			logger.warn({ appId }, "Daily-news output failed validation; retrying generation with stricter constraints");
-			if (invalidPath) {
-				logger.warn({ appId, artifact: invalidPath }, "Daily-news invalid generation artifact saved");
-			}
-			const retryPrompt = [
-				launcherPrompt,
-				"",
-				"Your previous output was rejected by runtime validation.",
-				"Retry now. Return only the final news report content.",
-				"",
-				"Hard constraints (must satisfy all):",
-				"- No completion/status/meta text (for example: 'Daily news summary completed...').",
-				"- Use only fetched web news within last 48 hours from now_iso.",
-				"- Include 7-12 story items grouped by required categories.",
-				"- Every story item must include one source line exactly in this form: 来源：[<媒体简称>](<原始新闻URL>).",
-				"- Source links must be valid article URLs, not dead links or generic pages.",
-			].join("\n");
-			// Retry with fresh context using orchestrator
-			const retryEffectivePrompt = retryPrompt;
-			const retryRequest: ExecutionRequest = {
-				prompt: retryEffectivePrompt,
-				options: {
-					timeout: timeoutMs,
-					workspace,
-					chatId: executionTarget.chatId,
-				},
-				instance,
-			};
-
-			const retryOrchestratorResult = await getExecutionOrchestrator().execute(retryRequest);
-
-			// Handle async execution - wait for tmux completion and capture output
-			let retryFinalResult = retryOrchestratorResult;
-			if (retryOrchestratorResult.mode === "tmux" && retryOrchestratorResult.status === "running") {
-				logger.info({ sessionName, workspace, timeoutMs }, "Retry execution is async via tmux, waiting for completion...");
-				retryFinalResult = await waitForTmuxCompletion({
-					sessionName,
-					timeoutMs,
-					promptSentAt: Date.now(),
-				});
-			}
-
-			const retryGeneration = {
-				success: retryFinalResult.status === "completed",
-				output: retryFinalResult.output,
-				error: retryFinalResult.error,
-				exitCode: retryFinalResult.exitCode,
-				retryable: retryFinalResult.retryable,
-				isTimeout: retryFinalResult.isTimeout,
-			};
-			if (!retryGeneration.success) {
-				throw new Error(retryGeneration.error || `Mini-app "${appId}" retry generation failed`);
-			}
-			output = sanitizeMiniAppOutput(app.id, retryGeneration.output || "");
-			if (!output || !isValidDailyNewsOutput(output)) {
-				const retryInvalidPath = await persistMiniAppDebugArtifact({
-					appId: app.id,
-					stage: "retry",
-					launcherPrompt,
-					retryPrompt,
-					rawOutput: retryGeneration.output || "",
-					sanitizedOutput: output,
-				});
-				throw new Error(
-					`Mini-app "${appId}" produced invalid output: must be direct news content with valid 来源 links and no completion/meta summary${retryInvalidPath ? ` (artifact: ${retryInvalidPath})` : ""}`,
-				);
-			}
 		}
 
 		const channels = buildDispatchChannels();
@@ -843,19 +517,7 @@ export class MiniAppDriver {
 					if (!channels.telegram) return "failed" as const;
 					const chunks = splitTextChunks(output, TELEGRAM_SAFE_CHUNK_SIZE);
 					for (const chunk of chunks) {
-						try {
-							await channels.telegram.sendMessage(target.chatId, chunk, { parse_mode: "Markdown" });
-						} catch (error) {
-							logger.warn(
-								{
-									appId,
-									chatId: target.chatId,
-									error: error instanceof Error ? error.message : String(error),
-								},
-								"Mini-app markdown send failed, retrying telegram chunk as plain text",
-							);
-							await channels.telegram.sendMessage(target.chatId, chunk);
-						}
+						await channels.telegram.sendMessage(target.chatId, chunk);
 					}
 				} else if (target.channel === "feishu") {
 					if (!channels.feishu) return "failed" as const;
