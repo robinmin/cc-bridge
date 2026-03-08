@@ -16,8 +16,9 @@ set -eo pipefail
 # IPC_BASE_DIR is set via docker-compose.yml, fallback to /ipc if not set
 export IPC_BASE_DIR="${IPC_BASE_DIR:-/ipc}"
 
-# GATEWAY_URL - fallback to host.docker.internal if not set (for Stop hook context)
-export GATEWAY_URL="${GATEWAY_URL:-http://host.docker.internal:8080}"
+# GATEWAY_URL - fallback to host.docker.internal only when truly unset.
+# An explicitly empty value disables HTTP callbacks for sync IPC runs.
+export GATEWAY_URL="${GATEWAY_URL-http://host.docker.internal:8080}"
 
 # Ensure PATH includes all required locations for claude, jq, curl, etc.
 # Order matters: /app/node_modules/.bin first (claude-code CLI)
