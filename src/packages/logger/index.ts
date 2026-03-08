@@ -3,7 +3,7 @@ import path from "node:path";
 import pino from "pino";
 
 const LOG_DIR = "data/logs";
-const LOG_FILE = path.join(LOG_DIR, "combined.log");
+const LOG_FILE = path.join(LOG_DIR, process.env.NODE_ENV === "test" ? "test.log" : "combined.log");
 
 // Helper to detect log format from config files early
 export const detectLogFormat = (): string => {
