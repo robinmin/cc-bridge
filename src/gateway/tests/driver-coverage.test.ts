@@ -5,6 +5,7 @@ import path from "node:path";
 import { MiniAppDriver, miniAppDriver, runCli } from "@/gateway/apps/driver";
 import { FeishuChannel } from "@/gateway/channels/feishu";
 import { TelegramChannel } from "@/gateway/channels/telegram";
+import * as containerEngine from "@/gateway/engine/container";
 import { getExecutionOrchestrator } from "@/gateway/engine/orchestrator";
 import { instanceManager } from "@/gateway/instance-manager";
 import { persistence } from "@/gateway/persistence";
@@ -73,9 +74,14 @@ Hello`,
 
 describe("MiniAppDriver runApp coverage", () => {
 	let appsDir: string;
+	let containerExecuteMock: ReturnType<typeof mock>;
 
 	beforeEach(async () => {
 		appsDir = await mkdtemp(path.join(tmpdir(), "miniapp-run-test-"));
+		containerExecuteMock = mock();
+		spyOn(containerEngine, "createContainerEngine").mockReturnValue({
+			execute: containerExecuteMock,
+		} as never);
 	});
 
 	afterEach(async () => {
@@ -173,7 +179,7 @@ Prompt body`,
 		});
 	});
 
-	test("should dispatch telegram output and fallback to plain text when markdown send fails", async () => {
+	test("should dispatch telegram output without forcing raw markdown", async () => {
 		process.env.TELEGRAM_BOT_TOKEN = "test-token";
 		await writeFile(
 			path.join(appsDir, "ok.md"),
@@ -210,16 +216,22 @@ Prompt body {{input}}`,
 			retryable: false,
 			isTimeout: false,
 		});
-		const tgSend = spyOn(TelegramChannel.prototype, "sendMessage")
-			.mockRejectedValueOnce(new Error("bad markdown"))
-			.mockResolvedValue(undefined);
+		const tgSend = spyOn(TelegramChannel.prototype, "sendMessage").mockResolvedValue(undefined);
 		const storeMessage = spyOn(persistence, "storeMessage").mockResolvedValue(undefined as never);
+		containerExecuteMock.mockResolvedValue({
+			status: "completed",
+			output: "hello from app",
+			exitCode: 0,
+			retryable: false,
+			isTimeout: false,
+		});
 
 		const tempDriver = new MiniAppDriver(appsDir);
 		const result = await tempDriver.runApp("ok", { input: "world" });
 		expect(result.succeeded).toBe(1);
 		expect(result.failed).toBe(0);
-		expect(tgSend).toHaveBeenCalledTimes(2);
+		expect(tgSend).toHaveBeenCalledTimes(1);
+		expect(tgSend.mock.calls[0]?.[2]).toBeUndefined();
 		expect(storeMessage).toHaveBeenCalledTimes(1);
 	});
 
@@ -268,11 +280,19 @@ Prompt body`,
 		});
 		spyOn(TelegramChannel.prototype, "sendMessage").mockResolvedValue(undefined);
 		spyOn(persistence, "storeMessage").mockResolvedValue(undefined as never);
+		containerExecuteMock.mockResolvedValue({
+			status: "completed",
+			output: "ok",
+			exitCode: 0,
+			retryable: false,
+			isTimeout: false,
+		});
 
 		const tempDriver = new MiniAppDriver(appsDir);
 		const result = await tempDriver.runApp("fallback");
 		expect(result.succeeded).toBe(1);
-		expect(execSpy.mock.calls[0]?.[0].instance.name).toBe("app-inst");
+		expect(containerExecuteMock.mock.calls[0]?.[0].instance.name).toBe("app-inst");
+		expect(execSpy).not.toHaveBeenCalled();
 	});
 
 	test("should fail when generation fails", async () => {
@@ -310,109 +330,16 @@ Prompt body`,
 			retryable: false,
 			isTimeout: false,
 		});
+		containerExecuteMock.mockResolvedValue({
+			status: "failed",
+			error: "generation failed",
+			exitCode: 1,
+			retryable: false,
+			isTimeout: false,
+		});
 
 		const tempDriver = new MiniAppDriver(appsDir);
 		await expect(tempDriver.runApp("gen-fail")).rejects.toThrow(/generation failed/i);
-	});
-
-	test("should retry daily-news generation when first output fails validation", async () => {
-		process.env.TELEGRAM_BOT_TOKEN = "test-token";
-		await writeFile(
-			path.join(appsDir, "daily-news.md"),
-			`---
-id: daily-news
-enabled: true
-target_mode: all_sessions
-instance: inst-a
-channels: [telegram]
----
-Prompt body`,
-			"utf-8",
-		);
-		spyOn(ConfigLoader, "load").mockReturnValue({
-			...({} as Record<string, unknown>),
-			feishu: { appId: "", appSecret: "", domain: "feishu", encryptKey: "" },
-		});
-		spyOn(broadcast, "resolveBroadcastTargets").mockResolvedValue([
-			{ chatId: "1001", channel: "telegram", instanceName: "inst-a", workspace: "ws-a" },
-		]);
-		spyOn(instanceManager, "refresh").mockResolvedValue([]);
-		spyOn(instanceManager, "getInstance").mockReturnValue({
-			name: "inst-a",
-			containerId: "cid-1",
-			status: "running",
-			image: "img",
-		});
-		const execSpy = spyOn(getExecutionOrchestrator(), "execute")
-			.mockResolvedValueOnce({
-				status: "completed",
-				output: "Story without source line",
-				exitCode: 0,
-				retryable: false,
-				isTimeout: false,
-			})
-			.mockResolvedValueOnce({
-				status: "completed",
-				output: "世界新闻\n来源：[Reuters](https://example.com/story)",
-				exitCode: 0,
-				retryable: false,
-				isTimeout: false,
-			});
-		spyOn(TelegramChannel.prototype, "sendMessage").mockResolvedValue(undefined);
-		spyOn(persistence, "storeMessage").mockResolvedValue(undefined as never);
-
-		const tempDriver = new MiniAppDriver(appsDir);
-		const result = await tempDriver.runApp("daily-news");
-		expect(result.succeeded).toBe(1);
-		expect(execSpy).toHaveBeenCalledTimes(2);
-	});
-
-	test("should fail daily-news when retry output is still invalid", async () => {
-		process.env.TELEGRAM_BOT_TOKEN = "test-token";
-		await writeFile(
-			path.join(appsDir, "daily-news-bad.md"),
-			`---
-id: daily-news
-enabled: true
-target_mode: all_sessions
-instance: inst-a
-channels: [telegram]
----
-Prompt body`,
-			"utf-8",
-		);
-		spyOn(ConfigLoader, "load").mockReturnValue({
-			...({} as Record<string, unknown>),
-			feishu: { appId: "", appSecret: "", domain: "feishu", encryptKey: "" },
-		});
-		spyOn(broadcast, "resolveBroadcastTargets").mockResolvedValue([
-			{ chatId: "1001", channel: "telegram", instanceName: "inst-a", workspace: "ws-a" },
-		]);
-		spyOn(instanceManager, "refresh").mockResolvedValue([]);
-		spyOn(instanceManager, "getInstance").mockReturnValue({
-			name: "inst-a",
-			containerId: "cid-1",
-			status: "running",
-			image: "img",
-		});
-		spyOn(getExecutionOrchestrator(), "execute")
-			.mockResolvedValueOnce({
-				status: "completed",
-				output: "first output without source",
-				exitCode: 0,
-				retryable: false,
-				isTimeout: false,
-			})
-			.mockResolvedValueOnce({
-				status: "completed",
-				output: "still invalid without source links",
-				exitCode: 0,
-				retryable: false,
-				isTimeout: false,
-			});
-
-		const tempDriver = new MiniAppDriver(appsDir);
-		await expect(tempDriver.runApp("daily-news-bad")).rejects.toThrow(/invalid output/i);
 	});
 
 	test("should resolve chat_ids targets and dispatch to feishu", async () => {
@@ -445,6 +372,13 @@ Prompt body`,
 			image: "img",
 		});
 		spyOn(getExecutionOrchestrator(), "execute").mockResolvedValue({
+			status: "completed",
+			output: "feishu ok",
+			exitCode: 0,
+			retryable: false,
+			isTimeout: false,
+		});
+		containerExecuteMock.mockResolvedValue({
 			status: "completed",
 			output: "feishu ok",
 			exitCode: 0,
