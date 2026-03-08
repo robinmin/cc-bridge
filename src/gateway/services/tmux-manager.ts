@@ -317,6 +317,44 @@ export class TmuxManager {
 		return `${GATEWAY_CONSTANTS.TMUX.SESSION_PREFIX}${GATEWAY_CONSTANTS.TMUX.SESSION_NAME_SEPARATOR}${sanitizedWorkspace}${GATEWAY_CONSTANTS.TMUX.SESSION_NAME_SEPARATOR}${sanitizedChatId}`;
 	}
 
+	private isEphemeralMiniAppSession(sessionName: string): boolean {
+		return sessionName.includes(`${GATEWAY_CONSTANTS.TMUX.SESSION_NAME_SEPARATOR}miniapp-`);
+	}
+
+	private async reclaimEphemeralMiniAppSessions(containerId: string, activeSessions: string[]): Promise<number> {
+		const ephemeralSessions = activeSessions.filter((sessionName) => this.isEphemeralMiniAppSession(sessionName));
+		let reclaimedCount = 0;
+
+		for (const sessionName of ephemeralSessions) {
+			try {
+				await this.killSession(containerId, sessionName);
+				reclaimedCount++;
+			} catch (error) {
+				logger.warn(
+					{
+						containerId,
+						sessionName,
+						error: error instanceof Error ? error.message : String(error),
+					},
+					"Failed to reclaim ephemeral mini-app tmux session",
+				);
+			}
+		}
+
+		if (reclaimedCount > 0) {
+			logger.warn(
+				{
+					containerId,
+					reclaimedCount,
+					ephemeralSessions,
+				},
+				"Reclaimed leaked ephemeral mini-app tmux sessions",
+			);
+		}
+
+		return reclaimedCount;
+	}
+
 	/**
 	 * Clear a chat/workspace tmux session if it exists (hard reset)
 	 */
@@ -485,7 +523,11 @@ export class TmuxManager {
 		}
 
 		// Check session limit
-		const activeSessions = await this.listSessions(containerId);
+		let activeSessions = await this.listSessions(containerId);
+		if (activeSessions.length >= this.config.maxSessionsPerContainer && String(chatId).startsWith("miniapp-")) {
+			await this.reclaimEphemeralMiniAppSessions(containerId, activeSessions);
+			activeSessions = await this.listSessions(containerId);
+		}
 		if (activeSessions.length >= this.config.maxSessionsPerContainer) {
 			const error = new TmuxManagerError(
 				`Maximum sessions per container reached (${this.config.maxSessionsPerContainer})`,
@@ -579,7 +621,7 @@ export class TmuxManager {
 		containerId: string,
 		sessionName: string,
 		prompt: string,
-		metadata: { requestId: string; chatId: string; workspace: string },
+		metadata: { requestId: string; chatId: string; workspace: string; sync?: boolean },
 		timeout: number = this.DEFAULT_SEND_TIMEOUT,
 	): Promise<void> {
 		const errorContext: TmuxErrorContext = {
@@ -639,6 +681,7 @@ export class TmuxManager {
 			`export REQUEST_ID=${safeRequestId}`,
 			`export CHAT_ID=${safeChatId}`,
 			`export WORKSPACE_NAME=${safeWorkspace}`,
+			...(metadata.sync ? ["export GATEWAY_URL=''"] : []),
 			`/app/scripts/container_cmd.sh request "$(cat ${promptFileQuoted})"`,
 			`rm -f ${promptFileQuoted}`,
 		].join("; ");
