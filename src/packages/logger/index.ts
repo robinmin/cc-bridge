@@ -3,7 +3,22 @@ import path from "node:path";
 import pino from "pino";
 
 const LOG_DIR = "data/logs";
-const LOG_FILE = path.join(LOG_DIR, process.env.NODE_ENV === "test" ? "test.log" : "combined.log");
+
+// Helper to get today's date in YYYYMMDD format
+const getDateString = (): string => {
+	const now = new Date();
+	const year = now.getFullYear();
+	const month = String(now.getMonth() + 1).padStart(2, "0");
+	const day = String(now.getDate()).padStart(2, "0");
+	return `${year}${month}${day}`;
+};
+
+const LOG_FILE = (() => {
+	const dateStr = getDateString();
+	const env = process.env.NODE_ENV;
+	if (env === "test") return path.join(LOG_DIR, `test-${dateStr}.log`);
+	return path.join(LOG_DIR, `combined-${dateStr}.log`);
+})();
 
 // Helper to detect log format from config files early
 export const detectLogFormat = (): string => {
@@ -72,13 +87,13 @@ export const createLogger = (serviceName: string, logFormat: string) => {
 					target: "pino-pretty",
 					options: {
 						destination: LOG_FILE,
-						colorize: true,
+						colorize: false,
 						translateTime: "SYS:standard",
 						singleLine: true,
 						mkdir: true,
 						ignore: "pid,hostname,service", // Hide these from the trailing metadata block
 						// \x1b[0m resets color after the level/time metadata
-						messageFormat: `\x1b[0m[${label}] {msg}`,
+						messageFormat: `[${label}] {msg}`,
 					},
 				})
 			: pino.transport({
