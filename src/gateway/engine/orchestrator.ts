@@ -45,7 +45,14 @@ export class ExecutionOrchestrator {
 	private initializeEngines(): void {
 		// In-process engine (feature-flagged)
 		if (this.config.enableInProcess) {
-			this.engines.set("in-process", new InProcessEngine(this.config.enableInProcess));
+			this.engines.set(
+				"in-process",
+				new InProcessEngine(
+					this.config.enableInProcess,
+					this.config.defaultProvider,
+					this.config.defaultModel,
+				),
+			);
 		}
 
 		// Host IPC engine
