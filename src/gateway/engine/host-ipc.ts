@@ -194,19 +194,47 @@ export class HostIpcEngine implements IExecutionEngine {
 		const requestId = crypto.randomUUID();
 		const sessionName = this.generateSessionName(params.workspace, params.chatId);
 
+		// Log which execution mode and engine type we're using
+		logger.info(
+			{
+				requestId,
+				sessionName,
+				workspace: params.workspace,
+				chatId: params.chatId,
+				engineType: this.config.engineType,
+				executionMode: params.sync ? "sync" : "async",
+			},
+			`[HostIpcEngine] Starting ${params.sync ? "sync" : "async"} execution`,
+		);
+
 		try {
 			// Get or create tmux session on host
 			await this.ensureHostSession(params.workspace, params.chatId, sessionName);
 
-			// Build the full command
-			const completionToken = `CC_BRIDGE_DONE_${requestId.replace(/-/g, "_")}`;
-			const fullCommand = this.buildCommand(
-				params.command,
-				params.args,
-				params.workspace,
-				completionToken,
-				params.timeoutMs,
-			);
+			let fullCommand: string;
+			let completionToken: string | undefined;
+
+			if (params.sync) {
+				// Sync mode: use completion token approach
+				completionToken = `CC_BRIDGE_DONE_${requestId.replace(/-/g, "_")}`;
+				fullCommand = this.buildSyncCommand(
+					params.command,
+					params.args,
+					params.workspace,
+					completionToken,
+					params.timeoutMs,
+				);
+			} else {
+				// Async mode: use host_exec.sh for callback mechanism
+				// Extract the prompt text from args (usually the last non-flag argument)
+				const promptText = params.args.find((a) => !a.startsWith("-")) || "";
+				fullCommand = this.buildAsyncCommand(
+					promptText,
+					params.workspace,
+					params.chatId,
+					requestId,
+				);
+			}
 
 			// Send command to tmux session (pass requestId for temp file naming)
 			await this.sendToHostSession(sessionName, fullCommand, requestId);
@@ -218,12 +246,13 @@ export class HostIpcEngine implements IExecutionEngine {
 					workspace: params.workspace,
 					command: params.command,
 					promptLength: fullCommand.length,
+					mode: params.sync ? "sync" : "async",
 				},
 				"Prompt sent via tmux to host session",
 			);
 
 			// If sync mode, wait for completion and capture output
-			if (params.sync) {
+			if (params.sync && completionToken) {
 				const result = await this.waitForTmuxCompletion(sessionName, params.timeoutMs, completionToken);
 
 				// Avoid leaving long-running CLI processes behind after sync timeout/failure.
@@ -238,7 +267,7 @@ export class HostIpcEngine implements IExecutionEngine {
 				return result;
 			}
 
-			// Return async result - response comes via callback
+			// Async mode: response comes via callback (host_exec.sh handles it)
 			return {
 				status: "running",
 				requestId,
@@ -489,10 +518,10 @@ export class HostIpcEngine implements IExecutionEngine {
 	}
 
 	/**
-	 * Build full command with workspace context
+	 * Build full command for sync mode (waits for completion with token)
 	 * Unsets CLAUDECODE to allow running claude inside Claude Code sessions
 	 */
-	private buildCommand(
+	private buildSyncCommand(
 		command: string,
 		args: string[],
 		workspace: string,
@@ -529,6 +558,51 @@ export class HostIpcEngine implements IExecutionEngine {
 			`if [ -f ${quotedTimeoutMarker} ]; then __cc_bridge_rc=124; rm -f ${quotedTimeoutMarker}; fi; ` +
 			`printf '\\n${completionToken}:%s\\n' "$__cc_bridge_rc"`
 		);
+	}
+
+	/**
+	 * Build full command for async mode (uses host_exec.sh for callback)
+	 * This provides the same callback mechanism as container_cmd.sh
+	 */
+	private buildAsyncCommand(
+		prompt: string,
+		workspace: string,
+		chatId: string,
+		requestId: string,
+	): string {
+		const workspacePath = this.resolveWorkspacePath(workspace) || ".";
+		const scriptPath = path.resolve(process.cwd(), "scripts/host_exec.sh");
+
+		// Write prompt to temp file to avoid shell escaping issues
+		const promptFile = `/tmp/cc-bridge-prompt-${requestId.replace(/[^a-zA-Z0-9_-]/g, "_")}.txt`;
+
+		// Escape the prompt for heredoc - use base64 to avoid any shell escaping issues
+		const promptBase64 = Buffer.from(prompt).toString("base64");
+
+		return (
+			`cd ${this.shellQuote(workspacePath)} && ` +
+			// Decode prompt from base64 to file
+			`echo '${promptBase64}' | base64 -d > ${this.shellQuote(promptFile)} && ` +
+			// Set environment variables for host_exec.sh
+			`export REQUEST_ID=${this.shellQuote(requestId)} && ` +
+			`export CHAT_ID=${this.shellQuote(chatId)} && ` +
+			`export WORKSPACE_NAME=${this.shellQuote(workspace)} && ` +
+			`export GATEWAY_URL=${this.shellQuote(process.env.GATEWAY_URL || "http://localhost:8080")} && ` +
+			`export IPC_BASE_DIR=${this.shellQuote(GATEWAY_CONSTANTS.FILESYSTEM_IPC.BASE_DIR)} && ` +
+			// Run host_exec.sh with prompt from file
+			`bash ${this.shellQuote(scriptPath)} request "$(cat ${this.shellQuote(promptFile)})"; ` +
+			`__cc_exec_rc=$?; ` +
+			`rm -f ${this.shellQuote(promptFile)}; ` +
+			`exit $__cc_exec_rc`
+		);
+	}
+
+	/**
+	 * Prepare execution context - placeholder for compatibility
+	 * Note: The actual prepareExecution is defined above with full implementation
+	 */
+	private getExecutionContext(workspace: string, chatId: string): { workspace: string; chatId: string } {
+		return { workspace, chatId };
 	}
 
 	/**
