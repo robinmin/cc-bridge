@@ -171,7 +171,7 @@ cmd_request() {
     log_info "request_id=$request_id workspace=$workspace"
 
     # Create directories
-    local data_dir="${IPC_BASE_DIR}/data/${workspace}"
+    local data_dir="${IPC_BASE_DIR}/${workspace}"
     mkdir -p "$data_dir"
     local data_file="${data_dir}/${request_id}.json"
 
@@ -275,7 +275,7 @@ cmd_response() {
         fi
     fi
 
-    local data_dir="${IPC_BASE_DIR}/data/${workspace}"
+    local data_dir="${IPC_BASE_DIR}/${workspace}"
     local data_file="${data_dir}/${request_id}.json"
     local marker_file
     marker_file=$(callback_marker_path "$data_dir" "$request_id")
