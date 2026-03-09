@@ -130,17 +130,23 @@ export interface OrchestratorConfig {
 	maxRetries: number;
 	/** Health check interval in ms */
 	healthCheckIntervalMs: number;
+	/** Default LLM provider for in-process execution */
+	defaultProvider?: string;
+	/** Default LLM model for in-process execution */
+	defaultModel?: string;
 }
 
 /** Default orchestrator configuration */
 export const DEFAULT_ORCHESTRATOR_CONFIG: OrchestratorConfig = {
 	layerOrder: ["in-process", "host-ipc", "container"],
-	enableInProcess: false, // Feature-flagged off by default
+	enableInProcess: process.env.ENABLE_IN_PROCESS === "true", // Enable via env var
 	enableHostIpc: true,
 	enableContainer: true,
 	defaultTimeoutMs: 120000,
 	maxRetries: 1,
 	healthCheckIntervalMs: 30000,
+	defaultProvider: process.env.LLM_PROVIDER || "anthropic",
+	defaultModel: process.env.LLM_MODEL || "claude-sonnet-4-6",
 };
 
 /** Execution context passed to engines */
