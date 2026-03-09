@@ -291,17 +291,47 @@ describe("InProcessEngine", () => {
 		expect(available).toBe(false);
 	});
 
-	test("isAvailable returns false even when enabled", async () => {
-		const engine = new InProcessEngine(true);
-		const available = await engine.isAvailable();
-		expect(available).toBe(false);
+	test("isAvailable returns true when enabled with API key", async () => {
+		// Set a mock API key for testing
+		const originalKey = process.env.ANTHROPIC_API_KEY;
+		process.env.ANTHROPIC_API_KEY = "test-api-key-for-testing";
+
+		try {
+			const engine = new InProcessEngine(true);
+			const available = await engine.isAvailable();
+			expect(available).toBe(true);
+		} finally {
+			// Restore original key
+			if (originalKey) {
+				process.env.ANTHROPIC_API_KEY = originalKey;
+			} else {
+				delete process.env.ANTHROPIC_API_KEY;
+			}
+		}
 	});
 
-	test("execute returns unavailable error", async () => {
+	test("isAvailable returns false when enabled but no API key", async () => {
+		// Ensure no API key is set
+		const originalKey = process.env.ANTHROPIC_API_KEY;
+		delete process.env.ANTHROPIC_API_KEY;
+
+		try {
+			const engine = new InProcessEngine(true);
+			const available = await engine.isAvailable();
+			expect(available).toBe(false);
+		} finally {
+			// Restore original key
+			if (originalKey) {
+				process.env.ANTHROPIC_API_KEY = originalKey;
+			}
+		}
+	});
+
+	test("execute returns not enabled error", async () => {
 		const engine = new InProcessEngine(false);
 		const result = await engine.execute({ prompt: "test" });
 		expect(result.status).toBe("failed");
-		expect(result.error).toContain("not available");
+		expect(result.error).toContain("not enabled");
 		expect(result.retryable).toBe(false);
 	});
 
@@ -310,6 +340,704 @@ describe("InProcessEngine", () => {
 		const health = await engine.getHealth();
 		expect(health.layer).toBe("in-process");
 		expect(health.available).toBe(false);
+	});
+});
+
+// =============================================================================
+// In-Process Engine Additional Coverage Tests
+// =============================================================================
+
+describe("InProcessEngine additional coverage", () => {
+	test("constructor uses default provider and model when not specified", () => {
+		const originalProvider = process.env.LLM_PROVIDER;
+		const originalModel = process.env.LLM_MODEL;
+		delete process.env.LLM_PROVIDER;
+		delete process.env.LLM_MODEL;
+
+		try {
+			const engine = new InProcessEngine(true);
+			expect(engine.getLayer()).toBe("in-process");
+		} finally {
+			if (originalProvider) process.env.LLM_PROVIDER = originalProvider;
+			if (originalModel) process.env.LLM_MODEL = originalModel;
+		}
+	});
+
+	test("constructor uses custom provider and model", () => {
+		const engine = new InProcessEngine(true, "openai", "gpt-4");
+		expect(engine.getLayer()).toBe("in-process");
+	});
+
+	test("constructor uses env vars for provider and model", () => {
+		const originalProvider = process.env.LLM_PROVIDER;
+		const originalModel = process.env.LLM_MODEL;
+		process.env.LLM_PROVIDER = "google";
+		process.env.LLM_MODEL = "gemini-pro";
+
+		try {
+			const engine = new InProcessEngine(true);
+			expect(engine.getLayer()).toBe("in-process");
+		} finally {
+			if (originalProvider) process.env.LLM_PROVIDER = originalProvider;
+			else delete process.env.LLM_PROVIDER;
+			if (originalModel) process.env.LLM_MODEL = originalModel;
+			else delete process.env.LLM_MODEL;
+		}
+	});
+
+	test("isAvailable checks OpenAI provider", async () => {
+		const originalAnthropic = process.env.ANTHROPIC_API_KEY;
+		const originalOpenai = process.env.OPENAI_API_KEY;
+		delete process.env.ANTHROPIC_API_KEY;
+		process.env.OPENAI_API_KEY = "test-openai-key";
+
+		try {
+			const engine = new InProcessEngine(true, "openai", "gpt-4");
+			const available = await engine.isAvailable();
+			expect(available).toBe(true);
+		} finally {
+			if (originalAnthropic) process.env.ANTHROPIC_API_KEY = originalAnthropic;
+			if (originalOpenai) process.env.OPENAI_API_KEY = originalOpenai;
+			else delete process.env.OPENAI_API_KEY;
+		}
+	});
+
+	test("isAvailable checks Google provider", async () => {
+		const originalAnthropic = process.env.ANTHROPIC_API_KEY;
+		const originalGoogle = process.env.GOOGLE_API_KEY;
+		delete process.env.ANTHROPIC_API_KEY;
+		process.env.GOOGLE_API_KEY = "test-google-key";
+
+		try {
+			const engine = new InProcessEngine(true, "google", "gemini-pro");
+			const available = await engine.isAvailable();
+			expect(available).toBe(true);
+		} finally {
+			if (originalAnthropic) process.env.ANTHROPIC_API_KEY = originalAnthropic;
+			if (originalGoogle) process.env.GOOGLE_API_KEY = originalGoogle;
+			else delete process.env.GOOGLE_API_KEY;
+		}
+	});
+
+	test("isAvailable checks Gemini provider (alias)", async () => {
+		const originalAnthropic = process.env.ANTHROPIC_API_KEY;
+		const originalGemini = process.env.GEMINI_API_KEY;
+		delete process.env.ANTHROPIC_API_KEY;
+		process.env.GEMINI_API_KEY = "test-gemini-key";
+
+		try {
+			const engine = new InProcessEngine(true, "gemini", "gemini-pro");
+			const available = await engine.isAvailable();
+			expect(available).toBe(true);
+		} finally {
+			if (originalAnthropic) process.env.ANTHROPIC_API_KEY = originalAnthropic;
+			if (originalGemini) process.env.GEMINI_API_KEY = originalGemini;
+			else delete process.env.GEMINI_API_KEY;
+		}
+	});
+
+	test("isAvailable checks OpenRouter provider", async () => {
+		const originalAnthropic = process.env.ANTHROPIC_API_KEY;
+		const originalOpenrouter = process.env.OPENROUTER_API_KEY;
+		delete process.env.ANTHROPIC_API_KEY;
+		process.env.OPENROUTER_API_KEY = "test-openrouter-key";
+
+		try {
+			const engine = new InProcessEngine(true, "openrouter", "anthropic/claude-3");
+			const available = await engine.isAvailable();
+			expect(available).toBe(true);
+		} finally {
+			if (originalAnthropic) process.env.ANTHROPIC_API_KEY = originalAnthropic;
+			if (originalOpenrouter) process.env.OPENROUTER_API_KEY = originalOpenrouter;
+			else delete process.env.OPENROUTER_API_KEY;
+		}
+	});
+
+	test("isAvailable checks unknown provider (falls back to LLM_API_KEY)", async () => {
+		const originalAnthropic = process.env.ANTHROPIC_API_KEY;
+		const originalLlmKey = process.env.LLM_API_KEY;
+		delete process.env.ANTHROPIC_API_KEY;
+		process.env.LLM_API_KEY = "test-llm-key";
+
+		try {
+			const engine = new InProcessEngine(true, "unknown-provider", "model-x");
+			const available = await engine.isAvailable();
+			expect(available).toBe(true);
+		} finally {
+			if (originalAnthropic) process.env.ANTHROPIC_API_KEY = originalAnthropic;
+			if (originalLlmKey) process.env.LLM_API_KEY = originalLlmKey;
+			else delete process.env.LLM_API_KEY;
+		}
+	});
+
+	test("isAvailable checks unknown provider with API_KEY fallback", async () => {
+		const originalAnthropic = process.env.ANTHROPIC_API_KEY;
+		const originalLlmKey = process.env.LLM_API_KEY;
+		const originalApiKey = process.env.API_KEY;
+		delete process.env.ANTHROPIC_API_KEY;
+		delete process.env.LLM_API_KEY;
+		process.env.API_KEY = "test-api-key";
+
+		try {
+			const engine = new InProcessEngine(true, "custom-provider", "model-y");
+			const available = await engine.isAvailable();
+			expect(available).toBe(true);
+		} finally {
+			if (originalAnthropic) process.env.ANTHROPIC_API_KEY = originalAnthropic;
+			if (originalLlmKey) process.env.LLM_API_KEY = originalLlmKey;
+			else delete process.env.LLM_API_KEY;
+			if (originalApiKey) process.env.API_KEY = originalApiKey;
+			else delete process.env.API_KEY;
+		}
+	});
+
+	test("isAvailable returns false for unknown provider without API key", async () => {
+		const originalAnthropic = process.env.ANTHROPIC_API_KEY;
+		const originalLlmKey = process.env.LLM_API_KEY;
+		const originalApiKey = process.env.API_KEY;
+		delete process.env.ANTHROPIC_API_KEY;
+		delete process.env.LLM_API_KEY;
+		delete process.env.API_KEY;
+
+		try {
+			const engine = new InProcessEngine(true, "unknown-provider", "model-x");
+			const available = await engine.isAvailable();
+			expect(available).toBe(false);
+		} finally {
+			if (originalAnthropic) process.env.ANTHROPIC_API_KEY = originalAnthropic;
+			if (originalLlmKey) process.env.LLM_API_KEY = originalLlmKey;
+			if (originalApiKey) process.env.API_KEY = originalApiKey;
+		}
+	});
+
+	test("execute with enabled but no API key returns failed", async () => {
+		const originalKey = process.env.ANTHROPIC_API_KEY;
+		delete process.env.ANTHROPIC_API_KEY;
+
+		try {
+			const engine = new InProcessEngine(true);
+			const result = await engine.execute({ prompt: "test" });
+			expect(result.status).toBe("failed");
+			expect(result.error).toContain("No API key");
+		} finally {
+			if (originalKey) process.env.ANTHROPIC_API_KEY = originalKey;
+		}
+	});
+
+	test("execute with unknown provider and no API key returns failed", async () => {
+		const originalAnthropic = process.env.ANTHROPIC_API_KEY;
+		const originalLlmKey = process.env.LLM_API_KEY;
+		const originalApiKey = process.env.API_KEY;
+		delete process.env.ANTHROPIC_API_KEY;
+		delete process.env.LLM_API_KEY;
+		delete process.env.API_KEY;
+
+		try {
+			const engine = new InProcessEngine(true, "unknown-provider", "model-x");
+			const result = await engine.execute({ prompt: "test" });
+			expect(result.status).toBe("failed");
+			expect(result.error).toContain("No API key");
+		} finally {
+			if (originalAnthropic) process.env.ANTHROPIC_API_KEY = originalAnthropic;
+			if (originalLlmKey) process.env.LLM_API_KEY = originalLlmKey;
+			if (originalApiKey) process.env.API_KEY = originalApiKey;
+		}
+	});
+
+	test("getHealth returns error message when not available", async () => {
+		const originalKey = process.env.ANTHROPIC_API_KEY;
+		delete process.env.ANTHROPIC_API_KEY;
+
+		try {
+			const engine = new InProcessEngine(true);
+			const health = await engine.getHealth();
+			expect(health.layer).toBe("in-process");
+			expect(health.available).toBe(false);
+			expect(health.error).toContain("disabled or API key");
+		} finally {
+			if (originalKey) process.env.ANTHROPIC_API_KEY = originalKey;
+		}
+	});
+
+	test("execute with chatId in options", async () => {
+		const engine = new InProcessEngine(false);
+		const result = await engine.execute({
+			prompt: "test",
+			options: { chatId: "chat-123", timeout: 5000 },
+		});
+		expect(result.status).toBe("failed");
+		expect(result.error).toContain("not enabled");
+	});
+
+	test("execute with maxTokens in options", async () => {
+		const engine = new InProcessEngine(false);
+		const result = await engine.execute({
+			prompt: "test",
+			options: { maxTokens: 2048 },
+		});
+		expect(result.status).toBe("failed");
+		expect(result.error).toContain("not enabled");
+	});
+});
+
+// =============================================================================
+// InProcessEngine isTextContentBlock Tests
+// =============================================================================
+
+import { isTextContentBlock } from "@/gateway/engine/in-process";
+
+describe("isTextContentBlock function", () => {
+	test("returns true for valid text content block", () => {
+		const block = { type: "text", text: "hello world" };
+		expect(isTextContentBlock(block)).toBe(true);
+	});
+
+	test("returns false for non-text content block", () => {
+		const block = { type: "image", data: "base64..." };
+		expect(isTextContentBlock(block)).toBe(false);
+	});
+
+	test("returns false for null", () => {
+		expect(isTextContentBlock(null)).toBe(false);
+	});
+
+	test("returns false for undefined", () => {
+		expect(isTextContentBlock(undefined)).toBe(false);
+	});
+
+	test("returns false for primitive values", () => {
+		expect(isTextContentBlock("string")).toBe(false);
+		expect(isTextContentBlock(123)).toBe(false);
+		expect(isTextContentBlock(true)).toBe(false);
+	});
+
+	test("returns false for object without type", () => {
+		const block = { text: "hello" };
+		expect(isTextContentBlock(block)).toBe(false);
+	});
+
+	test("returns false for object with wrong type", () => {
+		const block = { type: "tool_use", name: "test" };
+		expect(isTextContentBlock(block)).toBe(false);
+	});
+
+	test("returns true for text block with empty text", () => {
+		const block = { type: "text", text: "" };
+		expect(isTextContentBlock(block)).toBe(true);
+	});
+});
+
+// =============================================================================
+// InProcessEngine getHealth Tests
+// =============================================================================
+
+describe("InProcessEngine getHealth", () => {
+	test("returns health with layer 'in-process'", async () => {
+		const engine = new InProcessEngine(false);
+		const health = await engine.getHealth();
+		expect(health.layer).toBe("in-process");
+		expect(health.available).toBe(false);
+		expect(health.lastCheck).toBeInstanceOf(Date);
+	});
+
+	test("returns available=true when enabled with API key", async () => {
+		const originalKey = process.env.ANTHROPIC_API_KEY;
+		process.env.ANTHROPIC_API_KEY = "test-key";
+
+		try {
+			const engine = new InProcessEngine(true);
+			const health = await engine.getHealth();
+			expect(health.available).toBe(true);
+			expect(health.error).toBeUndefined();
+		} finally {
+			if (originalKey) process.env.ANTHROPIC_API_KEY = originalKey;
+			else delete process.env.ANTHROPIC_API_KEY;
+		}
+	});
+
+	test("returns error message when not available", async () => {
+		const originalKey = process.env.ANTHROPIC_API_KEY;
+		delete process.env.ANTHROPIC_API_KEY;
+
+		try {
+			const engine = new InProcessEngine(true);
+			const health = await engine.getHealth();
+			expect(health.available).toBe(false);
+			expect(health.error).toBeDefined();
+		} finally {
+			if (originalKey) process.env.ANTHROPIC_API_KEY = originalKey;
+		}
+	});
+});
+
+// =============================================================================
+// InProcessEngine execute Tests
+// =============================================================================
+
+describe("InProcessEngine execute", () => {
+	test("returns failed when disabled", async () => {
+		const engine = new InProcessEngine(false);
+		const result = await engine.execute({ prompt: "test" });
+		expect(result.status).toBe("failed");
+		expect(result.error).toContain("not enabled");
+		expect(result.retryable).toBe(false);
+	});
+
+	test("returns failed when no API key configured", async () => {
+		const originalKey = process.env.ANTHROPIC_API_KEY;
+		delete process.env.ANTHROPIC_API_KEY;
+
+		try {
+			const engine = new InProcessEngine(true);
+			const result = await engine.execute({ prompt: "test" });
+			expect(result.status).toBe("failed");
+			expect(result.error).toContain("No API key");
+		} finally {
+			if (originalKey) process.env.ANTHROPIC_API_KEY = originalKey;
+		}
+	});
+
+	test("execute with custom timeout option", async () => {
+		const engine = new InProcessEngine(false);
+		const result = await engine.execute({
+			prompt: "test",
+			options: { timeout: 5000 },
+		});
+		expect(result.status).toBe("failed");
+	});
+
+	test("execute with chatId option", async () => {
+		const engine = new InProcessEngine(false);
+		const result = await engine.execute({
+			prompt: "test",
+			options: { chatId: "test-chat-123" },
+		});
+		expect(result.status).toBe("failed");
+	});
+
+	test("execute with maxTokens option", async () => {
+		const engine = new InProcessEngine(false);
+		const result = await engine.execute({
+			prompt: "test",
+			options: { maxTokens: 2048 },
+		});
+		expect(result.status).toBe("failed");
+	});
+});
+
+describe("InProcessEngine getProviderConfig coverage", () => {
+	test("getProviderConfig returns correct config for anthropic", () => {
+		const originalKey = process.env.ANTHROPIC_API_KEY;
+		process.env.ANTHROPIC_API_KEY = "test-anthropic-key";
+
+		try {
+			const engine = new InProcessEngine(true, "anthropic", "claude-sonnet-4-6");
+			// @ts-expect-error - accessing private method
+			const config = engine.getProviderConfig();
+
+			expect(config.api).toBe("anthropic-messages");
+			expect(config.getApiKey()).toBe("test-anthropic-key");
+		} finally {
+			if (originalKey) process.env.ANTHROPIC_API_KEY = originalKey;
+			else delete process.env.ANTHROPIC_API_KEY;
+		}
+	});
+
+	test("getProviderConfig returns correct config for openai", () => {
+		const originalKey = process.env.OPENAI_API_KEY;
+		process.env.OPENAI_API_KEY = "test-openai-key";
+
+		try {
+			const engine = new InProcessEngine(true, "openai", "gpt-4");
+			// @ts-expect-error - accessing private method
+			const config = engine.getProviderConfig();
+
+			expect(config.api).toBe("openai-completions");
+			expect(config.getApiKey()).toBe("test-openai-key");
+		} finally {
+			if (originalKey) process.env.OPENAI_API_KEY = originalKey;
+			else delete process.env.OPENAI_API_KEY;
+		}
+	});
+
+	test("getProviderConfig returns correct config for google", () => {
+		const originalKey = process.env.GOOGLE_API_KEY;
+		process.env.GOOGLE_API_KEY = "test-google-key";
+
+		try {
+			const engine = new InProcessEngine(true, "google", "gemini-pro");
+			// @ts-expect-error - accessing private method
+			const config = engine.getProviderConfig();
+
+			expect(config.api).toBe("google-generative-ai");
+			expect(config.getApiKey()).toBe("test-google-key");
+		} finally {
+			if (originalKey) process.env.GOOGLE_API_KEY = originalKey;
+			else delete process.env.GOOGLE_API_KEY;
+		}
+	});
+
+	test("getProviderConfig returns correct config for gemini", () => {
+		const originalKey = process.env.GEMINI_API_KEY;
+		process.env.GEMINI_API_KEY = "test-gemini-key";
+
+		try {
+			const engine = new InProcessEngine(true, "gemini", "gemini-1.5-pro");
+			// @ts-expect-error - accessing private method
+			const config = engine.getProviderConfig();
+
+			expect(config.api).toBe("google-generative-ai");
+			expect(config.getApiKey()).toBe("test-gemini-key");
+		} finally {
+			if (originalKey) process.env.GEMINI_API_KEY = originalKey;
+			else delete process.env.GEMINI_API_KEY;
+		}
+	});
+
+	test("getProviderConfig returns correct config for openrouter", () => {
+		const originalKey = process.env.OPENROUTER_API_KEY;
+		process.env.OPENROUTER_API_KEY = "test-openrouter-key";
+
+		try {
+			const engine = new InProcessEngine(true, "openrouter", "anthropic/claude-3-opus");
+			// @ts-expect-error - accessing private method
+			const config = engine.getProviderConfig();
+
+			expect(config.api).toBe("openai-completions");
+			expect(config.baseUrl).toBe("https://openrouter.ai/api/v1");
+			expect(config.getApiKey()).toBe("test-openrouter-key");
+		} finally {
+			if (originalKey) process.env.OPENROUTER_API_KEY = originalKey;
+			else delete process.env.OPENROUTER_API_KEY;
+		}
+	});
+
+	test("getProviderConfig returns fallback config for unknown provider with LLM_API_KEY", () => {
+		const originalLlmKey = process.env.LLM_API_KEY;
+		const originalApiKey = process.env.API_KEY;
+		process.env.LLM_API_KEY = "test-llm-key";
+		delete process.env.API_KEY;
+
+		try {
+			const engine = new InProcessEngine(true, "unknown-provider", "model-x");
+			// @ts-expect-error - accessing private method
+			const config = engine.getProviderConfig();
+
+			expect(config.api).toBe("openai-completions");
+			expect(config.getApiKey()).toBe("test-llm-key");
+		} finally {
+			if (originalLlmKey) process.env.LLM_API_KEY = originalLlmKey;
+			else delete process.env.LLM_API_KEY;
+			if (originalApiKey) process.env.API_KEY = originalApiKey;
+		}
+	});
+
+	test("getProviderConfig returns fallback config for unknown provider with API_KEY", () => {
+		const originalLlmKey = process.env.LLM_API_KEY;
+		const originalApiKey = process.env.API_KEY;
+		delete process.env.LLM_API_KEY;
+		process.env.API_KEY = "test-api-key";
+
+		try {
+			const engine = new InProcessEngine(true, "custom-provider", "model-y");
+			// @ts-expect-error - accessing private method
+			const config = engine.getProviderConfig();
+
+			expect(config.api).toBe("openai-completions");
+			expect(config.getApiKey()).toBe("test-api-key");
+		} finally {
+			if (originalLlmKey) process.env.LLM_API_KEY = originalLlmKey;
+			else delete process.env.LLM_API_KEY;
+			if (originalApiKey) process.env.API_KEY = originalApiKey;
+		}
+	});
+
+	test("getProviderConfig returns fallback config with LLM_BASE_URL", () => {
+		const originalLlmKey = process.env.LLM_API_KEY;
+		const originalUrl = process.env.LLM_BASE_URL;
+		process.env.LLM_API_KEY = "test-llm-key";
+		process.env.LLM_BASE_URL = "https://custom.api.com/v1";
+
+		try {
+			const engine = new InProcessEngine(true, "custom-provider", "model-z");
+			// @ts-expect-error - accessing private method
+			const config = engine.getProviderConfig();
+
+			expect(config.api).toBe("openai-completions");
+			expect(config.baseUrl).toBe("https://custom.api.com/v1");
+		} finally {
+			if (originalLlmKey) process.env.LLM_API_KEY = originalLlmKey;
+			else delete process.env.LLM_API_KEY;
+			if (originalUrl) process.env.LLM_BASE_URL = originalUrl;
+			else delete process.env.LLM_BASE_URL;
+		}
+	});
+});
+
+describe("InProcessEngine buildModel coverage", () => {
+	test("buildModel creates correct Model for anthropic", () => {
+		const originalKey = process.env.ANTHROPIC_API_KEY;
+		process.env.ANTHROPIC_API_KEY = "test-key";
+
+		try {
+			const engine = new InProcessEngine(true, "anthropic", "claude-sonnet-4-6");
+			// @ts-expect-error - accessing private method
+			const model = engine.buildModel();
+
+			expect(model.id).toBe("claude-sonnet-4-6");
+			expect(model.name).toBe("claude-sonnet-4-6");
+			expect(model.provider).toBe("anthropic");
+			expect(model.api).toBe("anthropic-messages");
+			expect(model.contextWindow).toBe(200000);
+			expect(model.maxTokens).toBe(8192);
+		} finally {
+			if (originalKey) process.env.ANTHROPIC_API_KEY = originalKey;
+			else delete process.env.ANTHROPIC_API_KEY;
+		}
+	});
+
+	test("buildModel creates correct Model for openai", () => {
+		const originalKey = process.env.OPENAI_API_KEY;
+		process.env.OPENAI_API_KEY = "test-key";
+
+		try {
+			const engine = new InProcessEngine(true, "openai", "gpt-4");
+			// @ts-expect-error - accessing private method
+			const model = engine.buildModel();
+
+			expect(model.provider).toBe("openai");
+			expect(model.api).toBe("openai-completions");
+		} finally {
+			if (originalKey) process.env.OPENAI_API_KEY = originalKey;
+			else delete process.env.OPENAI_API_KEY;
+		}
+	});
+
+	test("buildModel creates correct Model for google", () => {
+		const originalKey = process.env.GOOGLE_API_KEY;
+		process.env.GOOGLE_API_KEY = "test-key";
+
+		try {
+			const engine = new InProcessEngine(true, "google", "gemini-pro");
+			// @ts-expect-error - accessing private method
+			const model = engine.buildModel();
+
+			expect(model.provider).toBe("google");
+			expect(model.api).toBe("google-generative-ai");
+		} finally {
+			if (originalKey) process.env.GOOGLE_API_KEY = originalKey;
+			else delete process.env.GOOGLE_API_KEY;
+		}
+	});
+
+	test("buildModel creates correct Model for gemini", () => {
+		const originalKey = process.env.GEMINI_API_KEY;
+		process.env.GEMINI_API_KEY = "test-key";
+
+		try {
+			const engine = new InProcessEngine(true, "gemini", "gemini-1.5-pro");
+			// @ts-expect-error - accessing private method
+			const model = engine.buildModel();
+
+			expect(model.provider).toBe("gemini");
+			expect(model.api).toBe("google-generative-ai");
+		} finally {
+			if (originalKey) process.env.GEMINI_API_KEY = originalKey;
+			else delete process.env.GEMINI_API_KEY;
+		}
+	});
+
+	test("buildModel creates correct Model for openrouter", () => {
+		const originalKey = process.env.OPENROUTER_API_KEY;
+		process.env.OPENROUTER_API_KEY = "test-key";
+
+		try {
+			const engine = new InProcessEngine(true, "openrouter", "anthropic/claude-3-opus");
+			// @ts-expect-error - accessing private method
+			const model = engine.buildModel();
+
+			expect(model.provider).toBe("openrouter");
+			expect(model.api).toBe("openai-completions");
+			expect(model.baseUrl).toBe("https://openrouter.ai/api/v1");
+		} finally {
+			if (originalKey) process.env.OPENROUTER_API_KEY = originalKey;
+			else delete process.env.OPENROUTER_API_KEY;
+		}
+	});
+
+	test("buildModel creates Model for unknown provider with LLM_BASE_URL", () => {
+		const originalKey = process.env.LLM_API_KEY;
+		const originalUrl = process.env.LLM_BASE_URL;
+		process.env.LLM_API_KEY = "test-key";
+		process.env.LLM_BASE_URL = "https://custom.api.com/v1";
+
+		try {
+			const engine = new InProcessEngine(true, "custom-provider", "custom-model");
+			// @ts-expect-error - accessing private method
+			const model = engine.buildModel();
+
+			expect(model.provider).toBe("custom-provider");
+			expect(model.api).toBe("openai-completions");
+			expect(model.baseUrl).toBe("https://custom.api.com/v1");
+		} finally {
+			if (originalKey) process.env.LLM_API_KEY = originalKey;
+			else delete process.env.LLM_API_KEY;
+			if (originalUrl) process.env.LLM_BASE_URL = originalUrl;
+			else delete process.env.LLM_BASE_URL;
+		}
+	});
+
+	test("buildModel throws when no API key configured", () => {
+		const originalKey = process.env.ANTHROPIC_API_KEY;
+		delete process.env.ANTHROPIC_API_KEY;
+
+		try {
+			const engine = new InProcessEngine(true, "anthropic", "claude-sonnet-4-6");
+			expect(() => {
+				// @ts-expect-error - accessing private method
+				engine.buildModel();
+			}).toThrow("No API key configured");
+		} finally {
+			if (originalKey) process.env.ANTHROPIC_API_KEY = originalKey;
+		}
+	});
+
+	test("getProviderConfig returns correct config for anthropic", () => {
+		const originalKey = process.env.ANTHROPIC_API_KEY;
+		process.env.ANTHROPIC_API_KEY = "test-anthropic-key";
+
+		try {
+			const engine = new InProcessEngine(true, "anthropic", "claude-sonnet-4-6");
+			// @ts-expect-error - accessing private method
+			const config = engine.getProviderConfig();
+
+			expect(config.api).toBe("anthropic-messages");
+			expect(config.getApiKey()).toBe("test-anthropic-key");
+		} finally {
+			if (originalKey) process.env.ANTHROPIC_API_KEY = originalKey;
+			else delete process.env.ANTHROPIC_API_KEY;
+		}
+	});
+
+	test("getProviderConfig returns correct config for unknown provider", () => {
+		const originalKey = process.env.LLM_API_KEY;
+		const originalUrl = process.env.LLM_BASE_URL;
+		process.env.LLM_API_KEY = "test-llm-key";
+		delete process.env.LLM_BASE_URL;
+
+		try {
+			const engine = new InProcessEngine(true, "unknown", "model");
+			// @ts-expect-error - accessing private method
+			const config = engine.getProviderConfig();
+
+			expect(config.api).toBe("openai-completions");
+			expect(config.getApiKey()).toBe("test-llm-key");
+			expect(config.baseUrl).toBeUndefined();
+		} finally {
+			if (originalKey) process.env.LLM_API_KEY = originalKey;
+			else delete process.env.LLM_API_KEY;
+			if (originalUrl) process.env.LLM_BASE_URL = originalUrl;
+		}
 	});
 });
 
@@ -620,6 +1348,659 @@ describe("HostIpcEngine execute coverage", () => {
 });
 
 // =============================================================================
+// HostIpcEngine Private Methods Coverage
+// =============================================================================
+
+describe("HostIpcEngine private methods coverage", () => {
+	test("shellQuote escapes single quotes", () => {
+		const engine = new HostIpcEngine();
+		// @ts-expect-error - accessing private method
+		const result = engine.shellQuote("it's a test");
+		expect(result).toBe("'it'\\''s a test'");
+	});
+
+	test("shellQuote handles normal strings", () => {
+		const engine = new HostIpcEngine();
+		// @ts-expect-error - accessing private method
+		const result = engine.shellQuote("normal string");
+		expect(result).toBe("'normal string'");
+	});
+
+	test("generateSessionName creates valid session name", () => {
+		const engine = new HostIpcEngine();
+		// @ts-expect-error - accessing private method
+		const result = engine.generateSessionName("my-workspace", "chat-123");
+		expect(result).toContain("claude");
+		// Hyphens and underscores are allowed in session names
+		expect(result).toContain("my-workspace");
+		expect(result).toContain("chat-123");
+	});
+
+	test("generateSessionName sanitizes special characters", () => {
+		const engine = new HostIpcEngine();
+		// @ts-expect-error - accessing private method
+		const result = engine.generateSessionName("ws@#$%", "chat!&*");
+		expect(result).not.toContain("@");
+		expect(result).not.toContain("#");
+		expect(result).not.toContain("!");
+	});
+
+	test("extractRecentOutput filters command echo lines", () => {
+		const engine = new HostIpcEngine();
+		const input = "> some command\nline1\nline2\n## Response\ncontent";
+		// @ts-expect-error - accessing private method
+		const result = engine.extractRecentOutput(input, "TOKEN");
+		expect(result).not.toContain("> some command");
+		expect(result).toContain("content");
+	});
+
+	test("extractRecentOutput handles markdown headers", () => {
+		const engine = new HostIpcEngine();
+		const input = "command echo\n## Introduction\nThis is the response";
+		// @ts-expect-error - accessing private method
+		const result = engine.extractRecentOutput(input, "TOKEN");
+		expect(result).toContain("Introduction");
+		expect(result).toContain("response");
+	});
+
+	test("extractRecentOutput filters Execute mini-app lines", () => {
+		const engine = new HostIpcEngine();
+		const input = "Execute mini-app something\n## Response\ncontent here";
+		// @ts-expect-error - accessing private method
+		const result = engine.extractRecentOutput(input, "TOKEN");
+		expect(result).not.toContain("Execute mini-app");
+	});
+
+	test("extractRecentOutput filters Instructions: lines", () => {
+		const engine = new HostIpcEngine();
+		const input = "Instructions: do something\n## Output\nthe result";
+		// @ts-expect-error - accessing private method
+		const result = engine.extractRecentOutput(input, "TOKEN");
+		expect(result).not.toContain("Instructions:");
+	});
+
+	test("extractRecentOutput filters bash -c lines", () => {
+		const engine = new HostIpcEngine();
+		const input = "bash -c 'some command'\n## Output\nresult";
+		// @ts-expect-error - accessing private method
+		const result = engine.extractRecentOutput(input, "TOKEN");
+		expect(result).not.toContain("bash -c");
+	});
+
+	test("extractRecentOutput uses fallback for no markers", () => {
+		const engine = new HostIpcEngine();
+		const lines = Array(100).fill("line content");
+		const input = lines.join("\n");
+		// @ts-expect-error - accessing private method
+		const result = engine.extractRecentOutput(input, "TOKEN");
+		expect(result.length).toBeGreaterThan(0);
+	});
+
+	test("extractRecentOutput detects Claude: start marker", () => {
+		const engine = new HostIpcEngine();
+		const input = "some command\nClaude: Here is my response";
+		// @ts-expect-error - accessing private method
+		const result = engine.extractRecentOutput(input, "TOKEN");
+		expect(result).toContain("Claude:");
+		expect(result).toContain("response");
+	});
+
+	test("extractRecentOutput detects Here's start marker", () => {
+		const engine = new HostIpcEngine();
+		const input = "command output\nHere's the answer";
+		// @ts-expect-error - accessing private method
+		const result = engine.extractRecentOutput(input, "TOKEN");
+		expect(result).toContain("Here's");
+	});
+
+	test("extractRecentOutput detects Based on start marker", () => {
+		const engine = new HostIpcEngine();
+		const input = "output\nBased on your request";
+		// @ts-expect-error - accessing private method
+		const result = engine.extractRecentOutput(input, "TOKEN");
+		expect(result).toContain("Based on");
+	});
+
+	test("extractRecentOutput detects I'll start marker", () => {
+		const engine = new HostIpcEngine();
+		const input = "cmd\nI'll help you with that";
+		// @ts-expect-error - accessing private method
+		const result = engine.extractRecentOutput(input, "TOKEN");
+		expect(result).toContain("I'll");
+	});
+
+	test("extractRecentOutput detects Let me start marker", () => {
+		const engine = new HostIpcEngine();
+		const input = "cmd output\nLet me explain";
+		// @ts-expect-error - accessing private method
+		const result = engine.extractRecentOutput(input, "TOKEN");
+		expect(result).toContain("Let me");
+	});
+
+	test("buildSyncCommand creates proper shell command", () => {
+		const engine = new HostIpcEngine();
+		// @ts-expect-error - accessing private method
+		const result = engine.buildSyncCommand("claude", ["-p", "test"], "workspace", "TOKEN_123", 60000);
+		expect(result).toContain("claude");
+		expect(result).toContain("TOKEN_123");
+		expect(result).toContain("unset CLAUDECODE");
+	});
+
+	test("buildSyncCommand includes timeout watchdog", () => {
+		const engine = new HostIpcEngine();
+		// @ts-expect-error - accessing private method
+		const result = engine.buildSyncCommand("claude", ["-p", "test"], "workspace", "TOKEN", 30000);
+		expect(result).toContain("sleep");
+		expect(result).toContain("kill");
+	});
+
+	test("sleep returns promise that resolves", async () => {
+		const engine = new HostIpcEngine();
+		// @ts-expect-error - accessing private method
+		await engine.sleep(10);
+		expect(true).toBe(true);
+	});
+});
+
+// =============================================================================
+// HostIpcEngine Tmux Execution Coverage
+// =============================================================================
+
+describe("HostIpcEngine tmux execution coverage", () => {
+	test("waitForTmuxCompletion returns completed on success", async () => {
+		const engine = new HostIpcEngine();
+		const completionToken = "CC_BRIDGE_DONE_123";
+
+		// Mock capturePane to return completion output
+		// @ts-expect-error - accessing private method
+		const originalCapturePane = engine.capturePane;
+		// @ts-expect-error
+		engine.capturePane = mock(async () => `output\n${completionToken}:0`);
+
+		try {
+			// @ts-expect-error - accessing private method
+			const result = await engine.waitForTmuxCompletion("session-name", 5000, completionToken);
+
+			expect(result.status).toBe("completed");
+			expect(result.exitCode).toBe(0);
+		} finally {
+			// @ts-expect-error
+			engine.capturePane = originalCapturePane;
+		}
+	});
+
+	test("waitForTmuxCompletion returns failed on shell error", async () => {
+		const engine = new HostIpcEngine();
+		const completionToken = "CC_BRIDGE_DONE_456";
+
+		// @ts-expect-error
+		engine.capturePane = mock(async () => `command not found\n${completionToken}:127`);
+
+		try {
+			// @ts-expect-error
+			const result = await engine.waitForTmuxCompletion("session-name", 5000, completionToken);
+
+			expect(result.status).toBe("failed");
+			expect(result.error).toContain("tmux command failed");
+		} finally {
+			// Restore
+		}
+	});
+
+	test("waitForTmuxCompletion returns timeout on exit code 124", async () => {
+		const engine = new HostIpcEngine();
+		const completionToken = "CC_BRIDGE_DONE_789";
+
+		// @ts-expect-error
+		engine.capturePane = mock(async () => `output\n${completionToken}:124`);
+
+		try {
+			// @ts-expect-error
+			const result = await engine.waitForTmuxCompletion("session-name", 5000, completionToken);
+
+			expect(result.status).toBe("timeout");
+			expect(result.isTimeout).toBe(true);
+			expect(result.exitCode).toBe(124);
+		} finally {
+			// Restore
+		}
+	});
+
+	test("waitForTmuxCompletion returns timeout when no completion token", async () => {
+		const engine = new HostIpcEngine();
+		const completionToken = "CC_BRIDGE_DONE_TIMEOUT";
+
+		// @ts-expect-error
+		engine.capturePane = mock(async () => "output without completion token");
+
+		try {
+			// @ts-expect-error - use short timeout
+			const result = await engine.waitForTmuxCompletion("session-name", 100, completionToken);
+
+			expect(result.status).toBe("timeout");
+			expect(result.isTimeout).toBe(true);
+		} finally {
+			// Restore
+		}
+	});
+
+	test("waitForTmuxCompletion handles capturePane error and retries", async () => {
+		const engine = new HostIpcEngine();
+		const completionToken = "CC_BRIDGE_DONE_RETRY";
+
+		let callCount = 0;
+		// @ts-expect-error
+		engine.capturePane = mock(async () => {
+			callCount++;
+			if (callCount < 2) {
+				throw new Error("capture failed");
+			}
+			return `output\n${completionToken}:0`;
+		});
+
+		try {
+			// @ts-expect-error
+			const result = await engine.waitForTmuxCompletion("session-name", 5000, completionToken);
+
+			expect(result.status).toBe("completed");
+		} finally {
+			// Restore
+		}
+	});
+
+	test("waitForTmuxCompletion returns timeout on capturePane final error", async () => {
+		const engine = new HostIpcEngine();
+		const completionToken = "CC_BRIDGE_DONE_FINAL";
+
+		// @ts-expect-error
+		engine.capturePane = mock(async () => {
+			throw new Error("capture failed");
+		});
+
+		try {
+			// @ts-expect-error - use short timeout
+			const result = await engine.waitForTmuxCompletion("session-name", 100, completionToken);
+
+			expect(result.status).toBe("timeout");
+		} finally {
+			// Restore
+		}
+	});
+
+	test("waitForTmuxCompletion handles syntax error in output", async () => {
+		const engine = new HostIpcEngine();
+		const completionToken = "CC_BRIDGE_DONE_SYNTAX";
+
+		// @ts-expect-error
+		engine.capturePane = mock(async () => `syntax error near token\n${completionToken}:2`);
+
+		try {
+			// @ts-expect-error
+			const result = await engine.waitForTmuxCompletion("session-name", 5000, completionToken);
+
+			expect(result.status).toBe("failed");
+			expect(result.error).toContain("tmux command failed");
+		} finally {
+			// Restore
+		}
+	});
+
+	test("waitForTmuxCompletion handles 'No such file' error", async () => {
+		const engine = new HostIpcEngine();
+		const completionToken = "CC_BRIDGE_DONE_NOSUCH";
+
+		// @ts-expect-error
+		engine.capturePane = mock(async () => `No such file or directory\n${completionToken}:1`);
+
+		try {
+			// @ts-expect-error
+			const result = await engine.waitForTmuxCompletion("session-name", 5000, completionToken);
+
+			expect(result.status).toBe("failed");
+		} finally {
+			// Restore
+		}
+	});
+
+	test("extractRecentOutput handles empty filtered lines with start markers", () => {
+		const engine = new HostIpcEngine();
+		const input = "line1\nline2\nClaude: response starts here";
+
+		// @ts-expect-error
+		const result = engine.extractRecentOutput(input, "TOKEN");
+
+		expect(result).toContain("Claude:");
+	});
+
+	test("extractRecentOutput handles # single hash header", () => {
+		const engine = new HostIpcEngine();
+		const input = "command\n# Single Header\ncontent";
+
+		// @ts-expect-error
+		const result = engine.extractRecentOutput(input, "TOKEN");
+
+		expect(result).toContain("Single Header");
+	});
+
+	test("extractRecentOutput handles # header with single word", () => {
+		const engine = new HostIpcEngine();
+		// The regex /^#{1,2}\s+\w+/ requires at least one space after the hash
+		const input = "command\n# Title\ncontent";
+
+		// @ts-expect-error
+		const result = engine.extractRecentOutput(input, "TOKEN");
+
+		expect(result).toContain("Title");
+	});
+
+	test("executeViaTmux handles error in ensureHostSession", async () => {
+		const engine = new HostIpcEngine({ command: "test-cmd" });
+
+		// Mock ensureHostSession to throw
+		// @ts-expect-error
+		const originalEnsure = engine.ensureHostSession;
+		// @ts-expect-error
+		engine.ensureHostSession = mock(async () => {
+			throw new Error("Session creation failed");
+		});
+
+		try {
+			const result = await engine.execute({
+				prompt: "test",
+				options: { sync: false },
+			});
+
+			expect(result.status).toBe("failed");
+			expect(result.error).toContain("Session creation failed");
+		} finally {
+			// @ts-expect-error
+			engine.ensureHostSession = originalEnsure;
+		}
+	});
+
+	test("executeViaTmux handles error in sendToHostSession", async () => {
+		const engine = new HostIpcEngine({ command: "test-cmd" });
+
+		// @ts-expect-error
+		engine.ensureHostSession = mock(async () => {});
+		// @ts-expect-error
+		engine.sendToHostSession = mock(async () => {
+			throw new Error("Send failed");
+		});
+
+		try {
+			const result = await engine.execute({
+				prompt: "test",
+				options: { sync: false },
+			});
+
+			expect(result.status).toBe("failed");
+		} finally {
+			// Restore
+		}
+	});
+
+	test("executeViaTmux with sync mode and successful completion", async () => {
+		const engine = new HostIpcEngine({ command: "test-cmd" });
+
+		// @ts-expect-error
+		engine.ensureHostSession = mock(async () => {});
+		// @ts-expect-error
+		engine.sendToHostSession = mock(async () => {});
+		// @ts-expect-error
+		engine.waitForTmuxCompletion = mock(async () => ({
+			status: "completed",
+			output: "test output",
+			exitCode: 0,
+			retryable: false,
+		}));
+		// @ts-expect-error
+		engine.interruptHostSession = mock(async () => {});
+
+		try {
+			const result = await engine.execute({
+				prompt: "test",
+				options: { sync: true, workspace: "ws", chatId: "123" },
+			});
+
+			expect(result.status).toBe("completed");
+		} finally {
+			// Restore
+		}
+	});
+
+	test("executeViaTmux with sync mode and non-completed result triggers interrupt", async () => {
+		const engine = new HostIpcEngine({ command: "test-cmd" });
+
+		// @ts-expect-error
+		engine.ensureHostSession = mock(async () => {});
+		// @ts-expect-error
+		engine.sendToHostSession = mock(async () => {});
+		// @ts-expect-error
+		engine.waitForTmuxCompletion = mock(async () => ({
+			status: "timeout",
+			error: "timed out",
+			isTimeout: true,
+			retryable: true,
+		}));
+		// @ts-expect-error
+		engine.interruptHostSession = mock(async () => {});
+
+		try {
+			const result = await engine.execute({
+				prompt: "test",
+				options: { sync: true, workspace: "ws", chatId: "123" },
+			});
+
+			expect(result.status).toBe("timeout");
+			// @ts-expect-error
+			expect(engine.interruptHostSession).toHaveBeenCalled();
+		} finally {
+			// Restore
+		}
+	});
+
+	test("executeViaTmux with ephemeral session cleans up after completion", async () => {
+		const engine = new HostIpcEngine({ command: "test-cmd" });
+
+		// @ts-expect-error
+		engine.ensureHostSession = mock(async () => {});
+		// @ts-expect-error
+		engine.sendToHostSession = mock(async () => {});
+		// @ts-expect-error
+		engine.waitForTmuxCompletion = mock(async () => ({
+			status: "completed",
+			output: "test output",
+			exitCode: 0,
+			retryable: false,
+		}));
+		// @ts-expect-error
+		engine.interruptHostSession = mock(async () => {});
+		// @ts-expect-error
+		engine.killHostSession = mock(async () => {});
+
+		try {
+			const result = await engine.execute({
+				prompt: "test",
+				options: { sync: true, ephemeralSession: true, workspace: "ws", chatId: "123" },
+			});
+
+			expect(result.status).toBe("completed");
+			// @ts-expect-error
+			expect(engine.killHostSession).toHaveBeenCalled();
+		} finally {
+			// Restore
+		}
+	});
+
+	test("executeViaTmux with ephemeral session cleans up after failure", async () => {
+		const engine = new HostIpcEngine({ command: "test-cmd" });
+
+		// @ts-expect-error
+		engine.ensureHostSession = mock(async () => {});
+		// @ts-expect-error
+		engine.sendToHostSession = mock(async () => {
+			throw new Error("Send failed");
+		});
+		// @ts-expect-error
+		engine.killHostSession = mock(async () => {});
+		// @ts-expect-error
+		engine.hostSessionExists = mock(async () => true);
+
+		try {
+			const result = await engine.execute({
+				prompt: "test",
+				options: { ephemeralSession: true, workspace: "ws", chatId: "123" },
+			});
+
+			expect(result.status).toBe("failed");
+			// The error is caught in executeViaTmux and session cleanup happens there
+		} finally {
+			// Restore
+		}
+	});
+});
+
+// =============================================================================
+// HostIpcEngine Execute Path Coverage
+// =============================================================================
+
+describe("HostIpcEngine execute path coverage", () => {
+	test("execute with options.args overrides config.args", () => {
+		const engine = new HostIpcEngine({ args: ["--config-arg"] });
+		// @ts-expect-error
+		const { buildArgs } = engine.prepareExecution("test", { args: ["--request-arg"] });
+		const { args } = buildArgs("prompt", "ws", "123");
+		expect(args).toContain("--request-arg");
+		expect(args).not.toContain("--config-arg");
+	});
+
+	test("execute with codex_host and options.args", () => {
+		const engine = new HostIpcEngine({ engineType: "codex_host" });
+		// @ts-expect-error
+		const { buildArgs } = engine.prepareExecution("test", { args: ["--custom"] });
+		const { args } = buildArgs("prompt", "ws", "123");
+		expect(args).toContain("--custom");
+	});
+
+	test("execute with allowDangerouslySkipPermissions false", () => {
+		const engine = new HostIpcEngine();
+		// @ts-expect-error
+		const { buildArgs } = engine.prepareExecution("test", { allowDangerouslySkipPermissions: false });
+		const { args } = buildArgs("prompt", "ws", "123");
+		// Should not include --dangerously-skip-permissions
+		expect(args.some((a: string) => a.includes("--dangerously-skip-permissions"))).toBe(false);
+	});
+
+	test("execute with custom allowedTools", () => {
+		const engine = new HostIpcEngine();
+		// @ts-expect-error
+		const { buildArgs } = engine.prepareExecution("test", { allowedTools: "Read,Write" });
+		const { args } = buildArgs("prompt", "ws", "123");
+		expect(args.some((a: string) => a.includes("allowedTools=Read,Write"))).toBe(true);
+	});
+
+	test("execute with empty allowedTools uses default", () => {
+		const engine = new HostIpcEngine();
+		// @ts-expect-error
+		const { buildArgs } = engine.prepareExecution("test", { allowedTools: "" });
+		const { args } = buildArgs("prompt", "ws", "123");
+		// Empty allowedTools falls back to "*" (default)
+		expect(args.some((a: string) => a.includes("allowedTools=*"))).toBe(true);
+	});
+
+	test("execute with options.command override", () => {
+		const engine = new HostIpcEngine({ command: "default-cmd" });
+		// @ts-expect-error
+		const { buildArgs } = engine.prepareExecution("test", { command: "override-cmd" });
+		const { command } = buildArgs("prompt", "ws", "123");
+		expect(command).toBe("override-cmd");
+	});
+
+	test("execute with codex_host options.command override", () => {
+		const engine = new HostIpcEngine({ engineType: "codex_host", command: "default-codex" });
+		// @ts-expect-error
+		const { buildArgs } = engine.prepareExecution("test", { command: "override-codex" });
+		const { command } = buildArgs("prompt", "ws", "123");
+		expect(command).toBe("override-codex");
+	});
+
+	test("getCommand uses CODEX_HOST_COMMAND env var", () => {
+		const original = process.env.CODEX_HOST_COMMAND;
+		process.env.CODEX_HOST_COMMAND = "my-codex";
+		try {
+			const engine = new HostIpcEngine({ engineType: "codex_host" });
+			// @ts-expect-error
+			expect(engine.getCommand()).toBe("my-codex");
+		} finally {
+			if (original) process.env.CODEX_HOST_COMMAND = original;
+			else delete process.env.CODEX_HOST_COMMAND;
+		}
+	});
+
+	test("getCommand uses CLAUDE_HOST_COMMAND env var", () => {
+		const original = process.env.CLAUDE_HOST_COMMAND;
+		process.env.CLAUDE_HOST_COMMAND = "my-claude";
+		try {
+			const engine = new HostIpcEngine();
+			// @ts-expect-error
+			expect(engine.getCommand()).toBe("my-claude");
+		} finally {
+			if (original) process.env.CLAUDE_HOST_COMMAND = original;
+			else delete process.env.CLAUDE_HOST_COMMAND;
+		}
+	});
+
+	test("execute returns running status in async mode", async () => {
+		const engine = new HostIpcEngine({ command: "nonexistent-cmd-for-test-xyz" });
+		const result = await engine.execute({
+			prompt: "test",
+			options: { sync: false },
+		});
+		// Should return running or failed (if tmux not available)
+		expect(["running", "failed"]).toContain(result.status);
+	});
+
+	test("execute with ephemeralSession option", async () => {
+		const engine = new HostIpcEngine({ command: "nonexistent-cmd-test" });
+		const result = await engine.execute({
+			prompt: "test",
+			options: { ephemeralSession: true, sync: false },
+		});
+		expect(result).toHaveProperty("status");
+	});
+
+	test("execute with all options", async () => {
+		const engine = new HostIpcEngine({ command: "nonexistent-cmd-test" });
+		const result = await engine.execute({
+			prompt: "test prompt",
+			options: {
+				workspace: "test-workspace",
+				chatId: "chat-456",
+				timeout: 5000,
+				sync: false,
+				ephemeralSession: true,
+				allowDangerouslySkipPermissions: true,
+				allowedTools: "Read",
+			},
+		});
+		expect(result).toHaveProperty("status");
+	});
+
+	test("execute with history for codex_host", async () => {
+		const engine = new HostIpcEngine({ engineType: "codex_host", command: "nonexistent" });
+		const result = await engine.execute({
+			prompt: "test",
+			options: {
+				history: [{ sender: "user", text: "hello", timestamp: "2024-01-01T00:00:00Z" }],
+				sync: false,
+			},
+		});
+		expect(result).toHaveProperty("status");
+	});
+});
+
+// =============================================================================
 // Container Engine Additional Coverage Tests
 // =============================================================================
 
@@ -812,6 +2193,448 @@ describe("ContainerEngine tmux execution path", () => {
 
 		expect(result.status).toBe("completed");
 		expect(mockManager.killSession).toHaveBeenCalledWith("c1", "test-session");
+	});
+});
+
+// =============================================================================
+// ContainerEngine Additional Coverage Tests
+// =============================================================================
+
+describe("ContainerEngine additional coverage", () => {
+	test("execute uses containerId from request when instance not provided", async () => {
+		const mockManager = {
+			getOrCreateSession: mock(async () => "test-session"),
+			killSession: mock(async () => {}),
+			sendToSession: mock(async () => {}),
+		};
+		const { ContainerEngine, TmuxManagerWrapper } = require("@/gateway/engine/index");
+		const wrapper = new TmuxManagerWrapper(mockManager);
+		const engine = new ContainerEngine(wrapper);
+
+		const result = await engine.execute({
+			prompt: "test",
+			containerId: "container-xyz",
+			options: { workspace: "ws", chatId: "123" },
+		});
+
+		expect(result.status).toBe("running");
+		expect(mockManager.getOrCreateSession).toHaveBeenCalledWith("container-xyz", "ws", "123");
+	});
+
+	test("execute prefers containerId over instance.containerId", async () => {
+		const mockManager = {
+			getOrCreateSession: mock(async () => "test-session"),
+			killSession: mock(async () => {}),
+			sendToSession: mock(async () => {}),
+		};
+		const { ContainerEngine, TmuxManagerWrapper } = require("@/gateway/engine/index");
+		const wrapper = new TmuxManagerWrapper(mockManager);
+		const engine = new ContainerEngine(wrapper);
+
+		const result = await engine.execute({
+			prompt: "test",
+			containerId: "preferred-container",
+			instance: { name: "test", containerId: "instance-container", status: "running", image: "i" },
+			options: { workspace: "ws", chatId: "123" },
+		});
+
+		expect(result.status).toBe("running");
+		expect(mockManager.getOrCreateSession).toHaveBeenCalledWith("preferred-container", "ws", "123");
+	});
+
+	test("execute with history builds prompt with buildClaudePrompt", async () => {
+		const mockManager = {
+			getOrCreateSession: mock(async () => "test-session"),
+			killSession: mock(async () => {}),
+			sendToSession: mock(async () => {}),
+		};
+		const { ContainerEngine, TmuxManagerWrapper } = require("@/gateway/engine/index");
+		const wrapper = new TmuxManagerWrapper(mockManager);
+		const engine = new ContainerEngine(wrapper);
+
+		const result = await engine.execute({
+			prompt: "current message",
+			containerId: "c1",
+			options: {
+				workspace: "ws",
+				chatId: "123",
+				history: [{ sender: "user", text: "hello", timestamp: "2024-01-01T00:00:00Z" }],
+			},
+		});
+
+		expect(result.status).toBe("running");
+	});
+
+	test("execute with sync mode returns completed result", async () => {
+		const mockManager = {
+			getOrCreateSession: mock(async () => "test-session"),
+			killSession: mock(async () => {}),
+			sendToSession: mock(async () => {}),
+		};
+		const { ContainerEngine, TmuxManagerWrapper } = require("@/gateway/engine/index");
+		const wrapper = new TmuxManagerWrapper(mockManager);
+		const engine = new ContainerEngine(wrapper);
+
+		// Mock waitForResponseFile
+		const waitForResponseFile = mock(async () => ({
+			status: "completed",
+			output: "success output",
+			exitCode: 0,
+			retryable: false,
+		}));
+		(engine as unknown as { waitForResponseFile: typeof waitForResponseFile }).waitForResponseFile =
+			waitForResponseFile;
+
+		const result = await engine.execute({
+			prompt: "test",
+			containerId: "c1",
+			options: { sync: true, workspace: "ws", chatId: "123", timeout: 5000 },
+		});
+
+		expect(result.status).toBe("completed");
+		expect(result.output).toBe("success output");
+	});
+
+	test("execute with sync mode and failed response", async () => {
+		const mockManager = {
+			getOrCreateSession: mock(async () => "test-session"),
+			killSession: mock(async () => {}),
+			sendToSession: mock(async () => {}),
+		};
+		const { ContainerEngine, TmuxManagerWrapper } = require("@/gateway/engine/index");
+		const wrapper = new TmuxManagerWrapper(mockManager);
+		const engine = new ContainerEngine(wrapper);
+
+		const waitForResponseFile = mock(async () => ({
+			status: "failed",
+			output: "error output",
+			exitCode: 1,
+			error: "Command failed",
+			retryable: false,
+		}));
+		(engine as unknown as { waitForResponseFile: typeof waitForResponseFile }).waitForResponseFile =
+			waitForResponseFile;
+
+		const result = await engine.execute({
+			prompt: "test",
+			containerId: "c1",
+			options: { sync: true, workspace: "ws", chatId: "123" },
+		});
+
+		expect(result.status).toBe("failed");
+		expect(result.exitCode).toBe(1);
+	});
+
+	test("execute cleans up ephemeral session on error", async () => {
+		const mockManager = {
+			getOrCreateSession: mock(async () => "test-session"),
+			killSession: mock(async () => {}),
+			sendToSession: mock(async () => {
+				throw new Error("Send failed");
+			}),
+		};
+		const { ContainerEngine, TmuxManagerWrapper } = require("@/gateway/engine/index");
+		const wrapper = new TmuxManagerWrapper(mockManager);
+		const engine = new ContainerEngine(wrapper);
+
+		const result = await engine.execute({
+			prompt: "test",
+			containerId: "c1",
+			options: { ephemeralSession: true, workspace: "ws", chatId: "123" },
+		});
+
+		expect(result.status).toBe("failed");
+		expect(mockManager.killSession).toHaveBeenCalled();
+	});
+
+	test("execute handles cleanup error gracefully", async () => {
+		const mockManager = {
+			getOrCreateSession: mock(async () => "test-session"),
+			killSession: mock(async () => {
+				throw new Error("Cleanup failed");
+			}),
+			sendToSession: mock(async () => {
+				throw new Error("Send failed");
+			}),
+		};
+		const { ContainerEngine, TmuxManagerWrapper } = require("@/gateway/engine/index");
+		const wrapper = new TmuxManagerWrapper(mockManager);
+		const engine = new ContainerEngine(wrapper);
+
+		// Should not throw even if cleanup fails
+		const result = await engine.execute({
+			prompt: "test",
+			containerId: "c1",
+			options: { ephemeralSession: true, workspace: "ws", chatId: "123" },
+		});
+
+		expect(result.status).toBe("failed");
+	});
+
+	test("execute with custom timeout", async () => {
+		const mockManager = {
+			getOrCreateSession: mock(async () => "test-session"),
+			killSession: mock(async () => {}),
+			sendToSession: mock(async () => {}),
+		};
+		const { ContainerEngine, TmuxManagerWrapper } = require("@/gateway/engine/index");
+		const wrapper = new TmuxManagerWrapper(mockManager);
+		const engine = new ContainerEngine(wrapper);
+
+		const result = await engine.execute({
+			prompt: "test",
+			containerId: "c1",
+			options: { timeout: 60000, workspace: "ws", chatId: "123" },
+		});
+
+		expect(result.status).toBe("running");
+	});
+
+	test("execute with custom workspace and chatId", async () => {
+		const mockManager = {
+			getOrCreateSession: mock(async () => "test-session"),
+			killSession: mock(async () => {}),
+			sendToSession: mock(async () => {}),
+		};
+		const { ContainerEngine, TmuxManagerWrapper } = require("@/gateway/engine/index");
+		const wrapper = new TmuxManagerWrapper(mockManager);
+		const engine = new ContainerEngine(wrapper);
+
+		const result = await engine.execute({
+			prompt: "test",
+			containerId: "c1",
+			options: { workspace: "custom-workspace", chatId: "chat-999" },
+		});
+
+		expect(result.status).toBe("running");
+		expect(mockManager.getOrCreateSession).toHaveBeenCalledWith("c1", "custom-workspace", "chat-999");
+	});
+
+	test("execute uses default values when options not provided", async () => {
+		const mockManager = {
+			getOrCreateSession: mock(async () => "test-session"),
+			killSession: mock(async () => {}),
+			sendToSession: mock(async () => {}),
+		};
+		const { ContainerEngine, TmuxManagerWrapper } = require("@/gateway/engine/index");
+		const wrapper = new TmuxManagerWrapper(mockManager);
+		const engine = new ContainerEngine(wrapper);
+
+		const result = await engine.execute({
+			prompt: "test",
+			containerId: "c1",
+			options: {},
+		});
+
+		expect(result.status).toBe("running");
+		// Should use default workspace "cc-bridge" and chatId "default"
+		expect(mockManager.getOrCreateSession).toHaveBeenCalledWith("c1", "cc-bridge", "default");
+	});
+
+	test("execute uses instance name when no containerId", async () => {
+		const mockManager = {
+			getOrCreateSession: mock(async () => "test-session"),
+			killSession: mock(async () => {}),
+			sendToSession: mock(async () => {}),
+		};
+		const { ContainerEngine, TmuxManagerWrapper } = require("@/gateway/engine/index");
+		const wrapper = new TmuxManagerWrapper(mockManager);
+		const engine = new ContainerEngine(wrapper);
+
+		const result = await engine.execute({
+			prompt: "test",
+			instance: { name: "my-instance", containerId: "inst-c1", status: "running", image: "img" },
+			options: { workspace: "ws", chatId: "123" },
+		});
+
+		expect(result.status).toBe("running");
+		expect(mockManager.getOrCreateSession).toHaveBeenCalledWith("inst-c1", "ws", "123");
+	});
+});
+
+// =============================================================================
+// ContainerEngine Private Methods Coverage via Mocked ResponseFileReader
+// =============================================================================
+
+describe("ContainerEngine waitForResponseFile coverage", () => {
+	test("waitForResponseFile returns completed result", async () => {
+		const { ContainerEngine } = require("@/gateway/engine/index");
+		const engine = new ContainerEngine();
+
+		// Create a mock ResponseFileReader
+		const mockReader = {
+			exists: mock(async () => true),
+			readResponseFile: mock(async () => ({
+				output: "test output",
+				exitCode: 0,
+				error: undefined,
+			})),
+		};
+
+		// Inject the mock reader
+		(engine as unknown as { getResponseFileReader: () => typeof mockReader }).getResponseFileReader = () => mockReader;
+
+		// Call waitForResponseFile directly
+		// @ts-expect-error - accessing private method
+		const result = await engine.waitForResponseFile("workspace", "request-id", 5000);
+
+		expect(result.status).toBe("completed");
+		expect(result.output).toBe("test output");
+		expect(result.exitCode).toBe(0);
+	});
+
+	test("waitForResponseFile returns failed result on non-zero exit code", async () => {
+		const { ContainerEngine } = require("@/gateway/engine/index");
+		const engine = new ContainerEngine();
+
+		const mockReader = {
+			exists: mock(async () => true),
+			readResponseFile: mock(async () => ({
+				output: "error output",
+				exitCode: 1,
+				error: "Command failed",
+			})),
+		};
+
+		(engine as unknown as { getResponseFileReader: () => typeof mockReader }).getResponseFileReader = () => mockReader;
+
+		// @ts-expect-error - accessing private method
+		const result = await engine.waitForResponseFile("workspace", "request-id", 5000);
+
+		expect(result.status).toBe("failed");
+		expect(result.exitCode).toBe(1);
+		expect(result.error).toContain("Command failed");
+	});
+
+	test("waitForResponseFile handles read errors and retries", async () => {
+		const { ContainerEngine } = require("@/gateway/engine/index");
+		const engine = new ContainerEngine();
+
+		let callCount = 0;
+		const mockReader = {
+			exists: mock(async () => true),
+			readResponseFile: mock(async () => {
+				callCount++;
+				if (callCount < 3) {
+					throw new Error("File not ready");
+				}
+				return {
+					output: "success after retry",
+					exitCode: 0,
+					error: undefined,
+				};
+			}),
+		};
+
+		(engine as unknown as { getResponseFileReader: () => typeof mockReader }).getResponseFileReader = () => mockReader;
+
+		// @ts-expect-error - accessing private method
+		const result = await engine.waitForResponseFile("workspace", "request-id", 5000);
+
+		expect(result.status).toBe("completed");
+		expect(result.output).toBe("success after retry");
+	});
+
+	test("waitForResponseFile returns timeout when file never appears", async () => {
+		const { ContainerEngine } = require("@/gateway/engine/index");
+		const engine = new ContainerEngine();
+
+		const mockReader = {
+			exists: mock(async () => false),
+			readResponseFile: mock(async () => ({ output: "", exitCode: 0 })),
+		};
+
+		(engine as unknown as { getResponseFileReader: () => typeof mockReader }).getResponseFileReader = () => mockReader;
+
+		// Use a very short timeout to make the test fast
+		// @ts-expect-error - accessing private method
+		const result = await engine.waitForResponseFile("workspace", "request-id", 100);
+
+		expect(result.status).toBe("timeout");
+		expect(result.isTimeout).toBe(true);
+		expect(result.retryable).toBe(true);
+	});
+
+	test("getResponseFileReader creates reader lazily", () => {
+		const { ContainerEngine } = require("@/gateway/engine/index");
+		const engine = new ContainerEngine();
+
+		// @ts-expect-error - accessing private method
+		const reader1 = engine.getResponseFileReader();
+		// @ts-expect-error - accessing private method
+		const reader2 = engine.getResponseFileReader();
+
+		// Should return same instance
+		expect(reader1).toBe(reader2);
+	});
+
+	test("sleep method works correctly", async () => {
+		const { ContainerEngine } = require("@/gateway/engine/index");
+		const engine = new ContainerEngine();
+
+		const start = Date.now();
+		// @ts-expect-error - accessing private method
+		await engine.sleep(50);
+		const elapsed = Date.now() - start;
+
+		expect(elapsed).toBeGreaterThanOrEqual(40); // Allow some variance
+	});
+});
+
+// =============================================================================
+// ContainerEngine TmuxManagerWrapper Tests
+// =============================================================================
+
+describe("TmuxManagerWrapper", () => {
+	test("getOrCreateSession delegates to manager", async () => {
+		const mockManager = {
+			getOrCreateSession: mock(async () => "session-name"),
+			killSession: mock(async () => {}),
+			sendToSession: mock(async () => {}),
+		};
+		const { TmuxManagerWrapper } = require("@/gateway/engine/index");
+		const wrapper = new TmuxManagerWrapper(mockManager);
+
+		const result = await wrapper.getOrCreateSession("c1", "ws", "chat1");
+
+		expect(result).toBe("session-name");
+		expect(mockManager.getOrCreateSession).toHaveBeenCalledWith("c1", "ws", "chat1");
+	});
+
+	test("killSession delegates to manager", async () => {
+		const mockManager = {
+			getOrCreateSession: mock(async () => "session"),
+			killSession: mock(async () => {}),
+			sendToSession: mock(async () => {}),
+		};
+		const { TmuxManagerWrapper } = require("@/gateway/engine/index");
+		const wrapper = new TmuxManagerWrapper(mockManager);
+
+		await wrapper.killSession("c1", "session");
+
+		expect(mockManager.killSession).toHaveBeenCalledWith("c1", "session");
+	});
+
+	test("sendToSession delegates to manager", async () => {
+		const mockManager = {
+			getOrCreateSession: mock(async () => "session"),
+			killSession: mock(async () => {}),
+			sendToSession: mock(async () => {}),
+		};
+		const { TmuxManagerWrapper } = require("@/gateway/engine/index");
+		const wrapper = new TmuxManagerWrapper(mockManager);
+
+		await wrapper.sendToSession("c1", "session", "prompt", {
+			requestId: "req-1",
+			chatId: "chat-1",
+			workspace: "ws",
+		});
+
+		expect(mockManager.sendToSession).toHaveBeenCalledWith("c1", "session", "prompt", {
+			requestId: "req-1",
+			chatId: "chat-1",
+			workspace: "ws",
+		});
 	});
 });
 
