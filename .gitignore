@@ -165,3 +165,5 @@ vite.config.ts.timestamp-*
 /src/gateway/tests/data/
 /data/gateway.db-shm
 /data/gateway.db-wal
+/data/test_gateway.db-shm
+/data/test_gateway.db-wal
