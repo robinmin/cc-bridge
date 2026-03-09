@@ -87,7 +87,7 @@ export const createLogger = (serviceName: string, logFormat: string) => {
 					target: "pino-pretty",
 					options: {
 						destination: LOG_FILE,
-						colorize: false,
+						colorize: true, // Enable colors for easier log monitoring
 						translateTime: "SYS:standard",
 						singleLine: true,
 						mkdir: true,
