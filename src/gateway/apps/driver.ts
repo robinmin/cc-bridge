@@ -22,7 +22,7 @@ import { getMissingRequiredFields } from "@/packages/validation";
 
 // Types previously from execution-engine.ts
 /** Execution engine type for mini-apps */
-export type MiniAppExecutionEngine = "claude_container" | "claude_host" | "codex_host";
+export type MiniAppExecutionEngine = "claude_container" | "claude_host" | "codex_host" | "in_process";
 /** Context mode for mini-app execution */
 export type ContextMode = "existing" | "fresh";
 
@@ -100,7 +100,7 @@ function parsePositiveInt(value: string | undefined): number | undefined {
 }
 
 function parseExecutionEngine(value: FrontmatterValue | undefined): MiniAppExecutionEngine {
-	if (value === "claude_host" || value === "codex_host" || value === "claude_container") {
+	if (value === "claude_host" || value === "codex_host" || value === "claude_container" || value === "in_process") {
 		return value;
 	}
 	return "claude_container";
@@ -147,10 +147,11 @@ function validateMiniAppFrontmatter(frontmatter: Record<string, FrontmatterValue
 		typeof executionEngine === "string" &&
 		executionEngine !== "claude_container" &&
 		executionEngine !== "claude_host" &&
-		executionEngine !== "codex_host"
+		executionEngine !== "codex_host" &&
+		executionEngine !== "in_process"
 	) {
 		throw new Error(
-			`Mini-app "${appId}" has invalid "execution_engine": ${executionEngine} (expected claude_container|claude_host|codex_host)`,
+			`Mini-app "${appId}" has invalid "execution_engine": ${executionEngine} (expected claude_container|claude_host|codex_host|in_process)`,
 		);
 	}
 
