@@ -3,7 +3,7 @@ id: daily-news
 name: Daily News Summary
 description: Produce a short news summary for all active chat sessions.
 enabled: true
-execution_engine: claude_host
+execution_engine: in_process
 context_mode: fresh
 instance: cc-bridge
 workspace: cc-bridge
