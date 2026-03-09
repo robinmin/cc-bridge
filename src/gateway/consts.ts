@@ -133,8 +133,11 @@ export const GATEWAY_CONSTANTS = {
 		// Layer order (tried in order until one succeeds)
 		layerOrder: ["in-process", "host-ipc", "container"] as const,
 		// Feature flags
-		enableInProcess: false, // Feature-flagged, disabled by default
+		enableInProcess: process.env.ENABLE_IN_PROCESS === "true", // Enable via env var
 		enableHostIpc: true,
 		enableContainer: true,
+		// Default LLM provider/model for in-process execution
+		defaultProvider: process.env.LLM_PROVIDER || "anthropic",
+		defaultModel: process.env.LLM_MODEL || "claude-sonnet-4-6",
 	},
 };
