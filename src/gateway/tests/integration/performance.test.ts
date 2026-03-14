@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { rm, utimes } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { FileSystemIpc } from "@/gateway/services/filesystem-ipc";
 
@@ -10,7 +11,8 @@ describe("Performance Benchmarks", () => {
 	let fileSystemIpc: FileSystemIpc;
 
 	beforeEach(async () => {
-		testIpcDir = process.env.TEST_IPC_DIR || "./data/test-ipc";
+		// Use home directory to avoid symlink issues with /tmp on macOS
+		testIpcDir = process.env.TEST_IPC_DIR || path.join(os.homedir(), ".test-ipc-bench");
 		if (existsSync(testIpcDir)) {
 			await rm(testIpcDir, { recursive: true, force: true });
 		}
