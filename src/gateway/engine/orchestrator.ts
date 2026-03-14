@@ -47,11 +47,7 @@ export class ExecutionOrchestrator {
 		if (this.config.enableInProcess) {
 			this.engines.set(
 				"in-process",
-				new InProcessEngine(
-					this.config.enableInProcess,
-					this.config.defaultProvider,
-					this.config.defaultModel,
-				),
+				new InProcessEngine(this.config.enableInProcess, this.config.defaultProvider, this.config.defaultModel),
 			);
 		}
 
@@ -261,6 +257,13 @@ export class ExecutionOrchestrator {
 	 */
 	getCachedHealth(layer: ExecutionLayer): LayerHealth | undefined {
 		return this.healthCache.get(layer);
+	}
+
+	/**
+	 * Get a specific engine by layer type
+	 */
+	getEngine(layer: ExecutionLayer): IExecutionEngine | undefined {
+		return this.engines.get(layer);
 	}
 
 	/**
