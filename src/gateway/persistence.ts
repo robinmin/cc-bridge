@@ -451,3 +451,200 @@ export class PersistenceManager {
 }
 
 export const persistence = new PersistenceManager();
+
+// =============================================================================
+// Agent Session Persistence (Phase 4)
+// =============================================================================
+
+/**
+ * Stored agent session metadata
+ */
+export interface DBAgentSession {
+	session_id: string;
+	provider: string;
+	model: string;
+	workspace_dir: string;
+	turn_count: number;
+	last_activity: string;
+	created_at: string;
+}
+
+/**
+ * Stored agent message (serialized AgentMessage from pi-agent-core)
+ */
+export interface DBAgentMessage {
+	id?: number;
+	session_id: string;
+	message_json: string;
+	sequence: number;
+	created_at: string;
+}
+
+/**
+ * Agent Session Persistence Manager
+ *
+ * Extends the base PersistenceManager pattern for agent-specific tables.
+ * Uses a separate class to avoid bloating PersistenceManager with agent concerns.
+ */
+export class AgentPersistence {
+	private db: Database;
+
+	constructor(dbPath: string = "data/gateway.db") {
+		const dir = path.dirname(dbPath);
+		if (!fs.existsSync(dir)) {
+			fs.mkdirSync(dir, { recursive: true });
+		}
+		this.db = new Database(dbPath);
+		this.db.exec("PRAGMA journal_mode = WAL;");
+		this.db.exec("PRAGMA synchronous = NORMAL;");
+		this.db.exec("PRAGMA busy_timeout = 5000;");
+		this.initTables();
+	}
+
+	private initTables(): void {
+		this.db.run(`
+			CREATE TABLE IF NOT EXISTS agent_sessions (
+				session_id TEXT PRIMARY KEY,
+				provider TEXT NOT NULL,
+				model TEXT NOT NULL,
+				workspace_dir TEXT NOT NULL,
+				turn_count INTEGER NOT NULL DEFAULT 0,
+				last_activity DATETIME DEFAULT CURRENT_TIMESTAMP,
+				created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+			)
+		`);
+
+		this.db.run(`
+			CREATE TABLE IF NOT EXISTS agent_messages (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				session_id TEXT NOT NULL,
+				message_json TEXT NOT NULL,
+				sequence INTEGER NOT NULL,
+				created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+				FOREIGN KEY (session_id) REFERENCES agent_sessions(session_id) ON DELETE CASCADE
+			)
+		`);
+
+		this.db.run(`
+			CREATE INDEX IF NOT EXISTS idx_agent_messages_session
+			ON agent_messages(session_id, sequence)
+		`);
+	}
+
+	// --- Session CRUD ---
+
+	/**
+	 * Save or update agent session metadata.
+	 */
+	saveSession(sessionId: string, provider: string, model: string, workspaceDir: string, turnCount: number): void {
+		this.db.run(
+			`INSERT OR REPLACE INTO agent_sessions (session_id, provider, model, workspace_dir, turn_count, last_activity)
+			 VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+			[sessionId, provider, model, workspaceDir, turnCount],
+		);
+	}
+
+	/**
+	 * Get session metadata by ID.
+	 */
+	getSession(sessionId: string): DBAgentSession | null {
+		return (
+			(this.db.query("SELECT * FROM agent_sessions WHERE session_id = ?").get(sessionId) as DBAgentSession) || null
+		);
+	}
+
+	/**
+	 * Delete a session and its messages (CASCADE).
+	 */
+	deleteSession(sessionId: string): void {
+		// Delete messages first (in case FK cascade not supported)
+		this.db.run("DELETE FROM agent_messages WHERE session_id = ?", [sessionId]);
+		this.db.run("DELETE FROM agent_sessions WHERE session_id = ?", [sessionId]);
+	}
+
+	/**
+	 * List all sessions ordered by last activity.
+	 */
+	listSessions(): DBAgentSession[] {
+		return this.db.query("SELECT * FROM agent_sessions ORDER BY last_activity DESC").all() as DBAgentSession[];
+	}
+
+	/**
+	 * Delete sessions older than the given TTL (in milliseconds).
+	 */
+	cleanupExpiredSessions(ttlMs: number): number {
+		const cutoff = new Date(Date.now() - ttlMs).toISOString();
+		// Delete messages for expired sessions
+		this.db.run(
+			"DELETE FROM agent_messages WHERE session_id IN (SELECT session_id FROM agent_sessions WHERE last_activity < ?)",
+			[cutoff],
+		);
+		const result = this.db.run("DELETE FROM agent_sessions WHERE last_activity < ?", [cutoff]);
+		return result.changes;
+	}
+
+	// --- Message History ---
+
+	/**
+	 * Save the full message history for a session (replace strategy).
+	 * This replaces all existing messages for the session.
+	 */
+	saveMessages(sessionId: string, messages: unknown[]): void {
+		// Use a transaction for atomicity
+		const deleteStmt = this.db.prepare("DELETE FROM agent_messages WHERE session_id = ?");
+		const insertStmt = this.db.prepare(
+			"INSERT INTO agent_messages (session_id, message_json, sequence) VALUES (?, ?, ?)",
+		);
+
+		this.db.transaction(() => {
+			deleteStmt.run(sessionId);
+			for (let i = 0; i < messages.length; i++) {
+				insertStmt.run(sessionId, JSON.stringify(messages[i]), i);
+			}
+		})();
+	}
+
+	/**
+	 * Load message history for a session.
+	 * Returns deserialized messages in order.
+	 */
+	loadMessages(sessionId: string): unknown[] {
+		const rows = this.db
+			.query("SELECT message_json FROM agent_messages WHERE session_id = ? ORDER BY sequence ASC")
+			.all(sessionId) as Array<{ message_json: string }>;
+
+		return rows
+			.map((row) => {
+				try {
+					return JSON.parse(row.message_json);
+				} catch {
+					return null;
+				}
+			})
+			.filter(Boolean);
+	}
+
+	/**
+	 * Get the count of messages for a session.
+	 */
+	getMessageCount(sessionId: string): number {
+		const result = this.db
+			.query("SELECT COUNT(*) as count FROM agent_messages WHERE session_id = ?")
+			.get(sessionId) as { count: number };
+		return result?.count ?? 0;
+	}
+
+	/**
+	 * Update the turn count and last activity for a session.
+	 */
+	touchSession(sessionId: string, turnCount: number): void {
+		this.db.run("UPDATE agent_sessions SET turn_count = ?, last_activity = CURRENT_TIMESTAMP WHERE session_id = ?", [
+			turnCount,
+			sessionId,
+		]);
+	}
+
+	close(): void {
+		this.db.close();
+	}
+}
