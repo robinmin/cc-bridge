@@ -1,75 +1,46 @@
 /**
  * In-Process Execution Engine
  *
- * TRUE in-process LLM execution using @mariozechner/pi-ai.
- * Executes prompts directly within the same Node.js process via completeSimple API.
- * No subprocess spawning - this is real in-process execution with ~0ms latency.
- */
-
-import { completeSimple, type Api, type Model, type TextContent } from "@mariozechner/pi-ai";
-import { logger } from "@/packages/logger";
-import type { ExecutionRequest, ExecutionResult, IExecutionEngine, LayerHealth } from "./contracts";
-
-/**
- * Check if a content block is a text block
- * Exported for testing
- */
-export function isTextContentBlock(block: unknown): block is TextContent {
-	return typeof block === "object" && block !== null && (block as { type?: string }).type === "text";
-}
-
-/**
- * Provider configuration
- */
-interface ProviderConfig {
-	getApiKey: () => string | undefined;
-	baseUrl?: string;
-	api: Api;
-}
-
-/**
- * Known provider configurations
- * Note: getApiKey is a function to read env vars at runtime (for testability)
- */
-const PROVIDER_CONFIGS: Record<string, ProviderConfig> = {
-	anthropic: {
-		getApiKey: () => process.env.ANTHROPIC_API_KEY,
-		api: "anthropic-messages",
-	},
-	openai: {
-		getApiKey: () => process.env.OPENAI_API_KEY,
-		api: "openai-completions",
-	},
-	google: {
-		getApiKey: () => process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY,
-		api: "google-generative-ai",
-	},
-	gemini: {
-		getApiKey: () => process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY,
-		api: "google-generative-ai",
-	},
-	openrouter: {
-		getApiKey: () => process.env.OPENROUTER_API_KEY,
-		baseUrl: "https://openrouter.ai/api/v1",
-		api: "openai-completions",
-	},
-};
-
-/**
- * In-process execution engine
+ * Thin adapter that implements IExecutionEngine using EmbeddedAgent.
+ * Uses AgentSessionManager to maintain per-chat agent instances with
+ * multi-turn conversation support via pi-agent-core's agent loop.
  *
- * Uses @mariozechner/pi-ai's completeSimple for direct LLM API calls.
- * No subprocess spawning - true in-process execution.
+ * This replaces the previous completeSimple-based implementation with
+ * a full-featured agent that supports tool calling, workspace injection,
+ * and streaming events.
+ */
+
+import path from "node:path";
+import { GATEWAY_CONSTANTS } from "@/gateway/consts";
+import { logger } from "@/packages/logger";
+import { AgentSessionManager, type AgentSessionManagerConfig } from "./agent-sessions";
+import type { ExecutionRequest, ExecutionResult, IExecutionEngine, LayerHealth } from "./contracts";
+import { type EmbeddedAgentConfig, type PromptOptions, resolveProviderApiKey } from "./embedded-agent";
+import { createDefaultTools, type ToolPolicyConfig } from "./tools";
+
+/**
+ * In-process execution engine using EmbeddedAgent.
+ *
+ * Implements IExecutionEngine with backward-compatible interface.
+ * All new agent capabilities (tools, streaming, maxIterations) are
+ * accessed via optional fields on ExecutionOptions.
  */
 export class InProcessEngine implements IExecutionEngine {
 	private readonly enabled: boolean;
 	private readonly defaultProvider: string;
 	private readonly defaultModel: string;
+	private readonly sessionManager: AgentSessionManager;
 
-	constructor(enabled: boolean = false, defaultProvider?: string, defaultModel?: string) {
+	constructor(
+		enabled: boolean = false,
+		defaultProvider?: string,
+		defaultModel?: string,
+		sessionConfig?: AgentSessionManagerConfig,
+	) {
 		this.enabled = enabled;
 		this.defaultProvider = defaultProvider || process.env.LLM_PROVIDER || "anthropic";
 		this.defaultModel = defaultModel || process.env.LLM_MODEL || "claude-sonnet-4-6";
+		this.sessionManager = new AgentSessionManager(sessionConfig);
 	}
 
 	getLayer(): "in-process" {
@@ -81,73 +52,15 @@ export class InProcessEngine implements IExecutionEngine {
 			return false;
 		}
 
-		// Check if API key is available for the default provider
-		const config = this.getProviderConfig();
-		const apiKey = config.getApiKey();
+		// Check if API key is available for the default provider (M5: use shared resolver)
+		const apiKey = resolveProviderApiKey(this.defaultProvider);
 		if (!apiKey) {
-			logger.warn(
-				{ provider: this.defaultProvider },
-				"In-process engine: No API key configured for provider",
-			);
+			logger.warn({ provider: this.defaultProvider }, "In-process engine: No API key configured for provider");
 			return false;
 		}
 
-		logger.debug(
-			{ provider: this.defaultProvider, model: this.defaultModel },
-			"In-process engine available",
-		);
+		logger.debug({ provider: this.defaultProvider, model: this.defaultModel }, "In-process engine available");
 		return true;
-	}
-
-	/**
-	 * Get provider configuration including API key getter and API type
-	 */
-	private getProviderConfig(): ProviderConfig {
-		// Check known providers first
-		const knownConfig = PROVIDER_CONFIGS[this.defaultProvider];
-		if (knownConfig) {
-			return knownConfig;
-		}
-
-		// Generic fallback - try LLM_API_KEY or API_KEY env vars
-		return {
-			getApiKey: () => process.env.LLM_API_KEY || process.env.API_KEY,
-			api: "openai-completions", // Default to OpenAI-compatible API
-			baseUrl: process.env.LLM_BASE_URL,
-		};
-	}
-
-	/**
-	 * Build a Model object for completeSimple
-	 * Note: API key is NOT part of the Model object - it's passed separately in options
-	 */
-	private buildModel(): Model {
-		const config = this.getProviderConfig();
-		const apiKey = config.getApiKey();
-		if (!apiKey) {
-			throw new Error(`No API key configured for provider: ${this.defaultProvider}`);
-		}
-
-		// Create a properly typed Model object
-		const model: Model = {
-			id: this.defaultModel,
-			name: this.defaultModel, // Use model ID as name
-			provider: this.defaultProvider,
-			api: config.api,
-			baseUrl: config.baseUrl || "",
-			reasoning: false, // Default - can be overridden if needed
-			input: ["text"], // Default to text input
-			cost: {
-				input: 0,
-				output: 0,
-				cacheRead: 0,
-				cacheWrite: 0,
-			},
-			contextWindow: 200000, // Default 200k context
-			maxTokens: 8192, // Default max output tokens
-		};
-
-		return model;
 	}
 
 	async execute(request: ExecutionRequest): Promise<ExecutionResult> {
@@ -160,74 +73,135 @@ export class InProcessEngine implements IExecutionEngine {
 		}
 
 		const timeoutMs = request.options?.timeout || 120000;
-		const requestId = request.options?.chatId || `in-process-${Date.now()}`;
+		const chatId = request.options?.chatId || `in-process-${Date.now()}`;
+		const maxIterations = request.options?.maxIterations ?? 50;
+
+		// Resolve workspace directory
+		const workspace = request.options?.workspace || "default";
+		const workspaceDir = path.resolve(GATEWAY_CONSTANTS.CONFIG.PROJECTS_ROOT, workspace);
+
+		// M3: Path traversal validation — ensure workspace is within PROJECTS_ROOT
+		const projectsRoot = path.resolve(GATEWAY_CONSTANTS.CONFIG.PROJECTS_ROOT);
+		if (!workspaceDir.startsWith(projectsRoot + path.sep) && workspaceDir !== projectsRoot) {
+			return {
+				status: "failed",
+				error: `Workspace path "${workspace}" resolves outside of PROJECTS_ROOT. Possible path traversal attempt.`,
+				retryable: false,
+			};
+		}
 
 		logger.info(
-			{ requestId, promptLength: request.prompt.length, timeoutMs, provider: this.defaultProvider, model: this.defaultModel },
-			"Executing via in-process engine (TRUE in-process, no subprocess)",
+			{
+				chatId,
+				promptLength: request.prompt.length,
+				timeoutMs,
+				maxIterations,
+				provider: this.defaultProvider,
+				model: this.defaultModel,
+				workspace,
+			},
+			"Executing via in-process agent engine",
 		);
 
 		const startTime = Date.now();
 
 		try {
-			// Get provider config for API key
-			const config = this.getProviderConfig();
-			const apiKey = config.getApiKey();
-			if (!apiKey) {
-				throw new Error(`No API key configured for provider: ${this.defaultProvider}`);
+			// Get tool policy from options
+			const toolPolicy = request.options?.toolPolicy as ToolPolicyConfig | undefined;
+
+			// Build session-level agent config (H3: per-request options passed to prompt())
+			const agentConfig: EmbeddedAgentConfig = {
+				sessionId: String(chatId),
+				workspaceDir,
+				provider: this.defaultProvider,
+				model: this.defaultModel,
+				tools: createDefaultTools(workspaceDir, toolPolicy, String(chatId)),
+			};
+
+			// Per-request options passed to prompt(), not stored on the session
+			const promptOptions: PromptOptions = {
+				maxIterations,
+				timeoutMs,
+				onEvent: request.options?.onEvent,
+				onImmediate: request.options?.onImmediate,
+			};
+
+			// Get or create an agent for this chat session
+			const agent = this.sessionManager.getOrCreate(chatId, agentConfig);
+
+			// Execute the prompt and collect results
+			let result = await agent.prompt(request.prompt, promptOptions);
+
+			// Process follow-up queue after prompt completes
+			const followUps = agent.drainFollowUpQueue();
+			if (followUps.length > 0) {
+				logger.info({ chatId, followUpCount: followUps.length }, "Processing follow-up messages");
+				for (const followUp of followUps) {
+					try {
+						const followUpResult = await agent.prompt(followUp, promptOptions);
+						if (followUpResult.output) {
+							result = {
+								...result,
+								output: result.output ? `${result.output}\n\n---\n\n${followUpResult.output}` : followUpResult.output,
+							};
+						}
+					} catch (error) {
+						logger.warn({ chatId, error }, "Follow-up message execution failed");
+					}
+				}
 			}
 
-			// Build the model configuration
-			const model = this.buildModel();
+			const durationMs = Date.now() - startTime;
 
-			// Create abort controller for timeout
-			const controller = new AbortController();
-			const timeout = setTimeout(() => controller.abort(), timeoutMs);
-
-			try {
-				// Execute prompt directly in-process using completeSimple
-				// API key is passed in options, not in model object
-				const res = await completeSimple(
-					model,
+			if (result.aborted) {
+				logger.warn(
 					{
-						messages: [
-							{
-								role: "user",
-								content: request.prompt,
-								timestamp: Date.now(),
-							},
-						],
+						chatId,
+						durationMs,
+						turnCount: result.turnCount,
+						maxIterations,
 					},
-					{
-						apiKey,
-						maxTokens: request.options?.maxTokens || 4096,
-						temperature: 0.7,
-						signal: controller.signal,
-					},
+					"Agent execution aborted (timeout or max iterations)",
 				);
 
-				// Extract text content from response
-				const output = res.content
-					.filter(isTextContentBlock)
-					.map((block) => block.text.trim())
-					.filter(Boolean)
-					.join("\n");
-
-				const durationMs = Date.now() - startTime;
-				logger.info(
-					{ requestId, outputLength: output.length, durationMs, stopReason: res.stopReason },
-					"In-process execution completed",
-				);
+				// Still return whatever output was collected
+				if (result.output) {
+					return {
+						status: "completed",
+						output: result.output,
+						exitCode: 0,
+						retryable: false,
+					};
+				}
 
 				return {
-					status: "completed",
-					output,
-					exitCode: 0,
-					retryable: false,
+					status: "failed",
+					error: `Agent execution aborted after ${result.turnCount} turns`,
+					retryable: true,
+					isTimeout: true,
 				};
-			} finally {
-				clearTimeout(timeout);
 			}
+
+			logger.info(
+				{
+					chatId,
+					outputLength: result.output.length,
+					durationMs,
+					turnCount: result.turnCount,
+					toolCalls: result.toolCalls.length,
+				},
+				"In-process agent execution completed",
+			);
+
+			// Phase 4: Persist session state after successful execution
+			this.sessionManager.persistSession(chatId);
+
+			return {
+				status: "completed",
+				output: result.output,
+				exitCode: 0,
+				retryable: false,
+			};
 		} catch (error) {
 			const errorMessage = error instanceof Error ? error.message : String(error);
 			const durationMs = Date.now() - startTime;
@@ -241,7 +215,7 @@ export class InProcessEngine implements IExecutionEngine {
 					(error.cause instanceof Error && error.cause.name === "AbortError"));
 
 			if (isAbortError) {
-				logger.warn({ requestId, timeoutMs, durationMs }, "In-process execution timed out");
+				logger.warn({ chatId, timeoutMs, durationMs }, "In-process agent execution timed out");
 				return {
 					status: "failed",
 					error: `In-process execution timed out after ${timeoutMs}ms`,
@@ -250,7 +224,7 @@ export class InProcessEngine implements IExecutionEngine {
 				};
 			}
 
-			logger.error({ requestId, error: errorMessage, durationMs }, "In-process execution failed");
+			logger.error({ chatId, error: errorMessage, durationMs }, "In-process agent execution failed");
 			return {
 				status: "failed",
 				error: `In-process execution failed: ${errorMessage}`,
@@ -267,5 +241,19 @@ export class InProcessEngine implements IExecutionEngine {
 			lastCheck: new Date(),
 			error: available ? undefined : "Feature flag disabled or API key not configured",
 		};
+	}
+
+	/**
+	 * Get the session manager for external access (e.g., cleanup, metrics).
+	 */
+	getSessionManager(): AgentSessionManager {
+		return this.sessionManager;
+	}
+
+	/**
+	 * Stop the engine and clean up all sessions.
+	 */
+	dispose(): void {
+		this.sessionManager.dispose();
 	}
 }
