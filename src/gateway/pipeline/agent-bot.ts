@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import path from "node:path";
+import type { AgentEvent } from "@mariozechner/pi-agent-core";
 import type { Channel } from "@/gateway/channels";
 import { GATEWAY_CONSTANTS } from "@/gateway/consts";
 import {
@@ -9,7 +10,8 @@ import {
 	isAsyncResult,
 	validateAndSanitizePrompt,
 } from "@/gateway/engine";
-import type { ExecutionRequest } from "@/gateway/engine/contracts";
+import type { ExecutionRequest, ExecutionResult } from "@/gateway/engine/contracts";
+import { InProcessEngine } from "@/gateway/engine/in-process";
 import { getExecutionOrchestrator } from "@/gateway/engine/orchestrator";
 import { instanceManager } from "@/gateway/instance-manager";
 import { buildMemoryBootstrapContext, persistConversationMemory, resolveMemoryConfig } from "@/gateway/memory/manager";
@@ -21,6 +23,23 @@ import { TmuxManager } from "@/gateway/services/tmux-manager";
 import { logger } from "@/packages/logger";
 import { renderTemplate } from "@/packages/template";
 import type { Bot, Message } from "./index";
+
+// =============================================================================
+// Streaming Support
+// =============================================================================
+
+/** Streaming state for a single execution */
+interface StreamingState {
+	chatId: string | number;
+	messageId?: string | number; // For edits
+	pendingText: string;
+	debounceTimer?: ReturnType<typeof setTimeout>;
+	lastUpdateMs: number;
+}
+
+// Default streaming config
+const STREAMING_DEBOUNCE_MS = 300; // Batch updates every 300ms
+const STREAMING_ENABLED = process.env.ENABLE_STREAMING === "true";
 
 export class AgentBot implements Bot {
 	name = "AgentBot";
@@ -47,6 +66,9 @@ export class AgentBot implements Bot {
 	private memoryConfig = resolveMemoryConfig(GATEWAY_CONSTANTS.DEFAULT_CONFIG.memory);
 	private projectsRoot = GATEWAY_CONSTANTS.CONFIG.PROJECTS_ROOT;
 
+	// Streaming state per chat (for real-time updates)
+	private streamingStates: Map<string, StreamingState> = new Map();
+
 	constructor(
 		private channel: Channel,
 		private persistenceManager = persistence,
@@ -58,6 +80,153 @@ export class AgentBot implements Bot {
 		if (options?.memory) {
 			this.memoryConfig = resolveMemoryConfig(options.memory);
 		}
+	}
+
+	// =============================================================================
+	// Streaming Methods
+	// =============================================================================
+
+	/**
+	 * Create a streaming event handler for real-time updates to Telegram/Feishu.
+	 * Returns an onImmediate callback that can be passed to the execution engine.
+	 */
+	private createStreamingCallback(chatId: string | number): (event: AgentEvent) => void {
+		const key = String(chatId);
+		const state: StreamingState = {
+			chatId,
+			pendingText: "",
+			lastUpdateMs: Date.now(),
+		};
+		this.streamingStates.set(key, state);
+
+		return (event: AgentEvent) => {
+			switch (event.type) {
+				case "message_start": {
+					// Start a new message - send initial "thinking" message
+					this.sendInitialStreamingMessage(state);
+					break;
+				}
+
+				case "message_update": {
+					// Accumulate text delta for incremental updates
+					if (event.delta && "text" in event.delta && typeof event.delta.text === "string") {
+						state.pendingText += event.delta.text;
+						this.scheduleStreamingUpdate(state);
+					}
+					break;
+				}
+
+				case "message_end": {
+					// Final message - flush any pending text
+					this.flushStreamingMessage(state);
+					break;
+				}
+
+				case "tool_execution_start": {
+					// Tool execution started - show status
+					this.sendToolStatusMessage(state, event.toolName, "start");
+					break;
+				}
+
+				case "tool_execution_end": {
+					// Tool execution ended - show result summary
+					this.sendToolStatusMessage(state, event.toolName, event.isError ? "error" : "end");
+					break;
+				}
+
+				case "turn_end": {
+					// Turn completed - flush any pending text
+					this.flushStreamingMessage(state);
+					break;
+				}
+
+				// agent_start, agent_end: handled by message_end
+				// tool_execution_update: ignore for now
+			}
+		};
+	}
+
+	/**
+	 * Send initial "thinking" message to start streaming
+	 */
+	private async sendInitialStreamingMessage(state: StreamingState): Promise<void> {
+		try {
+			await this.channel.sendMessage(state.chatId, "🤔 Thinking...");
+			// Note: In a real implementation, we'd capture the messageId for editing
+			// For now, we'll just send new messages
+			logger.debug({ chatId: state.chatId }, "Sent initial streaming message");
+		} catch (error) {
+			logger.error({ chatId: state.chatId, error }, "Failed to send initial streaming message");
+		}
+	}
+
+	/**
+	 * Schedule a debounced streaming update
+	 */
+	private scheduleStreamingUpdate(state: StreamingState): void {
+		// Clear existing timer
+		if (state.debounceTimer) {
+			clearTimeout(state.debounceTimer);
+		}
+
+		// Schedule new update
+		state.debounceTimer = setTimeout(() => {
+			this.flushStreamingMessage(state);
+		}, STREAMING_DEBOUNCE_MS);
+	}
+
+	/**
+	 * Flush pending streaming text to the channel
+	 */
+	private async flushStreamingMessage(state: StreamingState): Promise<void> {
+		if (!state.pendingText.trim()) return;
+
+		// Try to edit existing message first, otherwise send new
+		if (state.messageId && this.channel.editMessage) {
+			try {
+				await this.channel.editMessage(state.chatId, state.messageId, state.pendingText);
+			} catch (error) {
+				// Fall back to sending new message if edit fails
+				logger.debug({ chatId: state.chatId, error }, "Edit failed, sending new message");
+				await this.channel.sendMessage(state.chatId, state.pendingText);
+			}
+		} else {
+			await this.channel.sendMessage(state.chatId, state.pendingText);
+		}
+
+		state.pendingText = "";
+		state.lastUpdateMs = Date.now();
+	}
+
+	/**
+	 * Send tool execution status message
+	 */
+	private async sendToolStatusMessage(
+		state: StreamingState,
+		toolName: string,
+		status: "start" | "end" | "error",
+	): Promise<void> {
+		const emoji = status === "start" ? "🔧" : status === "error" ? "❌" : "✅";
+		const text =
+			status === "start"
+				? `${emoji} Running ${toolName}...`
+				: status === "error"
+					? `${emoji} ${toolName} failed`
+					: `${emoji} ${toolName} completed`;
+
+		await this.channel.sendMessage(state.chatId, text);
+	}
+
+	/**
+	 * Clean up streaming state for a chat
+	 */
+	private cleanupStreamingState(chatId: string | number): void {
+		const key = String(chatId);
+		const state = this.streamingStates.get(key);
+		if (state?.debounceTimer) {
+			clearTimeout(state.debounceTimer);
+		}
+		this.streamingStates.delete(key);
 	}
 
 	getMenus() {
@@ -246,6 +415,24 @@ export class AgentBot implements Bot {
 			logger.warn({ chatId: message.chatId, reason: validationResult.reason }, "Message validation failed");
 			await this.channel.sendMessage(message.chatId, `⚠️ Invalid message: ${validationResult.reason}`);
 			return true;
+		}
+
+		// 5b. Check if in-process agent is already running for this chat — steer or queue
+		const orchestrator = getExecutionOrchestrator();
+		const inProcessEngine = orchestrator.getEngine("in-process");
+		if (inProcessEngine && inProcessEngine instanceof InProcessEngine) {
+			const sessionManager = inProcessEngine.getSessionManager();
+			if (sessionManager.isRunning(message.chatId)) {
+				const action = sessionManager.steerOrQueue(message.chatId, validationResult.sanitized);
+				logger.info({ chatId: message.chatId, action }, "Message steered/queued during active execution");
+				if (action === "steered") {
+					await this.channel.sendMessage(message.chatId, "Message injected into active execution.");
+				} else {
+					await this.channel.sendMessage(message.chatId, "Message queued for after current execution.");
+				}
+				await this.persistenceManager.storeMessage(message.chatId, "user", message.text, workspace);
+				return true;
+			}
 		}
 
 		// 6. Get message history for context (workspace-specific)
@@ -553,6 +740,9 @@ export class AgentBot implements Bot {
 			"Using workspace for Claude execution",
 		);
 
+		// Create streaming callback if enabled
+		const onImmediate = STREAMING_ENABLED ? this.createStreamingCallback(message.chatId) : undefined;
+
 		// Execute via unified orchestrator
 		const request: ExecutionRequest = {
 			prompt: effectivePrompt,
@@ -563,11 +753,22 @@ export class AgentBot implements Bot {
 				history: config.history,
 				allowDangerouslySkipPermissions: config.allowDangerouslySkipPermissions,
 				allowedTools: config.allowedTools,
+				streaming: STREAMING_ENABLED,
+				onImmediate,
 			},
 			containerId: instance.containerId,
 		};
 
-		let orchestratorResult = await getExecutionOrchestrator().execute(request);
+		let orchestratorResult: ExecutionResult;
+
+		try {
+			orchestratorResult = await getExecutionOrchestrator().execute(request);
+		} finally {
+			// Clean up streaming state after execution completes
+			if (onImmediate) {
+				this.cleanupStreamingState(message.chatId);
+			}
+		}
 
 		// Convert ExecutionResult to ClaudeExecutionResult format
 		let result: ClaudeExecutionResultOrAsync = {
