@@ -7,7 +7,9 @@
  * - Container (Docker exec / tmux)
  */
 
+import type { AgentEvent } from "@mariozechner/pi-agent-core";
 import type { AgentInstance } from "@/gateway/instance-manager";
+import type { ToolPolicyConfig } from "./tools/policy";
 
 // =============================================================================
 // Execution Layer Types
@@ -47,6 +49,18 @@ export interface ExecutionOptions {
 	sync?: boolean;
 	/** Kill tmux session after execution completes (for one-off runs) */
 	ephemeralSession?: boolean;
+	/** Optional streaming callback for agent events (in-process agent mode) */
+	onEvent?: (event: AgentEvent) => void;
+	/** Force agent mode for in-process execution (default: true when in-process) */
+	agentMode?: boolean;
+	/** Agent loop iteration guard (default: 50) */
+	maxIterations?: number;
+	/** Enable streaming mode for real-time updates (in-process agent mode) */
+	streaming?: boolean;
+	/** Immediate streaming callback for real-time updates (fires during collection) */
+	onImmediate?: (event: AgentEvent) => void;
+	/** Tool policy configuration for filtering/transforming tools */
+	toolPolicy?: ToolPolicyConfig;
 }
 
 /** Request for execution */
