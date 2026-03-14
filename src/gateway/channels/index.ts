@@ -13,6 +13,12 @@ export interface Channel {
 	 * Optional - channels that don't support this will no-op.
 	 */
 	showTyping?(chatId: string | number): Promise<void>;
+
+	/**
+	 * Edits an existing message.
+	 * Optional - channels that don't support this will throw.
+	 */
+	editMessage?(chatId: string | number, messageId: string | number, text: string, options?: unknown): Promise<void>;
 }
 
 export interface ChannelAdapter {
