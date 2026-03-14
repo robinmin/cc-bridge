@@ -84,4 +84,72 @@ id: empty
 # Heading`;
 		expect(extractMarkdownDescription(input)).toBe("");
 	});
+
+	test("extract description from content with no frontmatter", () => {
+		const input = `# Heading
+
+First non-header line.`;
+		expect(extractMarkdownDescription(input)).toBe("First non-header line.");
+	});
+
+	test("extract description from empty input", () => {
+		expect(extractMarkdownDescription("")).toBe("");
+	});
+
+	test("parse frontmatter with single-quoted values", () => {
+		const input = `---
+name: 'Single Quoted'
+value: 'test value'
+---
+Body`;
+		const parsed = parseMarkdownFrontmatter(input);
+		expect(parsed.name).toBe("Single Quoted");
+		expect(parsed.value).toBe("test value");
+	});
+
+	test("strip frontmatter when no frontmatter present", () => {
+		const input = "Just plain content";
+		expect(stripMarkdownFrontmatter(input)).toBe("Just plain content");
+	});
+
+	test("extract description handles bold and italic", () => {
+		const input = `---
+id: test
+---
+# Title
+**bold** and *italic* text
+Another line`;
+		const result = extractMarkdownDescription(input);
+		expect(result).toBe("bold and italic text");
+	});
+
+	test("extract description handles backticks", () => {
+		const input = `---
+id: test
+---
+# Title
+\`code\` inline`;
+		const result = extractMarkdownDescription(input);
+		expect(result).toBe("code inline");
+	});
+
+	test("parse frontmatter returns empty object for malformed frontmatter", () => {
+		const input = `---
+malformed
+no colon here
+---
+Body`;
+		const parsed = parseMarkdownFrontmatter(input);
+		expect(parsed).toEqual({});
+	});
+
+	test("strip frontmatter handles edge case with no closing", () => {
+		const input = `---
+id: test
+No closing dash
+More content`;
+		// Should return original when no proper closing
+		const result = stripMarkdownFrontmatter(input);
+		expect(result).toContain("id: test");
+	});
 });
