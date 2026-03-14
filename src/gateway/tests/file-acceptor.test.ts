@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, spyOn, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import fs from "node:fs/promises";
 import path from "node:path";
 import type { Channel } from "@/gateway/channels";
@@ -26,9 +26,17 @@ function makeMsg(att: Attachment[]): Message {
 }
 
 describe("file-acceptor", () => {
+	let mkdirSpy: ReturnType<typeof spyOn>;
+	let writeFileSpy: ReturnType<typeof spyOn>;
+
 	beforeEach(() => {
-		spyOn(fs, "mkdir").mockResolvedValue(undefined as never);
-		spyOn(fs, "writeFile").mockResolvedValue(undefined as never);
+		mkdirSpy = spyOn(fs, "mkdir").mockResolvedValue(undefined as never);
+		writeFileSpy = spyOn(fs, "writeFile").mockResolvedValue(undefined as never);
+	});
+
+	afterEach(() => {
+		mkdirSpy.mockRestore();
+		writeFileSpy.mockRestore();
 	});
 
 	test("returns early when disabled or empty", async () => {
