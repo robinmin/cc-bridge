@@ -1,8 +1,33 @@
-import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { DiscoveryCacheService } from "@/gateway/services/discovery-cache";
+import {
+	extractMarkdownDescription as realExtractDescription,
+	parseMarkdownFrontmatter as realParseFrontmatter,
+	stripMarkdownFrontmatter,
+} from "@/packages/markdown";
+
+// Mock dependencies to ensure consistent behavior across tests
+mock.module("@/packages/logger", () => ({
+	logger: {
+		info: mock(() => {}),
+		warn: mock(() => {}),
+		debug: mock(() => {}),
+		error: mock(() => {}),
+	},
+}));
+
+// Mock markdown module - delegate to real implementations for coverage
+const mockExtractDescription = mock(realExtractDescription);
+const mockParseFrontmatter = mock(realParseFrontmatter);
+
+mock.module("@/packages/markdown", () => ({
+	extractMarkdownDescription: mockExtractDescription,
+	parseMarkdownFrontmatter: mockParseFrontmatter,
+	stripMarkdownFrontmatter,
+}));
 
 describe("DiscoveryCacheService", () => {
 	let baseDir: string;
@@ -10,7 +35,11 @@ describe("DiscoveryCacheService", () => {
 	let pluginsCachePath: string;
 
 	beforeEach(async () => {
-		baseDir = await mkdtemp(path.join(tmpdir(), "discovery-cache-test-"));
+		// Use home directory with random suffix to avoid any test pollution
+		const randomSuffix = Math.random().toString(36).substring(2, 10);
+		const testDir = path.join(os.homedir(), `.disc-cache-test-${randomSuffix}`);
+		await mkdir(testDir, { recursive: true });
+		baseDir = testDir;
 		cachePath = path.join(baseDir, "data", "config", "discovery-cache.jsonc");
 		pluginsCachePath = path.join(baseDir, "installed_plugins.json");
 	});
