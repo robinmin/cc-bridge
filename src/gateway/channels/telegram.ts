@@ -153,6 +153,43 @@ export class TelegramClient {
 		const url = `${GATEWAY_CONSTANTS.DIAGNOSTICS.URLS.TELEGRAM_API_BASE}/file/bot${this.botToken}/${filePath}`;
 		return fetch(url, { signal: AbortSignal.timeout(TELEGRAM_API_TIMEOUT_MS) });
 	}
+
+	async editMessageText(
+		chatId: string | number,
+		messageId: number,
+		text: string,
+		options?: { parse_mode?: string },
+	): Promise<void> {
+		const url = `${GATEWAY_CONSTANTS.DIAGNOSTICS.URLS.TELEGRAM_API_BASE}/bot${this.botToken}/editMessageText`;
+		const payload: {
+			chat_id: string | number;
+			message_id: number;
+			text: string;
+			parse_mode?: string;
+		} = {
+			chat_id: chatId,
+			message_id: messageId,
+			text: options?.parse_mode ? text : escapeMarkdownV2(text),
+		};
+
+		if (options?.parse_mode) {
+			payload.parse_mode = options.parse_mode;
+		} else {
+			payload.parse_mode = DEFAULT_TELEGRAM_PARSE_MODE;
+		}
+
+		const response = await fetch(url, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify(payload),
+			signal: AbortSignal.timeout(TELEGRAM_API_TIMEOUT_MS),
+		});
+
+		if (!response.ok) {
+			const error = await response.text();
+			throw new Error(`Telegram API error (editMessageText): ${error}`);
+		}
+	}
 }
 
 export class TelegramChannel implements Channel, ChannelAdapter {
@@ -180,6 +217,20 @@ export class TelegramChannel implements Channel, ChannelAdapter {
 
 	async showTyping(chatId: string | number): Promise<void> {
 		await this.client.sendChatAction(chatId, "typing");
+	}
+
+	async editMessage(
+		chatId: string | number,
+		messageId: string | number,
+		text: string,
+		options?: unknown,
+	): Promise<void> {
+		// Telegram uses numeric message_id
+		const msgId = typeof messageId === "number" ? messageId : parseInt(String(messageId), 10);
+		if (Number.isNaN(msgId)) {
+			throw new Error("Invalid messageId for Telegram editMessage: must be a number");
+		}
+		await this.client.editMessageText(chatId, msgId, text, options as { parse_mode?: string });
 	}
 
 	async setMenu(commands: { command: string; description: string }[]): Promise<void> {
