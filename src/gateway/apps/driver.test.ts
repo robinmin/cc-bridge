@@ -502,7 +502,9 @@ Prompt body`,
 		const tempDriver = new MiniAppDriver(appsDir);
 		const result = await tempDriver.runApp("container-path");
 		expect(result.succeeded).toBe(1);
-		expect(String(containerExecuteMock.mock.calls[0]?.[0].prompt || "")).toContain("/workspaces/cc-bridge/src/apps/container-path.md");
+		expect(String(containerExecuteMock.mock.calls[0]?.[0].prompt || "")).toContain(
+			"/workspaces/cc-bridge/src/apps/container-path.md",
+		);
 	});
 
 	test("should resolve chat_ids targets and dispatch to feishu", async () => {
