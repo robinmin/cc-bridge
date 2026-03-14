@@ -264,6 +264,43 @@ class FeishuClient {
 	}
 
 	/**
+	 * Update an existing message in a Feishu chat
+	 */
+	async updateMessage(messageId: string, text: string): Promise<void> {
+		const token = await this.getTenantAccessToken();
+		const url = `${this.baseUrl}/open-apis/im/v1/messages/${messageId}`;
+
+		// Build message content in Feishu text format
+		const content = JSON.stringify({
+			text,
+		});
+
+		const response = await fetch(url, {
+			method: "PATCH",
+			headers: {
+				"Content-Type": "application/json",
+				Authorization: `Bearer ${token}`,
+			},
+			body: JSON.stringify({
+				msg_type: "text",
+				content,
+			}),
+			signal: AbortSignal.timeout(FEISHU_API_TIMEOUT_MS),
+		});
+
+		if (!response.ok) {
+			const error = await response.text();
+			throw new Error(`Feishu API error (updateMessage): ${error}`);
+		}
+
+		const data = (await response.json()) as FeishuMessageResponse;
+
+		if (data.code !== 0) {
+			throw new Error(`Feishu API error: ${data.msg} (code: ${data.code})`);
+		}
+	}
+
+	/**
 	 * Set bot menu commands
 	 * Note: Feishu uses different bot menu mechanism
 	 * This would require additional bot configuration setup
@@ -339,6 +376,16 @@ export class FeishuChannel implements Channel, ChannelAdapter {
 	async showTyping(chatId: string | number): Promise<void> {
 		// Feishu doesn't support typing indicators
 		await this.client.sendChatAction(String(chatId));
+	}
+
+	async editMessage(
+		_chatId: string | number,
+		messageId: string | number,
+		text: string,
+		_options?: unknown,
+	): Promise<void> {
+		// Feishu uses message_id (string) for updates
+		await this.client.updateMessage(String(messageId), text);
 	}
 
 	async setMenu(commands: { command: string; description: string }[]): Promise<void> {
