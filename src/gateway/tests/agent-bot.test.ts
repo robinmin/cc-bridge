@@ -134,6 +134,7 @@ describe("AgentBot", () => {
 				retryable: false,
 				isTimeout: false,
 			}),
+			getEngine: mock().mockReturnValue(undefined),
 		} as unknown as ReturnType<typeof orchestrator.getExecutionOrchestrator>);
 		// Need to test validation - but since we can't easily spy on the imported function,
 		// we test that when validation fails (empty/whitespace), it handles gracefully
@@ -151,6 +152,7 @@ describe("AgentBot", () => {
 				mode: "tmux",
 				status: "completed",
 			}),
+			getEngine: mock().mockReturnValue(undefined),
 		} as unknown as ReturnType<typeof orchestrator.getExecutionOrchestrator>);
 
 		const handled = await bot.handle({ ...baseMessage, text: "run async" });
@@ -161,7 +163,8 @@ describe("AgentBot", () => {
 	test("handle sends sync success output and stores assistant message", async () => {
 		spyOn(persistence, "getSession").mockResolvedValueOnce("cc-bridge");
 		spyOn(persistence, "getHistory").mockResolvedValueOnce([]);
-		spyOn(orchestrator, "getExecutionOrchestrator").mockReturnValueOnce({
+		// Mock orchestrator for both steering check (line 421) and execution (line 765)
+		const mockOrchestrator = {
 			execute: mock().mockResolvedValueOnce({
 				status: "completed",
 				output: "done",
@@ -169,7 +172,11 @@ describe("AgentBot", () => {
 				retryable: false,
 				isTimeout: false,
 			}),
-		} as unknown as ReturnType<typeof orchestrator.getExecutionOrchestrator>);
+			getEngine: mock().mockReturnValue(undefined),
+		};
+		spyOn(orchestrator, "getExecutionOrchestrator").mockReturnValue(
+			mockOrchestrator as unknown as ReturnType<typeof orchestrator.getExecutionOrchestrator>,
+		);
 
 		const handled = await bot.handle({ ...baseMessage, text: "run sync" });
 		expect(handled).toBe(true);
@@ -186,6 +193,7 @@ describe("AgentBot", () => {
 			.mockResolvedValueOnce({ status: "failed", retryable: false, error: "still bad", exitCode: 1 });
 		spyOn(orchestrator, "getExecutionOrchestrator").mockReturnValue({
 			execute: mockExecute,
+			getEngine: mock().mockReturnValue(undefined),
 		} as unknown as ReturnType<typeof orchestrator.getExecutionOrchestrator>);
 
 		const handled = await bot.handle({ ...baseMessage, text: "run retry" });
@@ -401,5 +409,159 @@ describe("AgentBot", () => {
 		);
 		await bot.handleWorkspaceList(baseMessage, defaultInstance);
 		expect(calls.at(-1)?.text).toContain("Failed to list workspaces");
+	});
+
+	test("createStreamingCallback handles all event types", async () => {
+		// Add editMessage to channel mock
+		const editCalls: Array<{ chatId: string | number; messageId: string | number; text: string }> = [];
+		(channel as unknown as { editMessage: ReturnType<typeof mock> }).editMessage = mock(
+			async (chatId: string | number, messageId: string | number, text: string) => {
+				editCalls.push({ chatId, messageId, text });
+			},
+		);
+
+		// Access private method
+		const createCallback = (
+			bot as unknown as { createStreamingCallback: (chatId: string | number) => (event: unknown) => void }
+		).createStreamingCallback.bind(bot);
+		const callback = createCallback("chat-1");
+
+		// message_start
+		callback({ type: "message_start" });
+		await new Promise((r) => setTimeout(r, 50));
+		expect(calls.some((c) => c.text.includes("Thinking"))).toBe(true);
+
+		// message_update with delta
+		callback({ type: "message_update", delta: { text: "Hello " } });
+		callback({ type: "message_update", delta: { text: "world" } });
+
+		// message_end - should flush
+		callback({ type: "message_end" });
+		await new Promise((r) => setTimeout(r, 50));
+		expect(calls.some((c) => c.text === "Hello world")).toBe(true);
+
+		// tool_execution_start
+		callback({ type: "tool_execution_start", toolName: "bash" });
+		await new Promise((r) => setTimeout(r, 50));
+		expect(calls.some((c) => c.text.includes("Running bash"))).toBe(true);
+
+		// tool_execution_end (success)
+		callback({ type: "tool_execution_end", toolName: "bash", isError: false });
+		await new Promise((r) => setTimeout(r, 50));
+		expect(calls.some((c) => c.text.includes("bash completed"))).toBe(true);
+
+		// tool_execution_end (error)
+		callback({ type: "tool_execution_end", toolName: "read", isError: true });
+		await new Promise((r) => setTimeout(r, 50));
+		expect(calls.some((c) => c.text.includes("read failed"))).toBe(true);
+
+		// turn_end
+		callback({ type: "turn_end" });
+		await new Promise((r) => setTimeout(r, 50));
+	});
+
+	test("flushStreamingMessage tries edit then falls back to send", async () => {
+		(channel as unknown as { editMessage: ReturnType<typeof mock> }).editMessage = mock(async () => {
+			throw new Error("edit not supported");
+		});
+
+		const createCallback = (
+			bot as unknown as { createStreamingCallback: (chatId: string | number) => (event: unknown) => void }
+		).createStreamingCallback.bind(bot);
+		const _callback = createCallback("chat-2");
+
+		// Set a messageId on the state to trigger edit path
+		const stateMap = (
+			bot as unknown as { streamingStates: Map<string, { messageId?: string | number; pendingText: string }> }
+		).streamingStates;
+		const state = stateMap.get("chat-2");
+		if (state) {
+			state.messageId = "msg-123";
+			state.pendingText = "some text";
+		}
+
+		// Flush manually
+		const flush = (
+			bot as unknown as { flushStreamingMessage: (s: unknown) => Promise<void> }
+		).flushStreamingMessage.bind(bot);
+		await flush(state);
+
+		// Should fall back to sendMessage after edit fails
+		expect(calls.some((c) => c.text === "some text")).toBe(true);
+	});
+
+	test("cleanupStreamingState clears timer and removes state", () => {
+		const createCallback = (
+			bot as unknown as { createStreamingCallback: (chatId: string | number) => (event: unknown) => void }
+		).createStreamingCallback.bind(bot);
+		createCallback("chat-cleanup");
+
+		const stateMap = (bot as unknown as { streamingStates: Map<string, unknown> }).streamingStates;
+		expect(stateMap.has("chat-cleanup")).toBe(true);
+
+		const cleanup = (
+			bot as unknown as { cleanupStreamingState: (chatId: string | number) => void }
+		).cleanupStreamingState.bind(bot);
+		cleanup("chat-cleanup");
+		expect(stateMap.has("chat-cleanup")).toBe(false);
+	});
+
+	test("/compact sends compacted and no-session outcomes", async () => {
+		(bot as unknown as { tmuxManager: { softReset: ReturnType<typeof mock> } }).tmuxManager = {
+			softReset: mock(async () => true),
+		} as never;
+		await bot.handle({ ...baseMessage, text: "/compact" });
+		expect(calls.at(-1)?.text).toContain("Compacted session context");
+
+		(bot as unknown as { tmuxManager: { softReset: ReturnType<typeof mock> } }).tmuxManager = {
+			softReset: mock(async () => false),
+		} as never;
+		await bot.handle({ ...baseMessage, text: "/compact" });
+		expect(calls.at(-1)?.text).toContain("No active session to compact");
+	});
+
+	test("/compact handles tmux manager failure", async () => {
+		(bot as unknown as { tmuxManager: { softReset: ReturnType<typeof mock> } }).tmuxManager = {
+			softReset: mock(async () => {
+				throw new Error("tmux error");
+			}),
+		} as never;
+		await bot.handle({ ...baseMessage, text: "/compact" });
+		expect(calls.at(-1)?.text).toContain("Failed to compact session");
+	});
+
+	test("/context_status shows session metadata", async () => {
+		const now = Date.now();
+		(bot as unknown as { tmuxManager: { getSessionMetadata: ReturnType<typeof mock> } }).tmuxManager = {
+			getSessionMetadata: mock(() => ({
+				turnCount: 15,
+				estimatedContextSize: 50000,
+				createdAt: now - 86400000, // 1 day ago
+				lastActivityAt: now - 3600000, // 1 hour ago
+				lastResetAt: now - 1800000, // 30 minutes ago
+			})),
+		} as never;
+		await bot.handle({ ...baseMessage, text: "/context_status" });
+		expect(calls.at(-1)?.text).toContain("Session Context Status");
+		expect(calls.at(-1)?.text).toContain("Turns");
+		expect(calls.at(-1)?.text).toContain("50k tokens");
+	});
+
+	test("/context_status handles error", async () => {
+		(bot as unknown as { tmuxManager: { getSessionMetadata: ReturnType<typeof mock> } }).tmuxManager = {
+			getSessionMetadata: mock(() => {
+				throw new Error("metadata error");
+			}),
+		} as never;
+		await bot.handle({ ...baseMessage, text: "/context_status" });
+		expect(calls.at(-1)?.text).toContain("Failed to get context status");
+	});
+
+	test("formatDuration handles various time ranges", () => {
+		const format = (bot as unknown as { formatDuration: (ms: number) => string }).formatDuration.bind(bot);
+		expect(format(30000)).toBe("30s");
+		expect(format(90000)).toBe("1m 30s");
+		expect(format(3660000)).toBe("1h 1m");
+		expect(format(90000000)).toBe("1d 1h");
 	});
 });
