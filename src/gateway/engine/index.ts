@@ -52,9 +52,55 @@ export {
 // Engines
 // =============================================================================
 
+export { AgentSessionManager, type AgentSessionManagerConfig } from "./agent-sessions";
 export { ContainerEngine, createContainerEngine, TmuxManagerWrapper } from "./container";
+export {
+	type CompactionConfig,
+	type CompactionResult,
+	compactMessages,
+	compactMessagesSync,
+	needsCompaction,
+} from "./context-compaction";
+export {
+	EmbeddedAgent,
+	type EmbeddedAgentConfig,
+	PROVIDER_CONFIGS,
+	type PromptOptions,
+	type ProviderConfig,
+	resolveProviderApiKey,
+} from "./embedded-agent";
+export { type AgentResult, EventCollector, isTextContentBlock, type ToolCallRecord } from "./event-bridge";
 export { createHostIpcEngine, type HostEngineType, type HostIpcConfig, HostIpcEngine } from "./host-ipc";
 export { InProcessEngine } from "./in-process";
+export {
+	applyToolPolicy,
+	type ChatPolicyConfig,
+	// Policy exports
+	ChatToolPolicy,
+	createBashTool,
+	createDefaultTools,
+	createReadFileTool,
+	createReadOnlyPolicyPipeline,
+	createToolPolicyPipeline,
+	createWebSearchTool,
+	createWriteFileTool,
+	GlobalToolPolicy,
+	ToolGranularPolicy,
+	type ToolPolicy,
+	type ToolPolicyAction,
+	type ToolPolicyConfig,
+	ToolPolicyPipeline,
+	type ToolPolicyResult,
+} from "./tools";
+export {
+	BOOTSTRAP_FILES,
+	type BootstrapFileName,
+	discoverSkills,
+	loadWorkspaceBootstrap,
+	SKILL_DIRS,
+	USER_SKILLS_DIR,
+	WorkspaceWatcher,
+} from "./workspace";
 
 // =============================================================================
 // Orchestrator
