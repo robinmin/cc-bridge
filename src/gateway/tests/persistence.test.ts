@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
-import { PersistenceManager } from "@/gateway/persistence";
+import { AgentPersistence, PersistenceManager } from "@/gateway/persistence";
 
 describe("PersistenceManager", () => {
 	const testDbPath = "data/test_gateway.db";
@@ -203,5 +203,149 @@ describe("PersistenceManager", () => {
 		expect(fs.existsSync(path.dirname(testDbNestedPath))).toBe(true);
 		nested.close();
 		fs.rmSync(path.dirname(testDbNestedPath), { recursive: true, force: true });
+	});
+
+	test("should support LRU cache delete, clear, and size", async () => {
+		persistence.close();
+		process.env.ENABLE_LRU_HISTORY = "true";
+		if (fs.existsSync(testDbPath)) fs.unlinkSync(testDbPath);
+		persistence = new PersistenceManager(testDbPath);
+
+		await persistence.storeMessage("chat-a", "user", "msg1", "ws");
+		await persistence.storeMessage("chat-b", "user", "msg2", "ws");
+
+		await persistence.getHistory("chat-a", 10, "ws");
+		await persistence.getHistory("chat-b", 10, "ws");
+
+		const cache = (
+			persistence as unknown as { historyCache: { delete: (k: string) => void; clear: () => void; size: number } }
+		).historyCache;
+		expect(cache.size).toBeGreaterThan(0);
+
+		cache.delete("chat-a:10:ws");
+		cache.clear();
+		expect(cache.size).toBe(0);
+	});
+});
+
+describe("AgentPersistence", () => {
+	const agentDbDir = "data/agent_test";
+	const agentDbPath = `${agentDbDir}/test_agent.db`;
+	let agentPersistence: AgentPersistence;
+
+	beforeEach(() => {
+		fs.rmSync(agentDbDir, { recursive: true, force: true });
+		fs.mkdirSync(agentDbDir, { recursive: true });
+		agentPersistence = new AgentPersistence(agentDbPath);
+	});
+
+	afterEach(() => {
+		agentPersistence.close();
+		fs.rmSync(agentDbDir, { recursive: true, force: true });
+	});
+
+	test("should save and retrieve a session", () => {
+		agentPersistence.saveSession("sess-1", "anthropic", "claude-3", "/workspace", 0);
+		const session = agentPersistence.getSession("sess-1");
+		expect(session).not.toBeNull();
+		expect(session?.session_id).toBe("sess-1");
+		expect(session?.provider).toBe("anthropic");
+		expect(session?.model).toBe("claude-3");
+		expect(session?.workspace_dir).toBe("/workspace");
+		expect(session?.turn_count).toBe(0);
+	});
+
+	test("should return null for non-existent session", () => {
+		const session = agentPersistence.getSession("non-existent");
+		expect(session).toBeNull();
+	});
+
+	test("should update session on duplicate save", () => {
+		agentPersistence.saveSession("sess-1", "anthropic", "claude-3", "/workspace", 0);
+		agentPersistence.saveSession("sess-1", "anthropic", "claude-4", "/workspace2", 5);
+		const session = agentPersistence.getSession("sess-1");
+		expect(session?.model).toBe("claude-4");
+		expect(session?.turn_count).toBe(5);
+	});
+
+	test("should delete a session and its messages", () => {
+		agentPersistence.saveSession("sess-1", "anthropic", "claude-3", "/workspace", 0);
+		agentPersistence.saveMessages("sess-1", [{ role: "user", content: "hello" }]);
+		agentPersistence.deleteSession("sess-1");
+		expect(agentPersistence.getSession("sess-1")).toBeNull();
+		expect(agentPersistence.getMessageCount("sess-1")).toBe(0);
+	});
+
+	test("should list all sessions ordered by last activity", () => {
+		agentPersistence.saveSession("sess-1", "anthropic", "claude-3", "/ws1", 1);
+		agentPersistence.saveSession("sess-2", "anthropic", "claude-3", "/ws2", 2);
+		const sessions = agentPersistence.listSessions();
+		expect(sessions.length).toBe(2);
+	});
+
+	test("should cleanup expired sessions", () => {
+		agentPersistence.saveSession("sess-old", "anthropic", "claude-3", "/ws", 0);
+		agentPersistence.touchSession("sess-old", 1);
+		const cleaned = agentPersistence.cleanupExpiredSessions(0);
+		expect(cleaned).toBeGreaterThanOrEqual(0);
+	});
+
+	test("should save and load messages", () => {
+		agentPersistence.saveSession("sess-1", "anthropic", "claude-3", "/ws", 0);
+		const messages = [
+			{ role: "user", content: "hello" },
+			{ role: "assistant", content: "hi there" },
+		];
+		agentPersistence.saveMessages("sess-1", messages);
+		const loaded = agentPersistence.loadMessages("sess-1");
+		expect(loaded.length).toBe(2);
+		expect((loaded[0] as { role: string }).role).toBe("user");
+		expect((loaded[1] as { role: string }).role).toBe("assistant");
+	});
+
+	test("should replace messages on re-save", () => {
+		agentPersistence.saveSession("sess-1", "anthropic", "claude-3", "/ws", 0);
+		agentPersistence.saveMessages("sess-1", [{ role: "user", content: "first" }]);
+		agentPersistence.saveMessages("sess-1", [{ role: "user", content: "replaced" }]);
+		const loaded = agentPersistence.loadMessages("sess-1");
+		expect(loaded.length).toBe(1);
+		expect((loaded[0] as { content: string }).content).toBe("replaced");
+	});
+
+	test("should return empty array for non-existent session messages", () => {
+		const loaded = agentPersistence.loadMessages("non-existent");
+		expect(loaded).toEqual([]);
+	});
+
+	test("should get message count", () => {
+		agentPersistence.saveSession("sess-1", "anthropic", "claude-3", "/ws", 0);
+		expect(agentPersistence.getMessageCount("sess-1")).toBe(0);
+		agentPersistence.saveMessages("sess-1", [{ a: 1 }, { b: 2 }, { c: 3 }]);
+		expect(agentPersistence.getMessageCount("sess-1")).toBe(3);
+	});
+
+	test("should touch session to update turn count", () => {
+		agentPersistence.saveSession("sess-1", "anthropic", "claude-3", "/ws", 0);
+		agentPersistence.touchSession("sess-1", 10);
+		const session = agentPersistence.getSession("sess-1");
+		expect(session?.turn_count).toBe(10);
+	});
+
+	test("should handle malformed JSON in loadMessages gracefully", () => {
+		agentPersistence.saveSession("sess-1", "anthropic", "claude-3", "/ws", 0);
+		const db = (agentPersistence as unknown as { db: { run: (sql: string, params: unknown[]) => void } }).db;
+		db.run("INSERT INTO agent_messages (session_id, message_json, sequence) VALUES (?, ?, ?)", [
+			"sess-1",
+			"not-valid-json{",
+			0,
+		]);
+		db.run("INSERT INTO agent_messages (session_id, message_json, sequence) VALUES (?, ?, ?)", [
+			"sess-1",
+			JSON.stringify({ role: "user", content: "valid" }),
+			1,
+		]);
+		const loaded = agentPersistence.loadMessages("sess-1");
+		expect(loaded.length).toBe(1);
+		expect((loaded[0] as { role: string }).role).toBe("user");
 	});
 });
