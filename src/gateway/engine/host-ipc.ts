@@ -228,12 +228,7 @@ export class HostIpcEngine implements IExecutionEngine {
 				// Async mode: use host_exec.sh for callback mechanism
 				// Extract the prompt text from args (usually the last non-flag argument)
 				const promptText = params.args.find((a) => !a.startsWith("-")) || "";
-				fullCommand = this.buildAsyncCommand(
-					promptText,
-					params.workspace,
-					params.chatId,
-					requestId,
-				);
+				fullCommand = this.buildAsyncCommand(promptText, params.workspace, params.chatId, requestId);
 			}
 
 			// Send command to tmux session (pass requestId for temp file naming)
@@ -564,12 +559,7 @@ export class HostIpcEngine implements IExecutionEngine {
 	 * Build full command for async mode (uses host_exec.sh for callback)
 	 * This provides the same callback mechanism as container_cmd.sh
 	 */
-	private buildAsyncCommand(
-		prompt: string,
-		workspace: string,
-		chatId: string,
-		requestId: string,
-	): string {
+	private buildAsyncCommand(prompt: string, workspace: string, chatId: string, requestId: string): string {
 		const workspacePath = this.resolveWorkspacePath(workspace) || ".";
 		const scriptPath = path.resolve(process.cwd(), "scripts/host_exec.sh");
 
@@ -595,14 +585,6 @@ export class HostIpcEngine implements IExecutionEngine {
 			`rm -f ${this.shellQuote(promptFile)}; ` +
 			`exit $__cc_exec_rc`
 		);
-	}
-
-	/**
-	 * Prepare execution context - placeholder for compatibility
-	 * Note: The actual prepareExecution is defined above with full implementation
-	 */
-	private getExecutionContext(workspace: string, chatId: string): { workspace: string; chatId: string } {
-		return { workspace, chatId };
 	}
 
 	/**
