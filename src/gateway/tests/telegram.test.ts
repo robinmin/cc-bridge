@@ -46,6 +46,14 @@ describe("TelegramChannel", () => {
 				} as Response;
 			}
 
+			if (url.includes("editMessageText")) {
+				return {
+					ok: true,
+					json: async () => ({ ok: true }),
+					text: async () => "OK",
+				} as Response;
+			}
+
 			if (url.includes("getWebhookInfo")) {
 				return {
 					ok: true,
@@ -325,6 +333,40 @@ describe("TelegramChannel", () => {
 				expect(mockCalls.some((c) => c.url.includes("/file/bot"))).toBe(true);
 			});
 		});
+
+		describe("editMessageText", () => {
+			test("should edit message with default MarkdownV2 parse mode", async () => {
+				await client.editMessageText(12345, 100, "Hello *world*");
+
+				const editCall = mockCalls.find((c) => c.url.includes("editMessageText"));
+				expect(editCall).toBeDefined();
+				expect(editCall?.body?.chat_id).toBe(12345);
+				expect(editCall?.body?.message_id).toBe(100);
+				expect(editCall?.body?.parse_mode).toBe("MarkdownV2");
+				expect(editCall?.body?.text).toContain("\\*");
+			});
+
+			test("should pass through custom parse mode without escaping", async () => {
+				await client.editMessageText(12345, 100, "Hello <b>world</b>", { parse_mode: "HTML" });
+
+				const editCall = mockCalls.find((c) => c.url.includes("editMessageText"));
+				expect(editCall?.body?.parse_mode).toBe("HTML");
+				expect(editCall?.body?.text).toBe("Hello <b>world</b>");
+			});
+
+			test("should throw on non-ok response", async () => {
+				// @ts-expect-error - mock fetch
+				globalThis.fetch = async () =>
+					({
+						ok: false,
+						text: async () => "edit-failed",
+					}) as Response;
+
+				await expect(client.editMessageText(12345, 100, "text")).rejects.toThrow(
+					"Telegram API error (editMessageText): edit-failed",
+				);
+			});
+		});
 	});
 
 	describe("channel delegation and attachments", () => {
@@ -337,6 +379,26 @@ describe("TelegramChannel", () => {
 			expect(mockCalls.some((c) => c.url.includes("setMyCommands"))).toBe(true);
 			const status = await telegram.getStatus();
 			expect(status).toBeDefined();
+		});
+
+		test("should delegate editMessage to client", async () => {
+			await telegram.editMessage(12345, 100, "Updated text");
+
+			const editCall = mockCalls.find((c) => c.url.includes("editMessageText"));
+			expect(editCall).toBeDefined();
+		});
+
+		test("should convert string messageId to number for editMessage", async () => {
+			await telegram.editMessage(12345, "200", "Updated text");
+
+			const editCall = mockCalls.find((c) => c.url.includes("editMessageText"));
+			expect(editCall?.body?.message_id).toBe(200);
+		});
+
+		test("should throw on invalid non-numeric messageId", async () => {
+			await expect(telegram.editMessage(12345, "not-a-number", "text")).rejects.toThrow(
+				"Invalid messageId for Telegram editMessage: must be a number",
+			);
 		});
 
 		test("should parse document and photo attachments", () => {

@@ -584,7 +584,7 @@ describe("InProcessEngine additional coverage", () => {
 // InProcessEngine isTextContentBlock Tests
 // =============================================================================
 
-import { isTextContentBlock } from "@/gateway/engine/in-process";
+import { isTextContentBlock } from "@/gateway/engine/event-bridge";
 
 describe("isTextContentBlock function", () => {
 	test("returns true for valid text content block", () => {
@@ -725,16 +725,19 @@ describe("InProcessEngine execute", () => {
 	});
 });
 
-describe("InProcessEngine getProviderConfig coverage", () => {
-	test("getProviderConfig returns correct config for anthropic", () => {
+// =============================================================================
+// Provider Config & API Key Resolution Tests (moved from InProcessEngine to embedded-agent.ts)
+// =============================================================================
+
+import { PROVIDER_CONFIGS, resolveProviderApiKey } from "@/gateway/engine/embedded-agent";
+
+describe("PROVIDER_CONFIGS", () => {
+	test("anthropic config returns correct api and key", () => {
 		const originalKey = process.env.ANTHROPIC_API_KEY;
 		process.env.ANTHROPIC_API_KEY = "test-anthropic-key";
 
 		try {
-			const engine = new InProcessEngine(true, "anthropic", "claude-sonnet-4-6");
-			// @ts-expect-error - accessing private method
-			const config = engine.getProviderConfig();
-
+			const config = PROVIDER_CONFIGS["anthropic"];
 			expect(config.api).toBe("anthropic-messages");
 			expect(config.getApiKey()).toBe("test-anthropic-key");
 		} finally {
@@ -743,15 +746,12 @@ describe("InProcessEngine getProviderConfig coverage", () => {
 		}
 	});
 
-	test("getProviderConfig returns correct config for openai", () => {
+	test("openai config returns correct api and key", () => {
 		const originalKey = process.env.OPENAI_API_KEY;
 		process.env.OPENAI_API_KEY = "test-openai-key";
 
 		try {
-			const engine = new InProcessEngine(true, "openai", "gpt-4");
-			// @ts-expect-error - accessing private method
-			const config = engine.getProviderConfig();
-
+			const config = PROVIDER_CONFIGS["openai"];
 			expect(config.api).toBe("openai-completions");
 			expect(config.getApiKey()).toBe("test-openai-key");
 		} finally {
@@ -760,15 +760,12 @@ describe("InProcessEngine getProviderConfig coverage", () => {
 		}
 	});
 
-	test("getProviderConfig returns correct config for google", () => {
+	test("google config returns correct api and key", () => {
 		const originalKey = process.env.GOOGLE_API_KEY;
 		process.env.GOOGLE_API_KEY = "test-google-key";
 
 		try {
-			const engine = new InProcessEngine(true, "google", "gemini-pro");
-			// @ts-expect-error - accessing private method
-			const config = engine.getProviderConfig();
-
+			const config = PROVIDER_CONFIGS["google"];
 			expect(config.api).toBe("google-generative-ai");
 			expect(config.getApiKey()).toBe("test-google-key");
 		} finally {
@@ -777,15 +774,12 @@ describe("InProcessEngine getProviderConfig coverage", () => {
 		}
 	});
 
-	test("getProviderConfig returns correct config for gemini", () => {
+	test("gemini config returns correct api and key", () => {
 		const originalKey = process.env.GEMINI_API_KEY;
 		process.env.GEMINI_API_KEY = "test-gemini-key";
 
 		try {
-			const engine = new InProcessEngine(true, "gemini", "gemini-1.5-pro");
-			// @ts-expect-error - accessing private method
-			const config = engine.getProviderConfig();
-
+			const config = PROVIDER_CONFIGS["gemini"];
 			expect(config.api).toBe("google-generative-ai");
 			expect(config.getApiKey()).toBe("test-gemini-key");
 		} finally {
@@ -794,15 +788,12 @@ describe("InProcessEngine getProviderConfig coverage", () => {
 		}
 	});
 
-	test("getProviderConfig returns correct config for openrouter", () => {
+	test("openrouter config returns correct api, baseUrl, and key", () => {
 		const originalKey = process.env.OPENROUTER_API_KEY;
 		process.env.OPENROUTER_API_KEY = "test-openrouter-key";
 
 		try {
-			const engine = new InProcessEngine(true, "openrouter", "anthropic/claude-3-opus");
-			// @ts-expect-error - accessing private method
-			const config = engine.getProviderConfig();
-
+			const config = PROVIDER_CONFIGS["openrouter"];
 			expect(config.api).toBe("openai-completions");
 			expect(config.baseUrl).toBe("https://openrouter.ai/api/v1");
 			expect(config.getApiKey()).toBe("test-openrouter-key");
@@ -811,232 +802,121 @@ describe("InProcessEngine getProviderConfig coverage", () => {
 			else delete process.env.OPENROUTER_API_KEY;
 		}
 	});
-
-	test("getProviderConfig returns fallback config for unknown provider with LLM_API_KEY", () => {
-		const originalLlmKey = process.env.LLM_API_KEY;
-		const originalApiKey = process.env.API_KEY;
-		process.env.LLM_API_KEY = "test-llm-key";
-		delete process.env.API_KEY;
-
-		try {
-			const engine = new InProcessEngine(true, "unknown-provider", "model-x");
-			// @ts-expect-error - accessing private method
-			const config = engine.getProviderConfig();
-
-			expect(config.api).toBe("openai-completions");
-			expect(config.getApiKey()).toBe("test-llm-key");
-		} finally {
-			if (originalLlmKey) process.env.LLM_API_KEY = originalLlmKey;
-			else delete process.env.LLM_API_KEY;
-			if (originalApiKey) process.env.API_KEY = originalApiKey;
-		}
-	});
-
-	test("getProviderConfig returns fallback config for unknown provider with API_KEY", () => {
-		const originalLlmKey = process.env.LLM_API_KEY;
-		const originalApiKey = process.env.API_KEY;
-		delete process.env.LLM_API_KEY;
-		process.env.API_KEY = "test-api-key";
-
-		try {
-			const engine = new InProcessEngine(true, "custom-provider", "model-y");
-			// @ts-expect-error - accessing private method
-			const config = engine.getProviderConfig();
-
-			expect(config.api).toBe("openai-completions");
-			expect(config.getApiKey()).toBe("test-api-key");
-		} finally {
-			if (originalLlmKey) process.env.LLM_API_KEY = originalLlmKey;
-			else delete process.env.LLM_API_KEY;
-			if (originalApiKey) process.env.API_KEY = originalApiKey;
-		}
-	});
-
-	test("getProviderConfig returns fallback config with LLM_BASE_URL", () => {
-		const originalLlmKey = process.env.LLM_API_KEY;
-		const originalUrl = process.env.LLM_BASE_URL;
-		process.env.LLM_API_KEY = "test-llm-key";
-		process.env.LLM_BASE_URL = "https://custom.api.com/v1";
-
-		try {
-			const engine = new InProcessEngine(true, "custom-provider", "model-z");
-			// @ts-expect-error - accessing private method
-			const config = engine.getProviderConfig();
-
-			expect(config.api).toBe("openai-completions");
-			expect(config.baseUrl).toBe("https://custom.api.com/v1");
-		} finally {
-			if (originalLlmKey) process.env.LLM_API_KEY = originalLlmKey;
-			else delete process.env.LLM_API_KEY;
-			if (originalUrl) process.env.LLM_BASE_URL = originalUrl;
-			else delete process.env.LLM_BASE_URL;
-		}
-	});
 });
 
-describe("InProcessEngine buildModel coverage", () => {
-	test("buildModel creates correct Model for anthropic", () => {
+describe("resolveProviderApiKey", () => {
+	test("resolves anthropic API key", () => {
 		const originalKey = process.env.ANTHROPIC_API_KEY;
-		process.env.ANTHROPIC_API_KEY = "test-key";
+		process.env.ANTHROPIC_API_KEY = "test-anthropic-key";
 
 		try {
-			const engine = new InProcessEngine(true, "anthropic", "claude-sonnet-4-6");
-			// @ts-expect-error - accessing private method
-			const model = engine.buildModel();
-
-			expect(model.id).toBe("claude-sonnet-4-6");
-			expect(model.name).toBe("claude-sonnet-4-6");
-			expect(model.provider).toBe("anthropic");
-			expect(model.api).toBe("anthropic-messages");
-			expect(model.contextWindow).toBe(200000);
-			expect(model.maxTokens).toBe(8192);
+			expect(resolveProviderApiKey("anthropic")).toBe("test-anthropic-key");
 		} finally {
 			if (originalKey) process.env.ANTHROPIC_API_KEY = originalKey;
 			else delete process.env.ANTHROPIC_API_KEY;
 		}
 	});
 
-	test("buildModel creates correct Model for openai", () => {
+	test("resolves openai API key", () => {
 		const originalKey = process.env.OPENAI_API_KEY;
-		process.env.OPENAI_API_KEY = "test-key";
+		process.env.OPENAI_API_KEY = "test-openai-key";
 
 		try {
-			const engine = new InProcessEngine(true, "openai", "gpt-4");
-			// @ts-expect-error - accessing private method
-			const model = engine.buildModel();
-
-			expect(model.provider).toBe("openai");
-			expect(model.api).toBe("openai-completions");
+			expect(resolveProviderApiKey("openai")).toBe("test-openai-key");
 		} finally {
 			if (originalKey) process.env.OPENAI_API_KEY = originalKey;
 			else delete process.env.OPENAI_API_KEY;
 		}
 	});
 
-	test("buildModel creates correct Model for google", () => {
+	test("resolves google API key", () => {
 		const originalKey = process.env.GOOGLE_API_KEY;
-		process.env.GOOGLE_API_KEY = "test-key";
+		process.env.GOOGLE_API_KEY = "test-google-key";
 
 		try {
-			const engine = new InProcessEngine(true, "google", "gemini-pro");
-			// @ts-expect-error - accessing private method
-			const model = engine.buildModel();
-
-			expect(model.provider).toBe("google");
-			expect(model.api).toBe("google-generative-ai");
+			expect(resolveProviderApiKey("google")).toBe("test-google-key");
 		} finally {
 			if (originalKey) process.env.GOOGLE_API_KEY = originalKey;
 			else delete process.env.GOOGLE_API_KEY;
 		}
 	});
 
-	test("buildModel creates correct Model for gemini", () => {
+	test("resolves gemini API key", () => {
 		const originalKey = process.env.GEMINI_API_KEY;
-		process.env.GEMINI_API_KEY = "test-key";
+		process.env.GEMINI_API_KEY = "test-gemini-key";
 
 		try {
-			const engine = new InProcessEngine(true, "gemini", "gemini-1.5-pro");
-			// @ts-expect-error - accessing private method
-			const model = engine.buildModel();
-
-			expect(model.provider).toBe("gemini");
-			expect(model.api).toBe("google-generative-ai");
+			expect(resolveProviderApiKey("gemini")).toBe("test-gemini-key");
 		} finally {
 			if (originalKey) process.env.GEMINI_API_KEY = originalKey;
 			else delete process.env.GEMINI_API_KEY;
 		}
 	});
 
-	test("buildModel creates correct Model for openrouter", () => {
+	test("resolves openrouter API key", () => {
 		const originalKey = process.env.OPENROUTER_API_KEY;
-		process.env.OPENROUTER_API_KEY = "test-key";
+		process.env.OPENROUTER_API_KEY = "test-openrouter-key";
 
 		try {
-			const engine = new InProcessEngine(true, "openrouter", "anthropic/claude-3-opus");
-			// @ts-expect-error - accessing private method
-			const model = engine.buildModel();
-
-			expect(model.provider).toBe("openrouter");
-			expect(model.api).toBe("openai-completions");
-			expect(model.baseUrl).toBe("https://openrouter.ai/api/v1");
+			expect(resolveProviderApiKey("openrouter")).toBe("test-openrouter-key");
 		} finally {
 			if (originalKey) process.env.OPENROUTER_API_KEY = originalKey;
 			else delete process.env.OPENROUTER_API_KEY;
 		}
 	});
 
-	test("buildModel creates Model for unknown provider with LLM_BASE_URL", () => {
-		const originalKey = process.env.LLM_API_KEY;
-		const originalUrl = process.env.LLM_BASE_URL;
-		process.env.LLM_API_KEY = "test-key";
-		process.env.LLM_BASE_URL = "https://custom.api.com/v1";
+	test("falls back to LLM_API_KEY for unknown provider", () => {
+		const originalLlmKey = process.env.LLM_API_KEY;
+		const originalApiKey = process.env.API_KEY;
+		process.env.LLM_API_KEY = "test-llm-key";
+		delete process.env.API_KEY;
 
 		try {
-			const engine = new InProcessEngine(true, "custom-provider", "custom-model");
-			// @ts-expect-error - accessing private method
-			const model = engine.buildModel();
-
-			expect(model.provider).toBe("custom-provider");
-			expect(model.api).toBe("openai-completions");
-			expect(model.baseUrl).toBe("https://custom.api.com/v1");
+			expect(resolveProviderApiKey("unknown-provider")).toBe("test-llm-key");
 		} finally {
-			if (originalKey) process.env.LLM_API_KEY = originalKey;
+			if (originalLlmKey) process.env.LLM_API_KEY = originalLlmKey;
 			else delete process.env.LLM_API_KEY;
-			if (originalUrl) process.env.LLM_BASE_URL = originalUrl;
-			else delete process.env.LLM_BASE_URL;
+			if (originalApiKey) process.env.API_KEY = originalApiKey;
 		}
 	});
 
-	test("buildModel throws when no API key configured", () => {
+	test("falls back to API_KEY for unknown provider", () => {
+		const originalLlmKey = process.env.LLM_API_KEY;
+		const originalApiKey = process.env.API_KEY;
+		delete process.env.LLM_API_KEY;
+		process.env.API_KEY = "test-api-key";
+
+		try {
+			expect(resolveProviderApiKey("custom-provider")).toBe("test-api-key");
+		} finally {
+			if (originalLlmKey) process.env.LLM_API_KEY = originalLlmKey;
+			else delete process.env.LLM_API_KEY;
+			if (originalApiKey) process.env.API_KEY = originalApiKey;
+		}
+	});
+
+	test("returns undefined when no key configured for unknown provider", () => {
+		const originalLlmKey = process.env.LLM_API_KEY;
+		const originalApiKey = process.env.API_KEY;
+		delete process.env.LLM_API_KEY;
+		delete process.env.API_KEY;
+
+		try {
+			expect(resolveProviderApiKey("unknown")).toBeUndefined();
+		} finally {
+			if (originalLlmKey) process.env.LLM_API_KEY = originalLlmKey;
+			if (originalApiKey) process.env.API_KEY = originalApiKey;
+		}
+	});
+
+	test("returns undefined when no key configured for known provider", () => {
 		const originalKey = process.env.ANTHROPIC_API_KEY;
 		delete process.env.ANTHROPIC_API_KEY;
 
 		try {
-			const engine = new InProcessEngine(true, "anthropic", "claude-sonnet-4-6");
-			expect(() => {
-				// @ts-expect-error - accessing private method
-				engine.buildModel();
-			}).toThrow("No API key configured");
+			expect(resolveProviderApiKey("anthropic")).toBeUndefined();
 		} finally {
 			if (originalKey) process.env.ANTHROPIC_API_KEY = originalKey;
-		}
-	});
-
-	test("getProviderConfig returns correct config for anthropic", () => {
-		const originalKey = process.env.ANTHROPIC_API_KEY;
-		process.env.ANTHROPIC_API_KEY = "test-anthropic-key";
-
-		try {
-			const engine = new InProcessEngine(true, "anthropic", "claude-sonnet-4-6");
-			// @ts-expect-error - accessing private method
-			const config = engine.getProviderConfig();
-
-			expect(config.api).toBe("anthropic-messages");
-			expect(config.getApiKey()).toBe("test-anthropic-key");
-		} finally {
-			if (originalKey) process.env.ANTHROPIC_API_KEY = originalKey;
-			else delete process.env.ANTHROPIC_API_KEY;
-		}
-	});
-
-	test("getProviderConfig returns correct config for unknown provider", () => {
-		const originalKey = process.env.LLM_API_KEY;
-		const originalUrl = process.env.LLM_BASE_URL;
-		process.env.LLM_API_KEY = "test-llm-key";
-		delete process.env.LLM_BASE_URL;
-
-		try {
-			const engine = new InProcessEngine(true, "unknown", "model");
-			// @ts-expect-error - accessing private method
-			const config = engine.getProviderConfig();
-
-			expect(config.api).toBe("openai-completions");
-			expect(config.getApiKey()).toBe("test-llm-key");
-			expect(config.baseUrl).toBeUndefined();
-		} finally {
-			if (originalKey) process.env.LLM_API_KEY = originalKey;
-			else delete process.env.LLM_API_KEY;
-			if (originalUrl) process.env.LLM_BASE_URL = originalUrl;
 		}
 	});
 });

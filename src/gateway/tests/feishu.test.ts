@@ -472,6 +472,62 @@ describe("FeishuChannel", () => {
 			await expect(feishu.sendMessage("oc_test12345", "x")).rejects.toThrow("Feishu API error: send bad (code: 99)");
 		});
 
+		test("should throw when updateMessage response is non-ok", async () => {
+			// @ts-expect-error - mock fetch
+			globalThis.fetch = async (input: RequestInfo | URL) => {
+				const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+				if (url.includes("tenant_access_token")) {
+					return {
+						ok: true,
+						json: async () => ({ code: 0, tenant_access_token: "t", expire: 7200 }),
+						text: async () => "OK",
+					} as Response;
+				}
+				return {
+					ok: false,
+					text: async () => "update-failed",
+				} as Response;
+			};
+			await expect(feishu.editMessage("oc_test12345", "om_msg1", "text")).rejects.toThrow(
+				"Feishu API error (updateMessage): update-failed",
+			);
+		});
+
+		test("should throw when updateMessage returns non-zero code", async () => {
+			// @ts-expect-error - mock fetch
+			globalThis.fetch = async (input: RequestInfo | URL) => {
+				const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+				if (url.includes("tenant_access_token")) {
+					return {
+						ok: true,
+						json: async () => ({ code: 0, tenant_access_token: "t", expire: 7200 }),
+						text: async () => "OK",
+					} as Response;
+				}
+				return {
+					ok: true,
+					json: async () => ({ code: 50, msg: "update rejected" }),
+					text: async () => "OK",
+				} as Response;
+			};
+			await expect(feishu.editMessage("oc_test12345", "om_msg1", "text")).rejects.toThrow(
+				"Feishu API error: update rejected (code: 50)",
+			);
+		});
+
+		test("should edit message via updateMessage", async () => {
+			await feishu.editMessage("oc_test12345", "om_msg1", "Updated text");
+
+			const updateCall = mockCalls.find((call) => call.url.includes("messages/om_msg1"));
+			expect(updateCall).toBeDefined();
+			expect(updateCall?.body?.msg_type).toBe("text");
+		});
+
+		test("should set menu commands (no-op for Feishu)", async () => {
+			await feishu.setMenu([{ command: "help", description: "Show help" }]);
+			expect(true).toBe(true);
+		});
+
 		test("should download resource with bearer token", async () => {
 			// @ts-expect-error - mock fetch
 			globalThis.fetch = async (input: RequestInfo | URL) => {

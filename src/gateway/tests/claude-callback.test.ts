@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { mkdir, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { Hono } from "hono";
 import { setChannelForChat } from "@/gateway/channels/chat-channel-map";
@@ -57,8 +58,8 @@ describe("handleClaudeCallback (Hardened)", () => {
 			ipLimit: 200,
 		});
 
-		// Create test IPC directory
-		testIpcDir = `/tmp/test-callback-${Date.now()}`;
+		// Create test IPC directory in home to avoid symlink issues with /tmp on macOS
+		testIpcDir = path.join(os.homedir(), `.test-callback-${Date.now()}`);
 		await mkdir(path.join(testIpcDir, "test-workspace", "responses"), {
 			recursive: true,
 		});
