@@ -19,8 +19,14 @@
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
 import { AgentPersistence } from "@/gateway/persistence";
 import { logger } from "@/packages/logger";
-import { type CompactionConfig, compactMessages, compactMessagesSync, needsCompaction } from "./context-compaction";
-import { EmbeddedAgent, type EmbeddedAgentConfig } from "./embedded-agent";
+import {
+	type CompactionConfig,
+	compactMessages,
+	compactMessagesSync,
+	EmbeddedAgent,
+	type EmbeddedAgentConfig,
+	needsCompaction,
+} from "./agent";
 
 // =============================================================================
 // Types
