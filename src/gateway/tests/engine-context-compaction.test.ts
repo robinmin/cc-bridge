@@ -1,11 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
-import {
-	type CompactionConfig,
-	compactMessages,
-	compactMessagesSync,
-	needsCompaction,
-} from "@/gateway/engine/context-compaction";
+import { type CompactionConfig, compactMessages, compactMessagesSync, needsCompaction } from "@/gateway/engine/agent";
 
 describe("context-compaction", () => {
 	describe("needsCompaction", () => {
