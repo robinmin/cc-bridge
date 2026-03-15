@@ -9,7 +9,13 @@
  */
 
 export {
+	type AgentErrorCategory,
 	type AgentResult,
+	type AgentRunObservability,
+	type AgentTelemetrySpan,
+	type AgentTelemetryTracer,
+	type AgentUsageSnapshot,
+	accumulateUsage,
 	applyToolPolicy,
 	BashTool,
 	type BashToolOptions,
@@ -19,14 +25,17 @@ export {
 	ChatToolPolicy,
 	type CompactionConfig,
 	type CompactionResult,
+	categorizeAgentError,
 	// Context Compaction
 	compactMessages,
 	compactMessagesSync,
 	createBashTool,
 	// Tools
 	createDefaultTools,
+	createObservabilitySnapshot,
 	createReadFileTool,
 	createReadOnlyPolicyPipeline,
+	createRunId,
 	createToolPolicyPipeline,
 	createWebSearchTool,
 	createWriteFileTool,
@@ -34,8 +43,11 @@ export {
 	// Core
 	EmbeddedAgent,
 	type EmbeddedAgentConfig,
+	type EmbeddedAgentObservabilityConfig,
+	type EmbeddedAgentObservabilitySnapshot,
 	// Events
 	EventCollector,
+	finishObservabilityRun,
 	GlobalToolPolicy,
 	isTextContentBlock,
 	// Workspace
@@ -45,10 +57,12 @@ export {
 	type PromptOptions,
 	type ProviderConfig,
 	ReadFileTool,
+	recordSpanEvent,
 	resolveProviderApiKey,
 	// Utils
 	resolveWorkspacePath,
 	SKILL_DIRS,
+	startObservabilityRun,
 	type ToolCallRecord,
 	ToolGranularPolicy,
 	type ToolPolicy,
@@ -58,6 +72,7 @@ export {
 	ToolPolicyPipeline,
 	type ToolPolicyResult,
 	USER_SKILLS_DIR,
+	usageFromPiUsage,
 	WebSearchTool,
 	WorkspaceWatcher,
 	WriteFileTool,
