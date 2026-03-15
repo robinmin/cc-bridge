@@ -39,7 +39,7 @@ mock.module("@/packages/agent/workspace", () => ({
 	},
 }));
 
-import { EmbeddedAgent, PROVIDER_CONFIGS, resolveProviderApiKey } from "@/gateway/engine/embedded-agent";
+import { EmbeddedAgent, PROVIDER_CONFIGS, resolveProviderApiKey } from "@/gateway/engine/agent";
 
 describe("embedded-agent", () => {
 	// Set up API key for tests that need it
