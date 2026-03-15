@@ -52,55 +52,66 @@ export {
 // Engines
 // =============================================================================
 
-export { AgentSessionManager, type AgentSessionManagerConfig } from "./agent-sessions";
-export { ContainerEngine, createContainerEngine, TmuxManagerWrapper } from "./container";
+// Consolidated agent module - re-exports all agent functionality
 export {
+	type AgentResult,
+	applyToolPolicy,
+	BashTool,
+	type BashToolOptions,
+	BOOTSTRAP_FILES,
+	type BootstrapFileName,
+	type ChatPolicyConfig,
+	ChatToolPolicy,
 	type CompactionConfig,
 	type CompactionResult,
+	// Context Compaction
 	compactMessages,
 	compactMessagesSync,
-	needsCompaction,
-} from "./context-compaction";
-export {
-	EmbeddedAgent,
-	type EmbeddedAgentConfig,
-	PROVIDER_CONFIGS,
-	type PromptOptions,
-	type ProviderConfig,
-	resolveProviderApiKey,
-} from "./embedded-agent";
-export { type AgentResult, EventCollector, isTextContentBlock, type ToolCallRecord } from "./event-bridge";
-export { createHostIpcEngine, type HostEngineType, type HostIpcConfig, HostIpcEngine } from "./host-ipc";
-export { InProcessEngine } from "./in-process";
-export {
-	applyToolPolicy,
-	type ChatPolicyConfig,
-	// Policy exports
-	ChatToolPolicy,
 	createBashTool,
+	// Tools
 	createDefaultTools,
 	createReadFileTool,
 	createReadOnlyPolicyPipeline,
 	createToolPolicyPipeline,
 	createWebSearchTool,
 	createWriteFileTool,
+	discoverSkills,
+	// Core
+	EmbeddedAgent,
+	type EmbeddedAgentConfig,
+	// Events
+	EventCollector,
 	GlobalToolPolicy,
+	isTextContentBlock,
+	// Workspace
+	loadWorkspaceBootstrap,
+	needsCompaction,
+	PROVIDER_CONFIGS,
+	type PromptOptions,
+	type ProviderConfig,
+	ReadFileTool,
+	resolveProviderApiKey,
+	// Utils
+	resolveWorkspacePath,
+	SKILL_DIRS,
+	type ToolCallRecord,
 	ToolGranularPolicy,
 	type ToolPolicy,
 	type ToolPolicyAction,
+	// Tool Policy
 	type ToolPolicyConfig,
 	ToolPolicyPipeline,
 	type ToolPolicyResult,
-} from "./tools";
-export {
-	BOOTSTRAP_FILES,
-	type BootstrapFileName,
-	discoverSkills,
-	loadWorkspaceBootstrap,
-	SKILL_DIRS,
 	USER_SKILLS_DIR,
+	WebSearchTool,
 	WorkspaceWatcher,
-} from "./workspace";
+	WriteFileTool,
+} from "./agent";
+export { AgentSessionManager, type AgentSessionManagerConfig } from "./agent-sessions";
+export { ContainerEngine, createContainerEngine, TmuxManagerWrapper } from "./container";
+
+export { createHostIpcEngine, type HostEngineType, type HostIpcConfig, HostIpcEngine } from "./host-ipc";
+export { InProcessEngine } from "./in-process";
 
 // =============================================================================
 // Orchestrator
