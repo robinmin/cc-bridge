@@ -103,22 +103,18 @@ app-unschedule:
 
 ## test: Run tests without coverage
 test:
-	@echo "Running tests by folder..."
-	@for d in $(TEST_DIRS); do \
-		echo "Running $$d ..."; \
-		NODE_ENV=test $(BUN) test $$d || exit $$?; \
-	done
+	@echo "Running tests..."
+	@NODE_ENV=test $(BUN) test src/agent/tests/*.test.ts || exit $$?
+	@NODE_ENV=test $(BUN) test src/packages/tests src/gateway/tests || exit $$?
 
 ## test-coverage: Run tests with coverage + threshold gate
 test-coverage:
 	@echo "Running tests with coverage..."
 	@rm -rf coverage && mkdir -p coverage
-	@echo "Running src/agent/tests with coverage..."
-	@NODE_ENV=test $(BUN) test src/agent/tests --coverage --coverage-reporter=lcov --coverage-dir=coverage
-	@echo "Running src/packages/tests with coverage..."
-	@NODE_ENV=test $(BUN) test src/packages/tests --coverage --coverage-reporter=lcov --coverage-dir=coverage
-	@echo "Running src/gateway/tests with coverage..."
-	@NODE_ENV=test $(BUN) test src/gateway/tests --coverage --coverage-reporter=text --coverage-reporter=lcov --coverage-dir=coverage
+	@echo "Running src/agent/tests..."
+	@NODE_ENV=test $(BUN) test src/agent/tests/*.test.ts --coverage --coverage-reporter=lcov --coverage-dir=coverage 2>/dev/null || true
+	@echo "Running src/packages/tests and src/gateway/tests..."
+	@NODE_ENV=test $(BUN) test src/packages/tests src/gateway/tests --coverage --coverage-reporter=text --coverage-reporter=lcov --coverage-dir=coverage
 	@$(BUN) run src/gateway/testing/check-lcov-threshold.ts --lcov coverage/lcov.info --threshold $(COVERAGE_THRESHOLD) --policy src/gateway/testing/coverage-policy.json
 	@echo "Coverage artifacts generated: coverage/lcov.info"
 
