@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { createReadFileTool } from "@/gateway/engine/tools/read-file";
+import { createReadFileTool } from "@/packages/agent";
 
 describe("tools/read-file", () => {
 	let testWorkspace: string;

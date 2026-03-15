@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import type { AgentEvent, AgentTool } from "@mariozechner/pi-agent-core";
+import type { AgentTool } from "@mariozechner/pi-agent-core";
+import { type Static, Type } from "@mariozechner/pi-ai";
 
 // Mock logger
 mock.module("@/packages/logger", () => ({
@@ -21,24 +22,20 @@ mock.module("./workspace", () => ({
 }));
 
 // Track callbacks for testing
-let capturedOnMaxIterations: (() => void) | undefined;
-let capturedOnImmediate: ((event: AgentEvent) => void) | undefined;
+let capturedOnReload: ((newPrompt: string) => void) | undefined;
 
-// Mock event-bridge
-mock.module("./event-bridge", () => ({
-	EventCollector: class {
-		constructor(config?: { onMaxIterations?: () => void; onImmediate?: (event: AgentEvent) => void }) {
-			if (config?.onMaxIterations) {
-				capturedOnMaxIterations = config.onMaxIterations;
-			}
-			if (config?.onImmediate) {
-				capturedOnImmediate = config.onImmediate;
+// Mock workspace - capture onReload callback
+mock.module("@/packages/agent/workspace", () => ({
+	loadWorkspaceBootstrap: mock(async () => "system prompt"),
+	WorkspaceWatcher: class {
+		constructor(config?: { onReload?: (newPrompt: string) => void }) {
+			if (config?.onReload) {
+				capturedOnReload = config.onReload;
 			}
 		}
-		handleEvent = mock(() => {});
-		toResult = mock(() => ({ output: "", turnCount: 0, aborted: false, toolCalls: [], messages: [] }));
-		triggerMaxIterations = () => capturedOnMaxIterations?.();
-		triggerImmediate = (event: AgentEvent) => capturedOnImmediate?.(event);
+		start = mock(async () => {});
+		dispose = mock(() => {});
+		triggerReload = (newPrompt: string) => capturedOnReload?.(newPrompt);
 	},
 }));
 
@@ -165,6 +162,37 @@ describe("embedded-agent", () => {
 			agent.dispose();
 		});
 
+		test("creates agent with unknown provider using fallback", () => {
+			process.env.LLM_API_KEY = "fallback-key";
+			const agent = new EmbeddedAgent({
+				provider: "unknown-provider",
+				model: "test-model",
+				workspaceDir: "/tmp/test",
+			});
+			expect(agent).toBeDefined();
+			agent.dispose();
+			delete process.env.LLM_API_KEY;
+		});
+
+		test("creates agent with tools in constructor", () => {
+			const mockTool: AgentTool<unknown> = {
+				name: "test",
+				label: "Test",
+				description: "A test tool",
+				parameters: Type.Object({}) as Static<typeof Type.Object<object>>,
+				execute: async () => ({ content: [], details: undefined }),
+			};
+			const agent = new EmbeddedAgent({
+				provider: "anthropic",
+				model: "claude-3-5-sonnet-20241022",
+				workspaceDir: "/tmp/test",
+				tools: [mockTool],
+			});
+			expect(agent).toBeDefined();
+			expect(agent.getTools().length).toBe(1);
+			agent.dispose();
+		});
+
 		test("initializes with workspace", async () => {
 			const agent = new EmbeddedAgent({
 				provider: "anthropic",
@@ -195,6 +223,26 @@ describe("embedded-agent", () => {
 			});
 			await agent.initialize();
 			await agent.initialize();
+			agent.dispose();
+		});
+
+		test("hot reload updates system prompt via onReload callback", async () => {
+			const agent = new EmbeddedAgent({
+				provider: "anthropic",
+				model: "claude-3-5-sonnet-20241022",
+				workspaceDir: "/tmp/test",
+			});
+			await agent.initialize();
+			const _initialPrompt = agent.getSystemPrompt();
+
+			// Trigger the reload callback (simulates workspace file change)
+			// @ts-expect-error - accessing internal trigger method from mock
+			const watcher = agent["watcher"];
+			if (watcher?.triggerReload) {
+				watcher.triggerReload("new system prompt");
+			}
+
+			expect(agent.getSystemPrompt()).toBe("new system prompt");
 			agent.dispose();
 		});
 
@@ -340,6 +388,28 @@ describe("embedded-agent", () => {
 			agent.dispose();
 		});
 
+		test("queueFollowUp adds to queue when running", async () => {
+			const agent = new EmbeddedAgent({
+				provider: "anthropic",
+				model: "claude-3-5-sonnet-20241022",
+				workspaceDir: "/tmp/test",
+			});
+			await agent.initialize();
+
+			// Manually set promptRunning to true to test queueing
+			// @ts-expect-error - accessing private property
+			agent.promptRunning = true;
+
+			// Should not throw when running
+			agent.queueFollowUp("follow-up message");
+
+			// @ts-expect-error - accessing private property
+			const queue = agent.followUpQueue;
+			expect(queue).toContain("follow-up message");
+
+			agent.dispose();
+		});
+
 		test("drainFollowUpQueue returns empty array", () => {
 			const agent = new EmbeddedAgent({
 				provider: "anthropic",
@@ -358,6 +428,17 @@ describe("embedded-agent", () => {
 				workspaceDir: "/tmp/test",
 			});
 			await agent.waitForIdle();
+			agent.dispose();
+		});
+
+		test("getRawAgent returns the underlying agent", () => {
+			const agent = new EmbeddedAgent({
+				provider: "anthropic",
+				model: "claude-3-5-sonnet-20241022",
+				workspaceDir: "/tmp/test",
+			});
+			const rawAgent = agent.getRawAgent();
+			expect(rawAgent).toBeDefined();
 			agent.dispose();
 		});
 
@@ -390,6 +471,21 @@ describe("embedded-agent", () => {
 			});
 			await agent.initialize();
 			const result = await agent.prompt("test", { timeoutMs: 60000 });
+			expect(result).toBeDefined();
+			agent.dispose();
+		});
+
+		// Test that triggers timeout handler code path
+		test("timeout handler executes when timeout occurs", async () => {
+			const agent = new EmbeddedAgent({
+				provider: "anthropic",
+				model: "claude-3-5-sonnet-20241022",
+				workspaceDir: "/tmp/test",
+			});
+			await agent.initialize();
+
+			// Use a very short timeout that will expire during the test
+			const result = await agent.prompt("test", { timeoutMs: 1 });
 			expect(result).toBeDefined();
 			agent.dispose();
 		});

@@ -9,7 +9,7 @@ import {
 	ToolGranularPolicy,
 	type ToolPolicyConfig,
 	ToolPolicyPipeline,
-} from "@/gateway/engine/tools/policy";
+} from "@/packages/agent";
 
 describe("tools/policy", () => {
 	describe("GlobalToolPolicy", () => {

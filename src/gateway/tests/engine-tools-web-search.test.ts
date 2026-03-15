@@ -14,9 +14,9 @@ describe("tools/web-search", () => {
 		globalThis.fetch = originalFetch;
 	});
 
-	describe("tool metadata", () => {
-		test("tool has correct metadata", async () => {
-			const { createWebSearchTool } = await import("@/gateway/engine/tools/web-search");
+	describe("agent package tool metadata", () => {
+		test("agent package tool has correct metadata", async () => {
+			const { createWebSearchTool } = await import("@/packages/agent/tools/web-search");
 			const tool = createWebSearchTool("/tmp/test");
 			expect(tool.name).toBe("web_search");
 			expect(tool.label).toBe("Web Search");
@@ -27,7 +27,7 @@ describe("tools/web-search", () => {
 
 	describe("abort signal", () => {
 		test("handles pre-aborted signal", async () => {
-			const { createWebSearchTool } = await import("@/gateway/engine/tools/web-search");
+			const { createWebSearchTool } = await import("@/packages/agent/tools/web-search");
 			const tool = createWebSearchTool("/tmp/test");
 			const controller = new AbortController();
 			controller.abort();
@@ -37,7 +37,7 @@ describe("tools/web-search", () => {
 
 	describe("successful search", () => {
 		test("parses search results from HTML", async () => {
-			const { createWebSearchTool } = await import("@/gateway/engine/tools/web-search");
+			const { createWebSearchTool } = await import("@/packages/agent/tools/web-search");
 
 			const htmlContent = `
 				<div class="result">
@@ -63,7 +63,7 @@ describe("tools/web-search", () => {
 		});
 
 		test("handles DuckDuckGo URL redirect (uddg parameter)", async () => {
-			const { createWebSearchTool } = await import("@/gateway/engine/tools/web-search");
+			const { createWebSearchTool } = await import("@/packages/agent/tools/web-search");
 
 			const htmlContent = `
 				<div class="result">
@@ -82,7 +82,7 @@ describe("tools/web-search", () => {
 		});
 
 		test("strips HTML tags from titles and snippets", async () => {
-			const { createWebSearchTool } = await import("@/gateway/engine/tools/web-search");
+			const { createWebSearchTool } = await import("@/packages/agent/tools/web-search");
 
 			const htmlContent = `
 				<div class="result">
@@ -102,7 +102,7 @@ describe("tools/web-search", () => {
 		});
 
 		test("decodes HTML entities", async () => {
-			const { createWebSearchTool } = await import("@/gateway/engine/tools/web-search");
+			const { createWebSearchTool } = await import("@/packages/agent/tools/web-search");
 
 			const htmlContent = `
 				<div class="result">
@@ -122,7 +122,7 @@ describe("tools/web-search", () => {
 		});
 
 		test("handles no results", async () => {
-			const { createWebSearchTool } = await import("@/gateway/engine/tools/web-search");
+			const { createWebSearchTool } = await import("@/packages/agent/tools/web-search");
 
 			globalThis.fetch = mock(() => Promise.resolve(new Response("<html></html>", { status: 200 })));
 
@@ -134,7 +134,7 @@ describe("tools/web-search", () => {
 		});
 
 		test("handles results without snippets", async () => {
-			const { createWebSearchTool } = await import("@/gateway/engine/tools/web-search");
+			const { createWebSearchTool } = await import("@/packages/agent/tools/web-search");
 
 			const htmlContent = `
 				<div class="result">
@@ -152,7 +152,7 @@ describe("tools/web-search", () => {
 		});
 
 		test("caps results at MAX_RESULTS (8)", async () => {
-			const { createWebSearchTool } = await import("@/gateway/engine/tools/web-search");
+			const { createWebSearchTool } = await import("@/packages/agent/tools/web-search");
 
 			let htmlContent = "";
 			for (let i = 1; i <= 15; i++) {
@@ -179,7 +179,7 @@ describe("tools/web-search", () => {
 
 	describe("HTTP error handling", () => {
 		test("handles non-ok HTTP 500 response", async () => {
-			const { createWebSearchTool } = await import("@/gateway/engine/tools/web-search");
+			const { createWebSearchTool } = await import("@/packages/agent/tools/web-search");
 
 			globalThis.fetch = mock(() => Promise.resolve(new Response("Server Error", { status: 500 })));
 
@@ -191,7 +191,7 @@ describe("tools/web-search", () => {
 		});
 
 		test("handles non-ok HTTP 403 response", async () => {
-			const { createWebSearchTool } = await import("@/gateway/engine/tools/web-search");
+			const { createWebSearchTool } = await import("@/packages/agent/tools/web-search");
 
 			globalThis.fetch = mock(() => Promise.resolve(new Response("Forbidden", { status: 403 })));
 
@@ -205,7 +205,7 @@ describe("tools/web-search", () => {
 
 	describe("fetch error handling", () => {
 		test("handles network failure", async () => {
-			const { createWebSearchTool } = await import("@/gateway/engine/tools/web-search");
+			const { createWebSearchTool } = await import("@/packages/agent/tools/web-search");
 
 			globalThis.fetch = mock(() => Promise.reject(new TypeError("Network error")));
 
@@ -217,7 +217,7 @@ describe("tools/web-search", () => {
 		});
 
 		test("handles non-Error rejection", async () => {
-			const { createWebSearchTool } = await import("@/gateway/engine/tools/web-search");
+			const { createWebSearchTool } = await import("@/packages/agent/tools/web-search");
 
 			globalThis.fetch = mock(() => Promise.reject("string error"));
 
@@ -231,7 +231,7 @@ describe("tools/web-search", () => {
 
 	describe("abort during fetch", () => {
 		test("re-throws AbortError without wrapping", async () => {
-			const { createWebSearchTool } = await import("@/gateway/engine/tools/web-search");
+			const { createWebSearchTool } = await import("@/packages/agent/tools/web-search");
 
 			// Create a never-resolving fetch
 			const controller = new AbortController();
@@ -254,7 +254,7 @@ describe("tools/web-search", () => {
 
 	describe("fetch configuration", () => {
 		test("sends correct URL and headers", async () => {
-			const { createWebSearchTool } = await import("@/gateway/engine/tools/web-search");
+			const { createWebSearchTool } = await import("@/packages/agent/tools/web-search");
 
 			let capturedUrl = "";
 			let capturedHeaders: Record<string, string> = {};
@@ -276,7 +276,7 @@ describe("tools/web-search", () => {
 
 	describe("details field", () => {
 		test("details is always undefined", async () => {
-			const { createWebSearchTool } = await import("@/gateway/engine/tools/web-search");
+			const { createWebSearchTool } = await import("@/packages/agent/tools/web-search");
 
 			globalThis.fetch = mock(() => Promise.resolve(new Response("<html></html>", { status: 200 })));
 

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { createWriteFileTool } from "@/gateway/engine/tools/write-file";
+import { createWriteFileTool } from "@/packages/agent";
 
 describe("tools/write-file", () => {
 	let testWorkspace: string;

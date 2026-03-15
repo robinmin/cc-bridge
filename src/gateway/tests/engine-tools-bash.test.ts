@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { createBashTool } from "@/gateway/engine/tools/bash";
+import { createBashTool } from "@/packages/agent";
 
 // Short timeout for testing the timeout path
 const TEST_TIMEOUT_MS = 50;

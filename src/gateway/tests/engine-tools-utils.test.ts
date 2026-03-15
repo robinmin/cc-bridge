@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { resolveWorkspacePath } from "@/gateway/engine/tools/utils";
+import { resolveWorkspacePath } from "@/packages/agent";
 
 describe("tools/utils", () => {
 	let testWorkspace: string;
