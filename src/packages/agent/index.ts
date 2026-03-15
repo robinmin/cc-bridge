@@ -32,6 +32,31 @@ export {
 } from "./core/embedded-agent";
 export { type AgentResult, EventCollector, isTextContentBlock, type ToolCallRecord } from "./core/event-bridge";
 export {
+	type AgentErrorCategory,
+	type AgentRunObservability,
+	type AgentTelemetrySpan,
+	type AgentTelemetryTracer,
+	type AgentUsageSnapshot,
+	accumulateUsage,
+	categorizeAgentError,
+	cloneUsageSnapshot,
+	createObservabilitySnapshot,
+	createRunId,
+	type EmbeddedAgentObservabilityConfig,
+	type EmbeddedAgentObservabilitySnapshot,
+	finishObservabilityRun,
+	type ObservabilityRunContext,
+	recordSpanEvent,
+	startObservabilityRun,
+	usageFromPiUsage,
+} from "./core/observability";
+export {
+	type AgentOtelConfig,
+	type AgentOtelService,
+	createAgentOtelService,
+	createOtelConfigFromEnv,
+} from "./core/otel";
+export {
 	BOOTSTRAP_FILES,
 	type BootstrapFileName,
 	discoverSkills,
