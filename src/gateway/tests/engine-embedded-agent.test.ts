@@ -451,6 +451,58 @@ describe("embedded-agent", () => {
 			agent.dispose();
 		});
 
+		test("getObservabilitySnapshot returns initial state", () => {
+			const agent = new EmbeddedAgent({
+				sessionId: "test-session",
+				provider: "anthropic",
+				model: "claude-3-5-sonnet-20241022",
+				workspaceDir: "/tmp/test",
+			});
+			const snapshot = agent.getObservabilitySnapshot();
+			expect(snapshot).toBeDefined();
+			expect(snapshot.sessionId).toBe("test-session");
+			expect(snapshot.provider).toBe("anthropic");
+			expect(snapshot.model).toBe("claude-3-5-sonnet-20241022");
+			expect(snapshot.activeRun).toBeUndefined();
+			expect(snapshot.lastRun).toBeUndefined();
+			expect(snapshot.totals).toBeDefined();
+			agent.dispose();
+		});
+
+		test("getObservabilitySnapshot after prompt has activeRun", async () => {
+			const agent = new EmbeddedAgent({
+				sessionId: "test-session-active",
+				provider: "anthropic",
+				model: "claude-3-5-sonnet-20241022",
+				workspaceDir: "/tmp/test",
+			});
+			await agent.initialize();
+
+			// Mock the internal agent to hang but still resolve
+			const rawAgent = agent.getRawAgent();
+			const originalPrompt = rawAgent.prompt;
+			// biome-ignore lint/suspicious/noExplicitAny: Testing internal behavior
+			(rawAgent as any).prompt = async function (...args: unknown[]) {
+				// Start a long-running operation but resolve normally after
+				await new Promise((r) => setTimeout(r, 200));
+				return originalPrompt.apply(this, args);
+			};
+
+			// Start a prompt to create activeRun
+			const promptPromise = agent.prompt("test");
+
+			// Wait for observability to start but before it finishes
+			await new Promise((r) => setTimeout(r, 50));
+
+			const snapshot = agent.getObservabilitySnapshot();
+			expect(snapshot).toBeDefined();
+			expect(snapshot.activeRun).toBeDefined();
+
+			// Wait for prompt to complete
+			await promptPromise;
+			agent.dispose();
+		});
+
 		test("prompt accepts maxIterations option", async () => {
 			const agent = new EmbeddedAgent({
 				provider: "anthropic",
@@ -484,8 +536,18 @@ describe("embedded-agent", () => {
 			});
 			await agent.initialize();
 
-			// Use a very short timeout that will expire during the test
-			const result = await agent.prompt("test", { timeoutMs: 1 });
+			// Get raw agent and make it hang longer than our timeout
+			const rawAgent = agent.getRawAgent();
+			// biome-ignore lint/suspicious/noExplicitAny: Testing internal behavior
+			(rawAgent as any).prompt = async (_args: unknown[]) => {
+				// Hang longer than timeout (100ms > 10ms timeout)
+				await new Promise((r) => setTimeout(r, 100));
+				// Don't call original - timeout will abort
+			};
+
+			// Use short timeout that will expire while agent is hanging
+			const result = await agent.prompt("test", { timeoutMs: 10 });
+			// Result should still be defined - the timeout callback fires
 			expect(result).toBeDefined();
 			agent.dispose();
 		});
