@@ -1,6 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { AgentEvent, AgentMessage } from "@mariozechner/pi-agent-core";
-import { EventCollector, isTextContentBlock } from "@/gateway/engine/event-bridge";
+import { EventCollector, isTextContentBlock } from "@/gateway/engine/agent";
 
 describe("event-bridge", () => {
 	describe("isTextContentBlock", () => {
