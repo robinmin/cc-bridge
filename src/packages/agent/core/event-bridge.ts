@@ -7,7 +7,13 @@
  */
 
 import type { AgentEvent, AgentMessage } from "@mariozechner/pi-agent-core";
-import type { TextContent } from "@mariozechner/pi-ai";
+import type { AssistantMessage, TextContent } from "@mariozechner/pi-ai";
+import {
+	type AgentRunObservability,
+	type AgentUsageSnapshot,
+	accumulateUsage,
+	cloneUsageSnapshot,
+} from "./observability";
 
 /**
  * Collected result from an agent run
@@ -23,6 +29,8 @@ export interface AgentResult {
 	toolCalls: ToolCallRecord[];
 	/** Final messages from the agent */
 	messages: AgentMessage[];
+	/** Per-run observability snapshot */
+	observability?: AgentRunObservability;
 }
 
 /**
@@ -85,6 +93,20 @@ export class EventCollector {
 	private toolCalls: ToolCallRecord[] = [];
 	private finalMessages: AgentMessage[] = [];
 	private textParts: string[] = [];
+	private usageTotals: AgentUsageSnapshot = {
+		input: 0,
+		output: 0,
+		cacheRead: 0,
+		cacheWrite: 0,
+		totalTokens: 0,
+		cost: {
+			input: 0,
+			output: 0,
+			cacheRead: 0,
+			cacheWrite: 0,
+			total: 0,
+		},
+	};
 
 	private readonly maxIterations: number;
 	private readonly onMaxIterations?: () => void;
@@ -130,6 +152,9 @@ export class EventCollector {
 				if (text) {
 					this.textParts.push(text);
 				}
+				if (event.message.role === "assistant") {
+					accumulateUsage(this.usageTotals, (event.message as AssistantMessage).usage);
+				}
 				break;
 			}
 
@@ -163,6 +188,17 @@ export class EventCollector {
 			aborted: this.aborted,
 			toolCalls: this.toolCalls,
 			messages: this.finalMessages,
+		};
+	}
+
+	getUsageTotals(): AgentUsageSnapshot {
+		return cloneUsageSnapshot(this.usageTotals);
+	}
+
+	attachObservability(run: AgentRunObservability): AgentResult {
+		return {
+			...this.toResult(),
+			observability: run,
 		};
 	}
 }

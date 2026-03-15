@@ -18,6 +18,16 @@ import { Agent, type AgentEvent, type AgentOptions, type AgentTool } from "@mari
 import type { Api, Model, UserMessage } from "@mariozechner/pi-ai";
 import { logger } from "@/packages/logger";
 import { type AgentResult, EventCollector } from "./event-bridge";
+import {
+	categorizeAgentError,
+	createObservabilitySnapshot,
+	type EmbeddedAgentObservabilityConfig,
+	type EmbeddedAgentObservabilitySnapshot,
+	finishObservabilityRun,
+	recordSpanEvent,
+	startObservabilityRun,
+} from "./observability";
+import { type AgentOtelConfig, type AgentOtelService, createAgentOtelService } from "./otel";
 import { loadWorkspaceBootstrap, WorkspaceWatcher } from "./workspace";
 
 // =============================================================================
@@ -89,6 +99,10 @@ export interface EmbeddedAgentConfig {
 	model: string;
 	/** Tools to register on the agent */
 	tools?: AgentTool<unknown>[];
+	/** Optional observability hooks and tracing adapter */
+	observability?: EmbeddedAgentObservabilityConfig;
+	/** OpenTelemetry configuration */
+	otel?: AgentOtelConfig;
 }
 
 /**
@@ -127,9 +141,23 @@ export class EmbeddedAgent {
 	private promptRunning = false;
 	private followUpQueue: string[] = [];
 	private watcher: WorkspaceWatcher | null = null;
+	private readonly observabilityConfig: EmbeddedAgentObservabilityConfig;
+	private readonly observability: EmbeddedAgentObservabilitySnapshot;
+	private readonly otelService: AgentOtelService | null;
 
 	constructor(config: EmbeddedAgentConfig) {
 		this.config = config;
+
+		// Create OTEL service if configured
+		this.otelService = config.otel ? createAgentOtelService(config.otel) : null;
+
+		// Build observability config with OTEL service
+		this.observabilityConfig = {
+			...config.observability,
+			otelService: this.otelService ?? config.observability?.otelService,
+		};
+
+		this.observability = createObservabilitySnapshot(config.sessionId, config.provider, config.model);
 
 		// Resolve provider config for getApiKey
 		const providerConfig = this.getProviderConfig();
@@ -227,6 +255,8 @@ export class EmbeddedAgent {
 		const timeoutMs = options?.timeoutMs ?? 120000;
 		const onEvent = options?.onEvent;
 		const onImmediate = options?.onImmediate;
+		const runContext = startObservabilityRun(this.observability, message.length, this.observabilityConfig);
+		let timedOut = false;
 
 		this.promptRunning = true;
 
@@ -243,11 +273,13 @@ export class EmbeddedAgent {
 		// Subscribe to events BEFORE calling prompt
 		const unsub = this.agent.subscribe((event: AgentEvent) => {
 			collector.handleEvent(event);
+			recordSpanEvent(runContext.span, event);
 			onEvent?.(event);
 		});
 
 		// Set up timeout via AbortController
 		const timeoutHandle = setTimeout(() => {
+			timedOut = true;
 			logger.warn({ sessionId: this.config.sessionId, timeoutMs }, "Agent prompt timed out, aborting");
 			this.agent.abort();
 		}, timeoutMs);
@@ -255,7 +287,52 @@ export class EmbeddedAgent {
 		try {
 			// Agent.prompt() returns Promise<void> - loop runs internally
 			await this.agent.prompt(message);
-			return collector.toResult();
+			const result = collector.toResult();
+			const run = finishObservabilityRun({
+				snapshot: this.observability,
+				context: runContext,
+				outputLength: result.output.length,
+				turnCount: result.turnCount,
+				toolCallCount: result.toolCalls.length,
+				toolErrorCount: result.toolCalls.filter((toolCall) => toolCall.isError).length,
+				aborted: result.aborted,
+				usage: collector.getUsageTotals(),
+				errorCategory: result.aborted ? (timedOut ? "timeout" : "max_iterations") : undefined,
+				config: this.observabilityConfig,
+			});
+			logger.info(
+				{
+					sessionId: this.config.sessionId,
+					runId: run.runId,
+					durationMs: run.durationMs,
+					turnCount: run.turnCount,
+					toolCallCount: run.toolCallCount,
+					toolErrorCount: run.toolErrorCount,
+					totalTokens: run.usage.totalTokens,
+					totalCost: run.usage.cost.total,
+				},
+				"EmbeddedAgent prompt completed",
+			);
+			return {
+				...result,
+				observability: run,
+			};
+		} catch (error) {
+			runContext.span.recordException?.(error);
+			const category = categorizeAgentError(error);
+			finishObservabilityRun({
+				snapshot: this.observability,
+				context: runContext,
+				outputLength: 0,
+				turnCount: collector.toResult().turnCount,
+				toolCallCount: collector.toResult().toolCalls.length,
+				toolErrorCount: collector.toResult().toolCalls.filter((toolCall) => toolCall.isError).length,
+				aborted: category === "timeout" || category === "aborted" || category === "max_iterations",
+				usage: collector.getUsageTotals(),
+				errorCategory: category,
+				config: this.observabilityConfig,
+			});
+			throw error;
 		} finally {
 			clearTimeout(timeoutHandle);
 			unsub();
@@ -283,10 +360,11 @@ export class EmbeddedAgent {
 		this.agent.abort();
 	}
 
-	/** Clean up resources (watchers, etc.) */
-	dispose(): void {
+	/** Clean up resources (watchers, OTEL service, etc.) */
+	async dispose(): Promise<void> {
 		this.watcher?.dispose();
 		this.watcher = null;
+		await this.otelService?.shutdown();
 	}
 
 	/** Check if a prompt is currently running */
@@ -317,6 +395,33 @@ export class EmbeddedAgent {
 		const messages = [...this.followUpQueue];
 		this.followUpQueue = [];
 		return messages;
+	}
+
+	/**
+	 * Get cumulative per-session observability metrics.
+	 */
+	getObservabilitySnapshot(): EmbeddedAgentObservabilitySnapshot {
+		return {
+			...this.observability,
+			activeRun: this.observability.activeRun ? { ...this.observability.activeRun } : undefined,
+			lastRun: this.observability.lastRun
+				? {
+						...this.observability.lastRun,
+						usage: {
+							...this.observability.lastRun.usage,
+							cost: { ...this.observability.lastRun.usage.cost },
+						},
+					}
+				: undefined,
+			totals: {
+				...this.observability.totals,
+				usage: {
+					...this.observability.totals.usage,
+					cost: { ...this.observability.totals.usage.cost },
+				},
+				errorsByCategory: { ...this.observability.totals.errorsByCategory },
+			},
+		};
 	}
 
 	/**
