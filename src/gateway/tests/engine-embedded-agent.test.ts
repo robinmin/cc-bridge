@@ -24,8 +24,8 @@ mock.module("./workspace", () => ({
 // Track callbacks for testing
 let capturedOnReload: ((newPrompt: string) => void) | undefined;
 
-// Mock workspace - capture onReload callback
-mock.module("@/packages/agent/workspace", () => ({
+// Mock workspace - capture onReload callback (updated path for core/ reorganization)
+mock.module("@/packages/agent/core/workspace", () => ({
 	loadWorkspaceBootstrap: mock(async () => "system prompt"),
 	WorkspaceWatcher: class {
 		constructor(config?: { onReload?: (newPrompt: string) => void }) {
