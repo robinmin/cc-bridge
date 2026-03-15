@@ -13,10 +13,15 @@
 import path from "node:path";
 import { GATEWAY_CONSTANTS } from "@/gateway/consts";
 import { logger } from "@/packages/logger";
+import {
+	createDefaultTools,
+	type EmbeddedAgentConfig,
+	type PromptOptions,
+	resolveProviderApiKey,
+	type ToolPolicyConfig,
+} from "./agent";
 import { AgentSessionManager, type AgentSessionManagerConfig } from "./agent-sessions";
 import type { ExecutionRequest, ExecutionResult, IExecutionEngine, LayerHealth } from "./contracts";
-import { type EmbeddedAgentConfig, type PromptOptions, resolveProviderApiKey } from "./embedded-agent";
-import { createDefaultTools, type ToolPolicyConfig } from "./tools";
 
 /**
  * In-process execution engine using EmbeddedAgent.
