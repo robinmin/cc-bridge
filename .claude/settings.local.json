@@ -12,7 +12,8 @@
 
       "Bash(tasks:*)",
       "Bash(make:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(ast-grep:*)"
     ]
   }
 }
