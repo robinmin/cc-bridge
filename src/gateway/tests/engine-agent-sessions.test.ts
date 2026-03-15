@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import type { EmbeddedAgent } from "@/gateway/engine/agent";
 import { AgentSessionManager } from "@/gateway/engine/agent-sessions";
-import type { EmbeddedAgent } from "@/gateway/engine/embedded-agent";
 
 // Store managers to clean up after each test
 let createdManagers: AgentSessionManager[] = [];
