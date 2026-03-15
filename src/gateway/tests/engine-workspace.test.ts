@@ -9,7 +9,7 @@ import {
 	SKILL_DIRS,
 	USER_SKILLS_DIR,
 	WorkspaceWatcher,
-} from "@/gateway/engine/workspace";
+} from "@/gateway/engine/agent";
 
 describe("workspace", () => {
 	let testWorkspace: string;
