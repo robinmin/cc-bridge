@@ -584,7 +584,7 @@ describe("InProcessEngine additional coverage", () => {
 // InProcessEngine isTextContentBlock Tests
 // =============================================================================
 
-import { isTextContentBlock } from "@/gateway/engine/event-bridge";
+import { isTextContentBlock } from "@/gateway/engine/agent";
 
 describe("isTextContentBlock function", () => {
 	test("returns true for valid text content block", () => {
@@ -729,7 +729,7 @@ describe("InProcessEngine execute", () => {
 // Provider Config & API Key Resolution Tests (moved from InProcessEngine to embedded-agent.ts)
 // =============================================================================
 
-import { PROVIDER_CONFIGS, resolveProviderApiKey } from "@/gateway/engine/embedded-agent";
+import { PROVIDER_CONFIGS, resolveProviderApiKey } from "@/gateway/engine/agent";
 
 describe("PROVIDER_CONFIGS", () => {
 	test("anthropic config returns correct api and key", () => {
