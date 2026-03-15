@@ -21,7 +21,7 @@ export {
 	compactMessages,
 	compactMessagesSync,
 	needsCompaction,
-} from "./context-compaction";
+} from "./core/context-compaction";
 export {
 	EmbeddedAgent,
 	type EmbeddedAgentConfig,
@@ -29,8 +29,8 @@ export {
 	type PromptOptions,
 	type ProviderConfig,
 	resolveProviderApiKey,
-} from "./embedded-agent";
-export { type AgentResult, EventCollector, isTextContentBlock, type ToolCallRecord } from "./event-bridge";
+} from "./core/embedded-agent";
+export { type AgentResult, EventCollector, isTextContentBlock, type ToolCallRecord } from "./core/event-bridge";
 export {
 	BOOTSTRAP_FILES,
 	type BootstrapFileName,
@@ -39,7 +39,7 @@ export {
 	SKILL_DIRS,
 	USER_SKILLS_DIR,
 	WorkspaceWatcher,
-} from "./workspace";
+} from "./core/workspace";
 
 // =============================================================================
 // Tools
