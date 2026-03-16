@@ -1,16 +1,16 @@
 // Tasks CLI configuration — managed by `tasks init`
 // See: plugins/rd2/skills/tasks/SKILL.md
 {
-  "$schema_version": 1,
-  "active_folder": "docs/tasks",
-  "folders": {
-    "docs/prompts": {
-      "base_counter": 0,
-      "label": "Phase 1",
-    },
-    "docs/tasks": {
-      "base_counter": 161,
-      "label": "Phase 2",
-    },
-  },
+	"$schema_version": 1,
+	"active_folder": "docs/tasks",
+	"folders": {
+		"docs/prompts": {
+			"base_counter": 0,
+			"label": "Phase 1"
+		},
+		"docs/tasks": {
+			"base_counter": 161,
+			"label": "Phase 2"
+		}
+	}
 }
