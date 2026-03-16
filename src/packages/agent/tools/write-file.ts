@@ -11,6 +11,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import type { AgentTool, AgentToolResult } from "@mariozechner/pi-agent-core";
 import { type Static, Type } from "@mariozechner/pi-ai";
+import { PermissionTier } from "./permission/tiers";
 import { resolveWorkspacePath } from "./utils";
 
 const MAX_WRITE_SIZE = 1024 * 1024; // 1MB
@@ -36,6 +37,9 @@ export function createWriteFileTool(workspaceDir: string): AgentTool<typeof para
 			"The path must be relative to the workspace root. " +
 			"Maximum write size is 1MB.",
 		parameters,
+		tierRequirement: {
+			minTier: PermissionTier.WRITE,
+		},
 		execute: async (
 			_toolCallId: string,
 			params: WriteFileParams,
