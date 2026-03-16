@@ -10,6 +10,7 @@
 
 import type { AgentTool, AgentToolResult } from "@mariozechner/pi-agent-core";
 import { type Static, Type } from "@mariozechner/pi-ai";
+import { PermissionTier } from "./permission/tiers";
 
 const SEARCH_TIMEOUT_MS = 15_000; // 15 seconds
 const MAX_RESULTS = 8;
@@ -129,6 +130,9 @@ export function createWebSearchTool(_workspaceDir: string): AgentTool<typeof par
 			"Returns a list of search results with titles, URLs, and snippets. " +
 			"Useful for finding current information, documentation, or answering factual questions.",
 		parameters,
+		tierRequirement: {
+			minTier: PermissionTier.READ,
+		},
 		execute: async (
 			_toolCallId: string,
 			params: WebSearchParams,
