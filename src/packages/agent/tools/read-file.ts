@@ -9,6 +9,7 @@
 import fs from "node:fs/promises";
 import type { AgentTool, AgentToolResult } from "@mariozechner/pi-agent-core";
 import { type Static, Type } from "@mariozechner/pi-ai";
+import { PermissionTier } from "./permission/tiers";
 import { resolveWorkspacePath } from "./utils";
 
 const MAX_FILE_SIZE = 100 * 1024; // 100KB
@@ -31,6 +32,9 @@ export function createReadFileTool(workspaceDir: string): AgentTool<typeof param
 			"The path must be relative to the workspace root. " +
 			"Maximum file size is 100KB.",
 		parameters,
+		tierRequirement: {
+			minTier: PermissionTier.READ,
+		},
 		execute: async (
 			_toolCallId: string,
 			params: ReadFileParams,
