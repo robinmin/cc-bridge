@@ -16,6 +16,9 @@
 
 import type { AgentTool } from "@mariozechner/pi-agent-core";
 import { logger } from "@/packages/logger";
+import type { AuditSink } from "./permission/audit";
+import type { PermissionTier } from "./permission/tiers";
+import type { ToolRateLimit } from "./visibility/rate-limiter";
 
 // =============================================================================
 // Types
@@ -67,6 +70,37 @@ export interface ToolPolicyConfig {
 	toolConfig?: Record<string, unknown>;
 	/** Per-chat overrides (keyed by chat ID) */
 	chatOverrides?: Record<string, ChatPolicyConfig>;
+
+	// =============================================================================
+	// Enhanced Tool System Config (Phase 1-3)
+	// =============================================================================
+
+	/** Permission tier configuration */
+
+	/** Reference to predefined permission template */
+	permissionTemplate?: string;
+	/** Base tier for session (default: READ) */
+	sessionTier?: PermissionTier;
+	/** Allow JIT elevation (default: true) */
+	jitEnabled?: boolean;
+	/** Default escalation duration in ms (default: 60000) */
+	escalationTimeoutMs?: number;
+
+	/** Rate limiting configuration */
+
+	/** Per-tool rate limits */
+	rateLimits?: ToolRateLimit[];
+	/** Global rate limit: max calls per window (default: 100) */
+	globalMaxCalls?: number;
+	/** Global rate limit: window in ms (default: 60000) */
+	globalWindowMs?: number;
+
+	/** Audit configuration */
+
+	/** Enable audit logging (default: false) */
+	auditEnabled?: boolean;
+	/** Audit sink for logging (optional, defaults to console) */
+	auditSink?: AuditSink;
 }
 
 /**
