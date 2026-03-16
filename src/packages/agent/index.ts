@@ -99,3 +99,16 @@ export {
 } from "./tools/policy";
 
 export { resolveWorkspacePath } from "./tools/utils";
+
+// =============================================================================
+// Session Manager
+// =============================================================================
+
+export {
+	type AgentFactory,
+	type SessionAgent,
+	SessionManager,
+	type SessionManagerConfig,
+	type SessionMetadata,
+	type SessionPersistence,
+} from "./core/session-manager";
