@@ -15,6 +15,7 @@
 import { spawn } from "node:child_process";
 import type { AgentTool, AgentToolResult } from "@mariozechner/pi-agent-core";
 import { type Static, Type } from "@mariozechner/pi-ai";
+import { PermissionTier } from "./permission/tiers";
 
 const DEFAULT_TIMEOUT_MS = 30_000; // 30 seconds
 const MAX_OUTPUT_BYTES = 50 * 1024; // 50KB
@@ -192,6 +193,9 @@ export function createBashTool(
 			"The command runs with a 30-second timeout. " +
 			"Combined stdout+stderr output is limited to 50KB.",
 		parameters,
+		tierRequirement: {
+			minTier: PermissionTier.EXECUTE,
+		},
 		execute: async (
 			_toolCallId: string,
 			params: BashParams,
