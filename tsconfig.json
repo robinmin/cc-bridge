@@ -1,9 +1,6 @@
 {
 	"compilerOptions": {
-		"lib": [
-			"ESNext",
-			"DOM"
-		],
+		"lib": ["ESNext", "DOM"],
 		"module": "esnext",
 		"target": "esnext",
 		"moduleResolution": "bundler",
@@ -18,24 +15,12 @@
 		"allowSyntheticDefaultImports": true,
 		"forceConsistentCasingInFileNames": true,
 		"allowJs": true,
-		"types": [
-			"@types/bun"
-		],
+		"types": ["@types/bun"],
 		"baseUrl": ".",
 		"paths": {
-			"@/*": [
-				"src/*"
-			]
+			"@/*": ["src/*"]
 		}
 	},
-	"include": [
-		"src/agent/**/*",
-		"src/gateway/**/*",
-		"src/packages/**/*"
-	],
-	"exclude": [
-		"node_modules",
-		"vendors",
-		"dist"
-	]
+	"include": ["src/agent/**/*", "src/gateway/**/*", "src/packages/**/*"],
+	"exclude": ["node_modules", "vendors", "dist"]
 }
