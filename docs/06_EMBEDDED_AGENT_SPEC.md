@@ -707,12 +707,84 @@ Based on the current implementation, here are potential areas for future enhance
 
 ### 11.1 Enhanced Tool System
 
-| Feature | Description | Priority |
-|---------|-------------|----------|
-| **Tool result caching** | Cache tool results to avoid redundant executions | Medium |
-| **Tool timeout control** | Per-tool timeout configuration | Medium |
-| **Tool retry policy** | Automatic retry with exponential backoff | Low |
-| **Tool sandboxing** | Execute tools in isolated containers | Low |
+| Feature | Description | Priority | Status |
+|---------|-------------|----------|--------|
+| **Permission tiers** | Tier-based permissions (READ, WRITE, EXECUTE, ADMIN) | High | ✅ Implemented |
+| **JIT permission elevation** | Just-in-time elevation for specific operations | High | ✅ Implemented |
+| **Permission inheritance** | Sessions inherit base permissions with optional escalation | High | ✅ Implemented |
+| **Permission templates** | Predefined permission profiles | Medium | ✅ Implemented |
+| **Time-bounded access** | Permissions can expire after configurable duration | High | ✅ Implemented |
+| **Runtime permission evaluation** | Evaluate permissions at call time | High | ✅ Implemented |
+| **Context-aware permissions** | Consider session state, user identity, operation context | High | ✅ Implemented |
+| **Permission chaining** | Combine multiple permission sources | Medium | ✅ Implemented |
+| **Structured audit logging** | Log all tool invocations with metadata | High | ✅ Implemented |
+| **Tool execution tracing** | Track tool call chain for debugging | Medium | ✅ Implemented |
+| **Per-tool rate limiting** | Configure rate limits at tool level | Medium | ✅ Implemented |
+| **Tool usage metrics** | Track tool usage patterns for observability | Medium | ✅ Implemented |
+| **Tool result caching** | Cache tool results to avoid redundant executions | Medium | Future |
+| **Tool timeout control** | Per-tool timeout configuration | Medium | Future |
+| **Tool retry policy** | Automatic retry with exponential backoff | Low | Future |
+| **Tool sandboxing** | Execute tools in isolated containers | Low | Future |
+
+#### Permission Tiers
+
+The tool system implements a hierarchical permission model with four tiers:
+
+```typescript
+enum PermissionTier {
+  READ = 1,    // Read-only access to non-sensitive resources
+  WRITE = 2,    // Write access to workspace files
+  EXECUTE = 3,  // Execute commands with restrictions
+  ADMIN = 4,    // Full administrative access
+}
+```
+
+Tools declare their required tier in their metadata:
+
+```typescript
+{
+  name: "bash",
+  tierRequirement: {
+    minTier: PermissionTier.EXECUTE,
+  },
+}
+```
+
+#### JIT Permission Elevation
+
+Permissions can be elevated just-in-time for specific operations:
+
+```typescript
+const escalation = new PermissionEscalation({
+  maxDurationMs: 60000,
+  defaultDurationMs: 5000,
+});
+
+await escalation.requestEscalation({
+  sessionId: "session-123",
+  toolName: "bash",
+  reason: "Need to run build command",
+  requestedTier: PermissionTier.EXECUTE,
+  durationMs: 10000,
+});
+```
+
+#### Audit Logging
+
+All tool calls are logged with structured audit events:
+
+```typescript
+const auditLogger = new AuditLogger(sink, true);
+auditLogger.logResult(
+  "session-123",
+  "bash",
+  "execute",
+  { command: "ls" },
+  "success",
+  PermissionTier.EXECUTE,
+  false,
+);
+```
 
 ### 11.2 Memory & Context
 
@@ -733,12 +805,12 @@ Based on the current implementation, here are potential areas for future enhance
 
 ### 11.6 Security
 
-| Feature | Description | Priority |
-|---------|-------------|----------|
-| **Input sanitization** | Sanitize user prompts | High |
-| **Tool permission escalation** | Dynamic tool permissions | High |
-| **Rate limiting** | Per-user, per-session rate limits | Medium |
-| **Audit logging** | Log all agent actions | Medium |
+| Feature | Description | Priority | Status |
+|---------|-------------|----------|--------|
+| **Input sanitization** | Sanitize user prompts | High | ✅ Implemented |
+| **Tool permission escalation** | Dynamic tool permissions | High | ✅ Implemented |
+| **Rate limiting** | Per-user, per-session rate limits | Medium | ✅ Implemented |
+| **Audit logging** | Log all agent actions | Medium | ✅ Implemented |
 
 ---
 
@@ -762,6 +834,13 @@ Based on the current implementation, here are potential areas for future enhance
 | `src/packages/agent/tools/read-file.ts` | Read file tool |
 | `src/packages/agent/tools/write-file.ts` | Write file tool |
 | `src/packages/agent/tools/web-search.ts` | Web search tool |
+| `src/packages/agent/tools/permission/tiers.ts` | Permission tier definitions |
+| `src/packages/agent/tools/permission/evaluator.ts` | Runtime permission evaluation |
+| `src/packages/agent/tools/permission/escalation.ts` | JIT permission escalation |
+| `src/packages/agent/tools/permission/audit.ts` | Audit logging |
+| `src/packages/agent/tools/visibility/tracer.ts` | Tool call tracing |
+| `src/packages/agent/tools/visibility/metrics.ts` | Usage metrics collection |
+| `src/packages/agent/tools/visibility/rate-limiter.ts` | Per-tool rate limiting |
 
 ### Gateway Integration (`src/gateway/engine`)
 
