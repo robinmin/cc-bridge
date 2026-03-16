@@ -1,6 +1,6 @@
 # EmbeddedAgent Specification
 
-**Version**: 1.2.0
+**Version**: 1.3.0
 **Last Updated**: 2026-03-15
 **Status**: Production Ready
 **Module**: `src/packages/agent/core` (core), `src/gateway/engine/agent.ts` (gateway entry)
@@ -156,12 +156,14 @@ src/packages/agent/           # Reusable agent package
 │   ├── event-bridge.ts      # EventCollector
 │   ├── observability.ts     # Run tracking, usage stats, error categorization
 │   ├── otel.ts             # OpenTelemetry service integration
+│   ├── session-manager.ts  # Generic session lifecycle management
 │   ├── workspace.ts         # Workspace loading & watching
 │   └── context-compaction.ts # LLM-powered compaction
 └── tools/                   # Built-in tools & policies
 
 src/gateway/engine/           # Gateway integration
-└── agent.ts                 # Consolidated entry point (re-exports from packages/agent)
+├── agent.ts                 # Consolidated entry point (re-exports from packages/agent)
+└── agent-sessions.ts        # Gateway-specific session management (uses SessionManager)
 ```
 
 **Design Principles:**
@@ -508,46 +510,97 @@ The WorkspaceWatcher monitors bootstrap files for changes and automatically upda
 
 ## 8. Session Management
 
-### 8.1 AgentSessionManager
+The agent package provides a reusable `SessionManager` for managing multiple agent instances, plus a gateway-specific `AgentSessionManager` for chat-based sessions.
 
-The `AgentSessionManager` (in `src/gateway/engine/agent-sessions.ts`) manages per-chat agent instances:
+### 8.1 SessionManager (Reusable)
+
+The `SessionManager` in `src/packages/agent/core/session-manager.ts` is a generic, reusable session manager that can work with any agent type:
+
+```typescript
+// Configuration
+interface SessionManagerConfig {
+  sessionTtlMs?: number;           // Session idle timeout (default: 30 min)
+  maxSessions?: number;            // Max concurrent sessions (default: 100)
+  cleanupIntervalMs?: number;      // Cleanup timer interval (default: 60 sec)
+  maxMessagesPerSession?: number; // Max messages before pruning (default: 200)
+  persistence?: SessionPersistence;
+  compaction?: CompactionConfig;
+}
+
+// Generic agent interface
+interface SessionAgent {
+  getMessages(): AgentMessage[];
+  clearMessages(): void;
+  abort(): void;
+  dispose(): void;
+}
+
+// Session manager
+class SessionManager<TAgent extends SessionAgent> {
+  constructor(config: SessionManagerConfig, createAgent: (id: string) => TAgent)
+
+  getOrCreate(sessionId: string): TAgent
+  get(sessionId: string): TAgent | undefined
+  has(sessionId: string): boolean
+  remove(sessionId: string): boolean
+  dispose(): void
+
+  persistSession(sessionId: string, messages?: AgentMessage[]): void
+  getMetadata(sessionId: string): SessionMetadata | null
+  get size(): number
+
+  startCleanup(intervalMs: number): void
+  stopCleanup(): void
+  needsCompaction(sessionId: string): boolean
+}
+```
+
+**Key Features:**
+- Generic `TAgent` type - works with any agent implementation
+- TTL-based cleanup of idle sessions
+- LRU eviction when max sessions reached
+- Optional pluggable persistence
+- Context pruning using existing compaction
+
+**Pluggable Persistence:**
+```typescript
+interface SessionPersistence {
+  saveSession(sessionId: string, metadata: SessionMetadata): void;
+  loadSession(sessionId: string): SessionMetadata | null;
+  deleteSession(sessionId: string): void;
+  saveMessages(sessionId: string, messages: AgentMessage[]): void;
+  loadMessages(sessionId: string): AgentMessage[];
+  touchSession(sessionId: string, metadata: Partial<SessionMetadata>): void;
+  cleanupExpiredSessions(ttlMs: number): number;
+  close?(): void;
+}
+```
+
+### 8.2 AgentSessionManager (Gateway-Specific)
+
+The gateway uses its own `AgentSessionManager` built on top of `SessionManager`:
 
 ```typescript
 class AgentSessionManager {
   getOrCreate(chatId: string | number, config: EmbeddedAgentConfig): EmbeddedAgent
-  // Get existing agent or create new one for chat
-
   has(chatId: string | number): boolean
-  // Check if session exists
-
   get(chatId: string | number): EmbeddedAgent | undefined
-  // Get existing session
-
   remove(chatId: string | number): boolean
-  // Remove and dispose session
-
   persistSession(chatId: string | number): void
-  // Persist session state to storage
-
   isRunning(chatId: string | number): boolean
-  // Check if session's agent is currently running
-
   steerOrQueue(chatId: string | number, message: string): "steered" | "queued" | "not-running"
-  // Steer a running agent or queue message for follow-up
-
   dispose(): void
-  // Stop cleanup timer and dispose all sessions
 }
 ```
 
-### 8.2 Session Persistence
+### 8.3 Session Persistence
 
 Sessions can be persisted for:
 - Recovery after restarts
 - Context continuity across requests
 - Cost optimization (reuse existing sessions)
 
-### 8.3 Context Compaction
+### 8.4 Context Compaction
 
 For long-running sessions, context compaction can summarize old messages:
 
@@ -661,15 +714,7 @@ Based on the current implementation, here are potential areas for future enhance
 | **Tool retry policy** | Automatic retry with exponential backoff | Low |
 | **Tool sandboxing** | Execute tools in isolated containers | Low |
 
-### 11.2 Session Management
-
-| Feature | Description | Priority |
-|---------|-------------|----------|
-| **Session pooling** | Pool of pre-warmed agents for fast response | High |
-| **Session affinity** | Route requests to same session based on user/chat | Medium |
-| **Cross-session context** | Share context between sessions | Low |
-
-### 11.3 Memory & Context
+### 11.2 Memory & Context
 
 | Feature | Description | Priority |
 |---------|-------------|----------|
@@ -708,6 +753,7 @@ Based on the current implementation, here are potential areas for future enhance
 | `src/packages/agent/core/event-bridge.ts` | EventCollector for result aggregation |
 | `src/packages/agent/core/observability.ts` | Run tracking, usage stats, error categorization |
 | `src/packages/agent/core/otel.ts` | OpenTelemetry service integration |
+| `src/packages/agent/core/session-manager.ts` | Generic session lifecycle management |
 | `src/packages/agent/core/workspace.ts` | Workspace bootstrap loading and watching |
 | `src/packages/agent/core/context-compaction.ts` | LLM-powered context compaction |
 | `src/packages/agent/tools/index.ts` | Tool factory functions |
