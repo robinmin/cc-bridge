@@ -4,7 +4,6 @@
       "WebSearch",
       "WebFetch(domain:json.schemastore.org)",
       "WebFetch(domain:www.schemastore.org)",
-
       "Skill(rd2:tasks-unit)",
       "Skill(rd2:code-review)",
       "Skill(rd2:tasks-changelog)",
@@ -13,7 +12,9 @@
       "Bash(tasks:*)",
       "Bash(make:*)",
       "Bash(grep:*)",
-      "Bash(ast-grep:*)"
+      "Bash(ast-grep:*)",
+
+      "Bash(bun test:*)"
     ]
   }
 }
