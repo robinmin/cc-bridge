@@ -1,6 +1,6 @@
-import { AgentBot } from "@/gateway/pipeline/agent-bot";
 import type { Channel } from "@/gateway/channels";
 import type { Message } from "@/gateway/pipeline";
+import { AgentBot } from "@/gateway/pipeline/agent-bot";
 
 class StdoutChannel implements Channel {
 	name = "host";
