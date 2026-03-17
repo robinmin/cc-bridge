@@ -18,6 +18,16 @@
 					}
 				}
 			}
+		},
+		{
+			"includes": ["**/sandbox/validator.ts"],
+			"linter": {
+				"rules": {
+					"complexity": {
+						"noUselessConstructor": "off"
+					}
+				}
+			}
 		}
 	],
 	"formatter": {
