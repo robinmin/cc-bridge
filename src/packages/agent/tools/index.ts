@@ -78,6 +78,95 @@ export { createWebSearchTool, createWebSearchTool as WebSearchTool } from "./web
 export { createWriteFileTool, createWriteFileTool as WriteFileTool } from "./write-file";
 
 // =============================================================================
+// Sandbox System Exports
+// =============================================================================
+
+// Sandbox browser isolation
+export {
+	type BrowserSandboxConfig,
+	BrowserSandboxExecutor,
+	type BrowserValidationResult,
+	buildChromeFlags,
+	CdpPortAllocator,
+	createBrowserSandboxExecutor,
+	DEFAULT_BROWSER_SANDBOX_CONFIG,
+	getCdpPort,
+	validateBrowserSandboxConfig,
+} from "./sandbox/browser";
+// Sandbox config types
+export {
+	argToSandboxConfig,
+	BUILT_IN_TOOLS,
+	DEFAULT_SANDBOX_CONFIG,
+	parseSandboxArg,
+	type SandboxArgument,
+	type SandboxLimits,
+	type SandboxMode,
+	type SandboxStrictness,
+	STRICT_SANDBOX_CONFIG,
+	type ToolSandboxConfig,
+	type ToolSandboxDockerSettings,
+	type ToolSandboxPolicy,
+} from "./sandbox/config";
+// Sandbox executor
+export {
+	createDockerExecutor,
+	createSandboxExecutor,
+	DockerExecutor,
+	type ExecOptions,
+	type ExecResult,
+	HostExecutor,
+	type SandboxExecutor,
+} from "./sandbox/executor";
+// Sandbox limits
+export {
+	DEFAULT_LIMITS,
+	LENIENT_LIMITS,
+	limitsToDockerArgs,
+	normalizeMemory,
+	type ParsedLimits,
+	parseResourceLimits,
+	STRICT_LIMITS,
+} from "./sandbox/limits";
+// Sandbox network isolation
+export {
+	FULL_NETWORK,
+	ISOLATED_NETWORK,
+	type NetworkIsolationConfig,
+	type NetworkIsolationMode,
+	networkConfigToDockerArgs,
+	RESTRICTED_NETWORK,
+	validateNetworkConfig,
+} from "./sandbox/network";
+// Sandbox policy
+export {
+	createSandboxPolicyEvaluator,
+	needsSandbox,
+	type SandboxPolicyResult,
+	ToolSandboxPolicyEvaluator,
+} from "./sandbox/policy";
+
+// Sandbox quota
+export {
+	DEFAULT_QUOTA,
+	type ExecutionRecord,
+	QuotaEnforcer,
+	type QuotaStatus,
+	type QuotaUsageSummary,
+	type ResourceQuota,
+	STRICT_QUOTA,
+	UNLIMITED_QUOTA,
+} from "./sandbox/quota";
+// Sandbox validator
+export {
+	SandboxSecurityValidator,
+	SandboxValidationError,
+	sandboxValidator,
+	type ValidationResult,
+	validateSandboxConfig,
+} from "./sandbox/validator";
+
+// =============================================================================
 // Default Tools Factory
 // =============================================================================
 
