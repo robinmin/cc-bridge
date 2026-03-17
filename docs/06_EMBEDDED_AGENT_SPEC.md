@@ -1,7 +1,7 @@
 # EmbeddedAgent Specification
 
-**Version**: 1.3.0
-**Last Updated**: 2026-03-15
+**Version**: 1.4.0
+**Last Updated**: 2026-03-17
 **Status**: Production Ready
 **Module**: `src/packages/agent/core` (core), `src/gateway/engine/agent.ts` (gateway entry)
 
@@ -16,11 +16,13 @@
 4. [API Reference](#4-api-reference)
 5. [Provider Support](#5-provider-support)
 6. [Tool System](#6-tool-system)
-7. [Workspace System](#7-workspace-system)
-8. [Session Management](#8-session-management)
-9. [Event Handling](#9-event-handling)
-10. [Configuration](#10-configuration)
-11. [What's Next](#11-whats-next)
+7. [Enhanced Tool System](#7-enhanced-tool-system)
+8. [Security](#8-security)
+9. [Workspace System](#9-workspace-system)
+10. [Session Management](#10-session-management)
+11. [Event Handling](#11-event-handling)
+12. [Configuration](#12-configuration)
+13. [What's Next](#13-whats-next)
 
 ---
 
@@ -456,7 +458,142 @@ Tools can be filtered using the policy system:
 - ToolPolicyPipeline   // Chain multiple policies
 ```
 
-### 6.3 Registering Tools
+### 6.3 Tool Sandbox System
+
+The tool sandbox system provides isolation for tool execution using host mode or Docker containers.
+
+**Files**:
+- `src/packages/agent/tools/sandbox/config.ts` - Configuration types
+- `src/packages/agent/tools/sandbox/validator.ts` - Security validation
+- `src/packages/agent/tools/sandbox/policy.ts` - Per-tool policy evaluation
+- `src/packages/agent/tools/sandbox/limits.ts` - Resource limits
+- `src/packages/agent/tools/sandbox/executor.ts` - Host/Docker executors
+- `src/packages/agent/tools/sandbox/network.ts` - Network isolation
+- `src/packages/agent/tools/sandbox/browser.ts` - Browser sandbox (CDP)
+- `src/packages/agent/tools/sandbox/quota.ts` - Resource quota enforcement
+
+#### Sandbox Modes
+
+| Mode | Description |
+|------|-------------|
+| `host` | Execute directly on host (default) |
+| `docker` | Execute inside Docker container |
+
+#### Sandbox Configuration
+
+```typescript
+interface ToolSandboxConfig {
+  /** Sandbox mode: 'host' or 'docker' */
+  defaultMode: "host" | "docker";
+  /** Docker-specific settings */
+  docker?: ToolSandboxDockerSettings;
+  /** Per-tool policy overrides */
+  policies?: ToolSandboxPolicy[];
+  /** Resource limits */
+  limits?: SandboxLimits;
+  /** Resource quota */
+  quota?: ResourceQuota;
+  /** Network isolation */
+  networkIsolation?: NetworkIsolationConfig;
+  /** Browser sandbox config */
+  browser?: BrowserSandboxConfig;
+}
+```
+
+#### Security Validation
+
+The validator blocks dangerous Docker configurations:
+
+- Host network mode (security risk)
+- Unconfined seccomp profile
+- Unconfined AppArmor profile
+- Invalid bind mounts (relative paths)
+- Sensitive host path warnings (/etc, /var, /usr, /root, /home)
+
+```typescript
+const validator = new SandboxSecurityValidator();
+const result = validator.validateDockerSettings(settings);
+if (!result.valid) {
+  throw new Error(result.errors.map(e => e.message).join(", "));
+}
+```
+
+#### Per-Tool Policy Engine
+
+Each tool can have custom sandbox settings:
+
+```typescript
+interface ToolSandboxPolicy {
+  /** Glob pattern to match tool names */
+  toolPattern: string;
+  /** Override mode for matched tools */
+  mode?: "host" | "docker";
+  /** Custom Docker settings */
+  docker?: ToolSandboxDockerSettings;
+  /** Resource limits override */
+  limits?: SandboxLimits;
+  /** Strictness level */
+  strictness?: SandboxStrictness;
+}
+```
+
+#### Resource Limits
+
+```typescript
+interface SandboxLimits {
+  /** Memory limit (e.g., "512m", "2g") */
+  memory?: string;
+  /** CPU limit (number of CPUs) */
+  cpus?: number;
+  /** Maximum processes */
+  pids?: number;
+}
+```
+
+#### Network Isolation
+
+```typescript
+interface NetworkIsolationConfig {
+  /** Network mode: none, bridge, internal, host, custom */
+  mode: "none" | "bridge" | "internal" | "host" | "custom";
+  /** Custom network name (for custom mode) */
+  networkName?: string;
+  /** Allowed ports (for host mode) */
+  allowedPorts?: number[];
+}
+```
+
+#### Browser Sandbox
+
+Browser tools can run in isolated Chrome instances via CDP:
+
+```typescript
+interface BrowserSandboxConfig {
+  /** Enable browser sandbox */
+  enabled: boolean;
+  /** Chrome binary path */
+  binary?: string;
+  /** Remote debugging port */
+  port?: number;
+  /** Chrome flags for isolation */
+  flags?: string[];
+}
+```
+
+#### Resource Quota Enforcement
+
+```typescript
+interface ResourceQuota {
+  /** Maximum concurrent tool executions */
+  maxConcurrent?: number;
+  /** Maximum tools per minute */
+  maxPerMinute?: number;
+  /** Maximum total execution time (ms) */
+  maxTotalTimeMs?: number;
+}
+```
+
+### 6.4 Registering Tools
 
 ```typescript
 // Via constructor
@@ -474,9 +611,125 @@ agent.setTools([newTool1, newTool2]);
 
 ---
 
-## 7. Workspace System
+## 7. Enhanced Tool System
 
-### 7.1 Bootstrap Files
+The Enhanced Tool System provides advanced tool management features including permission tiers, JIT elevation, and observability.
+
+### 7.1 Permission Tiers
+
+The tool system implements a hierarchical permission model with four tiers:
+
+```typescript
+enum PermissionTier {
+  READ = 1,    // Read-only access to non-sensitive resources
+  WRITE = 2,   // Write access to workspace files
+  EXECUTE = 3, // Execute commands with restrictions
+  ADMIN = 4,   // Full administrative access
+}
+```
+
+Tools declare their required tier in their metadata:
+
+```typescript
+{
+  name: "bash",
+  tierRequirement: {
+    minTier: PermissionTier.EXECUTE,
+  },
+}
+```
+
+### 7.2 JIT Permission Elevation
+
+Permissions can be elevated just-in-time for specific operations:
+
+```typescript
+const escalation = new PermissionEscalation({
+  maxDurationMs: 60000,
+  defaultDurationMs: 5000,
+});
+
+await escalation.requestEscalation({
+  sessionId: "session-123",
+  toolName: "bash",
+  reason: "Need to run build command",
+  requestedTier: PermissionTier.EXECUTE,
+  durationMs: 10000,
+});
+```
+
+### 7.3 Audit Logging
+
+All tool calls are logged with structured audit events:
+
+```typescript
+const auditLogger = new AuditLogger(sink, true);
+auditLogger.logResult(
+  "session-123",
+  "bash",
+  "execute",
+  { command: "ls" },
+  "success",
+  PermissionTier.EXECUTE,
+  false,
+);
+```
+
+### 7.4 Tool Observability
+
+| Feature | Description |
+|---------|-------------|
+| **Tool execution tracing** | Track tool call chain for debugging |
+| **Per-tool rate limiting** | Configure rate limits at tool level |
+| **Tool usage metrics** | Track tool usage patterns for observability |
+| **Tool timeout control** | Per-tool timeout configuration |
+
+---
+
+## 8. Security
+
+The Security section covers built-in security features for the agent.
+
+### 8.1 Input Sanitization
+
+User prompts are sanitized before processing to prevent injection attacks.
+
+### 8.2 Tool Permission Escalation
+
+Dynamic tool permissions with time-bounded access:
+
+```typescript
+interface PermissionConfig {
+  sessionId: string;
+  baseTier: PermissionTier;
+  escalation?: {
+    maxDurationMs: number;
+    defaultDurationMs: number;
+  };
+}
+```
+
+### 8.3 Rate Limiting
+
+Per-user and per-session rate limits:
+
+```typescript
+interface RateLimitConfig {
+  maxPerMinute?: number;
+  maxPerHour?: number;
+  burstLimit?: number;
+}
+```
+
+### 8.4 Audit Logging
+
+Comprehensive logging of all agent actions with metadata.
+
+---
+
+## 9. Workspace System
+
+### 9.1 Bootstrap Files
 
 The workspace system loads markdown files in a specific order:
 
@@ -489,7 +742,7 @@ The workspace system loads markdown files in a specific order:
 | `MEMORY.md` | Long-term memory, facts | 5 |
 | `TOOLS.md` | Tool documentation, usage hints | 6 |
 
-### 7.2 Skills Discovery
+### 9.2 Skills Discovery
 
 Skills are loaded from:
 
@@ -497,7 +750,7 @@ Skills are loaded from:
 2. **Hidden folder**: `<workspace>/.agents/skills/<skill-name>/SKILL.md`
 3. **User-global**: `~/.agents/skills/<skill-name>/SKILL.md`
 
-### 7.3 Hot Reload
+### 9.3 Hot Reload
 
 The WorkspaceWatcher monitors bootstrap files for changes and automatically updates the agent's system prompt without restart.
 
@@ -508,11 +761,11 @@ The WorkspaceWatcher monitors bootstrap files for changes and automatically upda
 
 ---
 
-## 8. Session Management
+## 10. Session Management
 
 The agent package provides a reusable `SessionManager` for managing multiple agent instances, plus a gateway-specific `AgentSessionManager` for chat-based sessions.
 
-### 8.1 SessionManager (Reusable)
+### 10.1 SessionManager (Reusable)
 
 The `SessionManager` in `src/packages/agent/core/session-manager.ts` is a generic, reusable session manager that can work with any agent type:
 
@@ -576,7 +829,7 @@ interface SessionPersistence {
 }
 ```
 
-### 8.2 AgentSessionManager (Gateway-Specific)
+### 10.2 AgentSessionManager (Gateway-Specific)
 
 The gateway uses its own `AgentSessionManager` built on top of `SessionManager`:
 
@@ -593,14 +846,14 @@ class AgentSessionManager {
 }
 ```
 
-### 8.3 Session Persistence
+### 10.3 Session Persistence
 
 Sessions can be persisted for:
 - Recovery after restarts
 - Context continuity across requests
 - Cost optimization (reuse existing sessions)
 
-### 8.4 Context Compaction
+### 10.4 Context Compaction
 
 For long-running sessions, context compaction can summarize old messages:
 
@@ -615,9 +868,9 @@ interface CompactionConfig {
 
 ---
 
-## 9. Event Handling
+## 11. Event Handling
 
-### 9.1 Event Types
+### 11.1 Event Types
 
 The EmbeddedAgent emits/receives these event types from pi-agent-core:
 
@@ -634,7 +887,7 @@ The EmbeddedAgent emits/receives these event types from pi-agent-core:
 | `turn_end` | Turn completed |
 | `agent_end` | Agent finished |
 
-### 9.2 Event Callbacks
+### 11.2 Event Callbacks
 
 ```typescript
 // Called after event collection (batch)
@@ -644,7 +897,7 @@ onEvent?: (event: AgentEvent) => void
 onImmediate?: (event: AgentEvent) => void
 ```
 
-### 9.3 Max Iterations Guard
+### 11.3 Max Iterations Guard
 
 The EventCollector tracks `turn_end` events and triggers abortion when `turnCount >= maxIterations`:
 
@@ -659,9 +912,9 @@ const collector = new EventCollector({
 
 ---
 
-## 10. Configuration
+## 12. Configuration
 
-### 10.1 Environment Variables
+### 12.1 Environment Variables
 
 | Variable | Required | Description |
 |----------|----------|-------------|
@@ -675,7 +928,7 @@ const collector = new EventCollector({
 | `LLM_API_KEY` | | Fallback API key |
 | `LLM_BASE_URL` | | Custom endpoint URL |
 
-### 10.2 InProcessEngine Usage
+### 12.2 InProcessEngine Usage
 
 ```typescript
 const engine = new InProcessEngine(
@@ -701,92 +954,9 @@ const result = await engine.execute({
 
 ---
 
-## 11. What's Next
+## 13. What's Next
 
-Based on the current implementation, here are potential areas for future enhancement:
-
-### 11.1 Enhanced Tool System
-
-| Feature | Description | Priority | Status |
-|---------|-------------|----------|--------|
-| **Permission tiers** | Tier-based permissions (READ, WRITE, EXECUTE, ADMIN) | High | ✅ Implemented |
-| **JIT permission elevation** | Just-in-time elevation for specific operations | High | ✅ Implemented |
-| **Permission inheritance** | Sessions inherit base permissions with optional escalation | High | ✅ Implemented |
-| **Permission templates** | Predefined permission profiles | Medium | ✅ Implemented |
-| **Time-bounded access** | Permissions can expire after configurable duration | High | ✅ Implemented |
-| **Runtime permission evaluation** | Evaluate permissions at call time | High | ✅ Implemented |
-| **Context-aware permissions** | Consider session state, user identity, operation context | High | ✅ Implemented |
-| **Permission chaining** | Combine multiple permission sources | Medium | ✅ Implemented |
-| **Structured audit logging** | Log all tool invocations with metadata | High | ✅ Implemented |
-| **Tool execution tracing** | Track tool call chain for debugging | Medium | ✅ Implemented |
-| **Per-tool rate limiting** | Configure rate limits at tool level | Medium | ✅ Implemented |
-| **Tool usage metrics** | Track tool usage patterns for observability | Medium | ✅ Implemented |
-| **Tool result caching** | Cache tool results to avoid redundant executions | Medium | Future |
-| **Tool timeout control** | Per-tool timeout configuration | Medium | ✅ Implemented |
-| **Tool retry policy** | Automatic retry with exponential backoff | Low | Future |
-| **Tool sandboxing** | Execute tools in isolated containers | Low | Future |
-
-#### Permission Tiers
-
-The tool system implements a hierarchical permission model with four tiers:
-
-```typescript
-enum PermissionTier {
-  READ = 1,    // Read-only access to non-sensitive resources
-  WRITE = 2,    // Write access to workspace files
-  EXECUTE = 3,  // Execute commands with restrictions
-  ADMIN = 4,    // Full administrative access
-}
-```
-
-Tools declare their required tier in their metadata:
-
-```typescript
-{
-  name: "bash",
-  tierRequirement: {
-    minTier: PermissionTier.EXECUTE,
-  },
-}
-```
-
-#### JIT Permission Elevation
-
-Permissions can be elevated just-in-time for specific operations:
-
-```typescript
-const escalation = new PermissionEscalation({
-  maxDurationMs: 60000,
-  defaultDurationMs: 5000,
-});
-
-await escalation.requestEscalation({
-  sessionId: "session-123",
-  toolName: "bash",
-  reason: "Need to run build command",
-  requestedTier: PermissionTier.EXECUTE,
-  durationMs: 10000,
-});
-```
-
-#### Audit Logging
-
-All tool calls are logged with structured audit events:
-
-```typescript
-const auditLogger = new AuditLogger(sink, true);
-auditLogger.logResult(
-  "session-123",
-  "bash",
-  "execute",
-  { command: "ls" },
-  "success",
-  PermissionTier.EXECUTE,
-  false,
-);
-```
-
-### 11.2 Memory & Context
+Future enhancement areas:
 
 | Feature | Description | Priority |
 |---------|-------------|----------|
@@ -794,23 +964,11 @@ auditLogger.logResult(
 | **RAG pipeline** | Retrieve relevant docs from workspace | High |
 | **Long-term memory** | Persistent memory across sessions | Medium |
 | **User preference learning** | Learn and remember user preferences | Low |
-
-### 11.4 Provider & Model
-
-| Feature | Description | Priority |
-|---------|-------------|----------|
 | **More providers** | Azure OpenAI, Anthropic Vertex, etc. | Medium |
 | **Model routing** | Automatic model selection based on task | Low |
 | **Fallback chains** | Retry with different provider on failure | Medium |
-
-### 11.6 Security
-
-| Feature | Description | Priority | Status |
-|---------|-------------|----------|--------|
-| **Input sanitization** | Sanitize user prompts | High | ✅ Implemented |
-| **Tool permission escalation** | Dynamic tool permissions | High | ✅ Implemented |
-| **Rate limiting** | Per-user, per-session rate limits | Medium | ✅ Implemented |
-| **Audit logging** | Log all agent actions | Medium | ✅ Implemented |
+| **Tool result caching** | Cache tool results to avoid redundant executions | Medium |
+| **Tool retry policy** | Automatic retry with exponential backoff | Low |
 
 ---
 
@@ -841,6 +999,15 @@ auditLogger.logResult(
 | `src/packages/agent/tools/visibility/tracer.ts` | Tool call tracing |
 | `src/packages/agent/tools/visibility/metrics.ts` | Usage metrics collection |
 | `src/packages/agent/tools/visibility/rate-limiter.ts` | Per-tool rate limiting |
+| `src/packages/agent/tools/sandbox/index.ts` | Sandbox module exports |
+| `src/packages/agent/tools/sandbox/config.ts` | Sandbox configuration types |
+| `src/packages/agent/tools/sandbox/validator.ts` | Security validation |
+| `src/packages/agent/tools/sandbox/policy.ts` | Per-tool sandbox policy |
+| `src/packages/agent/tools/sandbox/limits.ts` | Resource limits |
+| `src/packages/agent/tools/sandbox/executor.ts` | Host/Docker executors |
+| `src/packages/agent/tools/sandbox/network.ts` | Network isolation |
+| `src/packages/agent/tools/sandbox/browser.ts` | Browser sandbox (CDP) |
+| `src/packages/agent/tools/sandbox/quota.ts` | Resource quota enforcement |
 
 ### Gateway Integration (`src/gateway/engine`)
 
