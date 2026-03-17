@@ -722,7 +722,7 @@ Based on the current implementation, here are potential areas for future enhance
 | **Per-tool rate limiting** | Configure rate limits at tool level | Medium | ✅ Implemented |
 | **Tool usage metrics** | Track tool usage patterns for observability | Medium | ✅ Implemented |
 | **Tool result caching** | Cache tool results to avoid redundant executions | Medium | Future |
-| **Tool timeout control** | Per-tool timeout configuration | Medium | Future |
+| **Tool timeout control** | Per-tool timeout configuration | Medium | ✅ Implemented |
 | **Tool retry policy** | Automatic retry with exponential backoff | Low | Future |
 | **Tool sandboxing** | Execute tools in isolated containers | Low | Future |
 
