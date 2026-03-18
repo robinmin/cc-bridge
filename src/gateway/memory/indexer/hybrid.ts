@@ -49,6 +49,10 @@ export class HybridSearchManager {
 	async initialize(): Promise<void> {
 		// Initialize FTS5
 		this.ftsIndexer = createFts5Indexer(this.workspaceRoot, this.paths);
+
+		// Set embedding provider for vector support
+		this.ftsIndexer.setEmbeddingProvider(this.embeddingProvider);
+
 		await this.ftsIndexer.initialize();
 
 		// Check vector availability
@@ -70,7 +74,7 @@ export class HybridSearchManager {
 	 * Check if vector search is available
 	 */
 	isVectorEnabled(): boolean {
-		return this.vectorEnabled;
+		return this.vectorEnabled && (this.ftsIndexer?.isVectorEnabled() ?? false);
 	}
 
 	/**
@@ -143,12 +147,20 @@ export class HybridSearchManager {
 	}
 
 	/**
-	 * Vector-only search
+	 * Vector-only search using cosine similarity
 	 */
-	private async vectorSearch(_query: string, _limit: number): Promise<SearchResult[]> {
-		// TODO: Implement vector search with cosine similarity
-		// For now, fall back to keyword
-		return this.keywordSearch(_query, _limit);
+	private async vectorSearch(query: string, limit: number): Promise<SearchResult[]> {
+		if (!this.ftsIndexer || !this.vectorEnabled) {
+			return [];
+		}
+
+		const results = await this.ftsIndexer.searchVectors(query, limit);
+		return results.map((r) => ({
+			id: r.id,
+			path: r.path,
+			snippet: r.content,
+			source: r.source,
+		}));
 	}
 
 	/**
@@ -167,7 +179,7 @@ export class HybridSearchManager {
 			return keywordResults.slice(0, limit);
 		}
 
-		// Get vector results (placeholder - needs full implementation)
+		// Get vector results
 		const vectorResults = await this.vectorSearch(query, limit * 2);
 
 		// Combine results using weighted scoring
@@ -188,7 +200,7 @@ export class HybridSearchManager {
 		// Score and merge results
 		const scored = new Map<string, SearchResult & { score: number }>();
 
-		// Score keyword results
+		// Score keyword results (normalize to 0-1 range)
 		for (let i = 0; i < keywordResults.length; i++) {
 			const r = keywordResults[i];
 			const score = ((keywordResults.length - i) / keywordResults.length) * keywordWeight;
@@ -198,7 +210,7 @@ export class HybridSearchManager {
 			}
 		}
 
-		// Score vector results
+		// Score vector results (normalize to 0-1 range)
 		for (let i = 0; i < vectorResults.length; i++) {
 			const r = vectorResults[i];
 			const score = ((vectorResults.length - i) / vectorResults.length) * vectorWeight;
