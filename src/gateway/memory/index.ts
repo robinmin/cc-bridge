@@ -27,6 +27,7 @@ export * from "./indexer/fts5";
 export * from "./indexer/hybrid";
 // Indexer Layer
 export * from "./indexer/indexer";
+export * from "./indexer/file-watcher";
 export * from "./memory";
 // Storage Layer
 export * from "./storage";
