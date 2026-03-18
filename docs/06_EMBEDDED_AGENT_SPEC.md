@@ -1,7 +1,7 @@
 # EmbeddedAgent Specification
 
-**Version**: 1.4.0
-**Last Updated**: 2026-03-17
+**Version**: 1.5.0
+**Last Updated**: 2026-03-18
 **Status**: Production Ready
 **Module**: `src/packages/agent/core` (core), `src/gateway/engine/agent.ts` (gateway entry)
 
@@ -11,6 +11,7 @@
 
 1. [Overview](#1-overview)
 2. [Architecture](#2-architecture)
+   2.1 [Execution Orchestrator](#21-execution-orchestrator)
    2.1.1 [Package Architecture](#211-package-architecture)
 3. [Core Components](#3-core-components)
 4. [API Reference](#4-api-reference)
@@ -19,10 +20,11 @@
 7. [Enhanced Tool System](#7-enhanced-tool-system)
 8. [Security](#8-security)
 9. [Workspace System](#9-workspace-system)
-10. [Session Management](#10-session-management)
-11. [Event Handling](#11-event-handling)
-12. [Configuration](#12-configuration)
-13. [What's Next](#13-whats-next)
+10. [Memory System](#10-memory-system)
+11. [Session Management](#11-session-management)
+12. [Event Handling](#12-event-handling)
+13. [Configuration](#13-configuration)
+14. [What's Next](#14-whats-next)
 
 ---
 
@@ -84,7 +86,55 @@ The EmbeddedAgent was designed with the following corrections from architectural
 
 ## 2. Architecture
 
-### 2.1 Component Diagram
+### 2.1 Execution Orchestrator
+
+The gateway implements a **3-layer execution engine** with automatic fallback:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        ExecutionOrchestrator                                  │
+│                                                                              │
+│  Manages layer selection, fallback, health monitoring, and retry logic       │
+└──────────────────────────────────┬──────────────────────────────────────────┘
+                                   │
+           ┌───────────────────────┼───────────────────────┐
+           │                       │                       │
+           ▼                       ▼                       ▼
+┌──────────────────┐  ┌──────────────────┐  ┌──────────────────────┐
+│   In-Process     │  │    Host IPC      │  │      Container       │
+│                  │  │                  │  │                      │
+│ EmbeddedAgent    │  │  tmux sessions   │  │  Docker exec + tmux  │
+│ (feature-flagged)│  │  on host OS      │  │                      │
+│                  │  │                  │  │                      │
+│ Default: disabled│  │ Default: enabled │  │ Default: enabled     │
+│ Env: ENABLE_IN_  │  │ Env: always      │  │ Env: always         │
+│ PROCESS=true     │  │ available        │  │ available           │
+└──────────────────┘  └──────────────────┘  └──────────────────────┘
+           │                       │                       │
+           └───────────────────────┼───────────────────────┘
+                                   │
+                                   ▼
+                        ┌──────────────────────┐
+                        │  ExecutionResult     │
+                        │  status: completed   │
+                        │         | failed     │
+                        │         | timeout    │
+                        │         | running    │
+                        └──────────────────────┘
+```
+
+**Layer Order** (tried in sequence until one succeeds):
+1. `in-process` - Uses EmbeddedAgent directly (feature-flagged via `ENABLE_IN_PROCESS=true`)
+2. `host-ipc` - Executes via tmux sessions on the host OS
+3. `container` - Executes via Docker exec with tmux sessions
+
+**Key Features**:
+- Automatic fallback when a layer fails
+- Health monitoring with periodic checks
+- Per-layer retry logic (configurable `maxRetries`)
+- Sync/async execution modes
+
+### 2.1.1 Component Diagram
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
@@ -149,7 +199,7 @@ User Request
 
 ## 2.1.1 Package Architecture
 
-The agent functionality is organized into two layers:
+The agent functionality is organized into three layers:
 
 ```
 src/packages/agent/           # Reusable agent package
@@ -164,14 +214,42 @@ src/packages/agent/           # Reusable agent package
 └── tools/                   # Built-in tools & policies
 
 src/gateway/engine/           # Gateway integration
+├── index.ts                 # Main exports
 ├── agent.ts                 # Consolidated entry point (re-exports from packages/agent)
-└── agent-sessions.ts        # Gateway-specific session management (uses SessionManager)
+├── agent-sessions.ts        # Gateway-specific session management
+├── in-process.ts           # InProcessEngine (IExecutionEngine)
+├── host-ipc.ts             # HostIpcEngine (IExecutionEngine)
+├── container.ts            # ContainerEngine (IExecutionEngine)
+├── orchestrator.ts         # ExecutionOrchestrator (3-layer management)
+├── contracts.ts            # Execution engine interfaces & types
+└── tools/                   # Gateway-specific tools
+
+src/gateway/memory/          # Memory system (Phase 5+)
+├── index.ts                 # Main exports
+├── memory.ts               # Core MemoryManager class
+├── manager.ts             # Memory management orchestration
+├── bank.ts                # Memory bank (long-term storage)
+├── daily-log.ts           # Daily log for events
+├── compaction.ts          # Compaction orchestration
+├── contracts.ts           # Memory interfaces
+├── types.ts               # Memory type definitions
+├── policy.ts              # Memory policies
+├── tools.ts               # Memory-related tools
+├── storage/               # Storage backends
+├── indexer/               # Indexing systems (FTS5, embeddings, hybrid)
+│   ├── indexer.ts         # Main indexer
+│   ├── fts5.ts            # SQLite FTS5 full-text search
+│   ├── embeddings.ts      # Embedding-based search
+│   ├── hybrid.ts          # Hybrid search fusion
+│   └── file-watcher.ts    # File watching for auto-indexing
+└── backend-*.ts           # Backend implementations
 ```
 
 **Design Principles:**
 1. **`src/packages/agent`** - Standalone, reusable package that can be used independently
-2. **`src/gateway/engine/agent.ts`** - Gateway's unified entry point, re-exports from the package
-3. Gateway code imports from `./agent` (gateway path) or `@/packages/agent` (direct)
+2. **`src/gateway/engine/`** - Gateway's unified entry point with 3-layer execution engine
+3. **`src/gateway/memory/`** - Memory system with markdown-first approach (Openclaw-inspired)
+4. Gateway code imports from `./engine` or `@/packages/agent` (direct)
 
 ---
 
@@ -761,11 +839,103 @@ The WorkspaceWatcher monitors bootstrap files for changes and automatically upda
 
 ---
 
-## 10. Session Management
+## 10. Memory System
+
+The gateway implements a comprehensive memory system following Openclaw's markdown-first approach with Pi-mono-style compaction.
+
+### 10.1 Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           MemoryManager                                      │
+│  Coordinates memory operations: read, write, search, compaction             │
+└──────────────────────────────────┬──────────────────────────────────────────┘
+                                   │
+        ┌──────────────────────────┼──────────────────────────┐
+        │                          │                          │
+        ▼                          ▼                          ▼
+┌───────────────┐      ┌───────────────────┐      ┌─────────────────┐
+│  MemoryBank  │      │   DailyLog        │      │  MemoryIndexer  │
+│               │      │                   │      │                 │
+│ Long-term    │      │ Event/topic log   │      │ FTS5 + Embedding│
+│ storage       │      │ by date           │      │ hybrid search   │
+└───────────────┘      └───────────────────┘      └─────────────────┘
+        │                          │                          │
+        └──────────────────────────┼──────────────────────────┘
+                                   │
+                                   ▼
+                        ┌─────────────────────┐
+                        │   StorageBackend    │
+                        │                     │
+                        │ builtin (SQLite)   │
+                        │ external (custom)  │
+                        │ none (disabled)     │
+                        └─────────────────────┘
+```
+
+### 10.2 Memory Backends
+
+The system supports pluggable storage backends:
+
+| Backend | Description |
+|---------|-------------|
+| `builtin` | SQLite-based storage with FTS5 (default) |
+| `external` | External vector store integration |
+| `none` | Memory disabled |
+
+### 10.3 Indexing System
+
+The memory indexer provides multiple search capabilities:
+
+| Index Type | Description |
+|------------|-------------|
+| **FTS5** | SQLite full-text search for keyword matching |
+| **Embeddings** | Vector-based semantic search |
+| **Hybrid** | Combines FTS5 and embedding search with fusion ranking |
+
+### 10.4 Key Features
+
+- **Markdown-first**: Memories stored as markdown files
+- **Auto-indexing**: File watcher automatically indexes new/modified files
+- **Token threshold detection**: Automatic compaction when memory exceeds thresholds
+- **LLM summarizer**: Context-aware compaction using LLM summarization
+- **Memory citations**: Track and cite memory sources in agent responses
+
+### 10.5 Configuration
+
+```typescript
+interface MemoryConfig {
+  /** Memory backend type */
+  backend: "builtin" | "external" | "none";
+  /** Enable auto-indexing via file watcher */
+  autoIndex?: boolean;
+  /** Token threshold for compaction (default: 8000) */
+  tokenThreshold?: number;
+  /** Maximum memory entries */
+  maxEntries?: number;
+  /** Citation mode */
+  citationMode?: MemoryCitationMode;
+}
+```
+
+### 10.6 Memory Tools
+
+Agents can interact with memory via tools:
+
+| Tool | Description |
+|------|-------------|
+| `memory_search` | Search memories using hybrid search |
+| `memory_read` | Read specific memory entries |
+| `memory_write` | Write new memories |
+| `memory_forget` | Delete memories |
+
+---
+
+## 11. Session Management
 
 The agent package provides a reusable `SessionManager` for managing multiple agent instances, plus a gateway-specific `AgentSessionManager` for chat-based sessions.
 
-### 10.1 SessionManager (Reusable)
+### 11.1 SessionManager (Reusable)
 
 The `SessionManager` in `src/packages/agent/core/session-manager.ts` is a generic, reusable session manager that can work with any agent type:
 
@@ -829,7 +999,7 @@ interface SessionPersistence {
 }
 ```
 
-### 10.2 AgentSessionManager (Gateway-Specific)
+### 11.2 AgentSessionManager (Gateway-Specific)
 
 The gateway uses its own `AgentSessionManager` built on top of `SessionManager`:
 
@@ -846,14 +1016,14 @@ class AgentSessionManager {
 }
 ```
 
-### 10.3 Session Persistence
+### 11.3 Session Persistence
 
 Sessions can be persisted for:
 - Recovery after restarts
 - Context continuity across requests
 - Cost optimization (reuse existing sessions)
 
-### 10.4 Context Compaction
+### 11.4 Context Compaction
 
 For long-running sessions, context compaction can summarize old messages:
 
@@ -868,9 +1038,9 @@ interface CompactionConfig {
 
 ---
 
-## 11. Event Handling
+## 12. Event Handling
 
-### 11.1 Event Types
+### 12.1 Event Types
 
 The EmbeddedAgent emits/receives these event types from pi-agent-core:
 
@@ -887,7 +1057,7 @@ The EmbeddedAgent emits/receives these event types from pi-agent-core:
 | `turn_end` | Turn completed |
 | `agent_end` | Agent finished |
 
-### 11.2 Event Callbacks
+### 12.2 Event Callbacks
 
 ```typescript
 // Called after event collection (batch)
@@ -897,7 +1067,7 @@ onEvent?: (event: AgentEvent) => void
 onImmediate?: (event: AgentEvent) => void
 ```
 
-### 11.3 Max Iterations Guard
+### 12.3 Max Iterations Guard
 
 The EventCollector tracks `turn_end` events and triggers abortion when `turnCount >= maxIterations`:
 
@@ -912,9 +1082,9 @@ const collector = new EventCollector({
 
 ---
 
-## 12. Configuration
+## 13. Configuration
 
-### 12.1 Environment Variables
+### 13.1 Environment Variables
 
 | Variable | Required | Description |
 |----------|----------|-------------|
@@ -928,7 +1098,7 @@ const collector = new EventCollector({
 | `LLM_API_KEY` | | Fallback API key |
 | `LLM_BASE_URL` | | Custom endpoint URL |
 
-### 12.2 InProcessEngine Usage
+### 13.2 InProcessEngine Usage
 
 ```typescript
 const engine = new InProcessEngine(
@@ -954,15 +1124,21 @@ const result = await engine.execute({
 
 ---
 
-## 13. What's Next
+## 14. What's Next
+
+Implemented features (v1.5.0):
+
+| Feature | Description | Status |
+|---------|-------------|--------|
+| **Memory system** | Complete memory with FTS5, embeddings, hybrid search | Implemented |
+| **3-layer execution** | In-process, Host IPC, Container with orchestrator | Implemented |
+| **LLM compaction** | Context summarization for long sessions | Implemented |
 
 Future enhancement areas:
 
 | Feature | Description | Priority |
 |---------|-------------|----------|
-| **Vector store integration** | Store and retrieve memories using embeddings | High |
 | **RAG pipeline** | Retrieve relevant docs from workspace | High |
-| **Long-term memory** | Persistent memory across sessions | Medium |
 | **User preference learning** | Learn and remember user preferences | Low |
 | **More providers** | Azure OpenAI, Anthropic Vertex, etc. | Medium |
 | **Model routing** | Automatic model selection based on task | Low |
@@ -1013,8 +1189,36 @@ Future enhancement areas:
 
 | File | Description |
 |------|-------------|
-| `src/gateway/engine/agent.ts` | Consolidated gateway entry point |
-| `src/gateway/engine/agent-sessions.ts` | Session management |
-| `src/gateway/engine/in-process.ts` | InProcessEngine adapter |
-| `src/gateway/engine/orchestrator.ts` | Execution orchestrator |
-| `src/gateway/engine/contracts.ts` | Engine contracts and types |
+| `src/gateway/engine/index.ts` | Main exports |
+| `src/gateway/engine/agent.ts` | Consolidated gateway entry point (re-exports @/packages/agent) |
+| `src/gateway/engine/agent-sessions.ts` | AgentSessionManager with SQLite persistence |
+| `src/gateway/engine/in-process.ts` | InProcessEngine (IExecutionEngine) |
+| `src/gateway/engine/host-ipc.ts` | HostIpcEngine via tmux (IExecutionEngine) |
+| `src/gateway/engine/container.ts` | ContainerEngine via Docker/tmux (IExecutionEngine) |
+| `src/gateway/engine/orchestrator.ts` | ExecutionOrchestrator (3-layer management) |
+| `src/gateway/engine/contracts.ts` | Engine contracts, types, and errors |
+| `src/gateway/engine/prompt-utils.ts` | Prompt building utilities |
+| `src/gateway/engine/context-strategy.ts` | Context strategy for LLM calls |
+| `src/gateway/engine/tools/` | Gateway-specific tools |
+
+### Memory System (`src/gateway/memory`)
+
+| File | Description |
+|------|-------------|
+| `src/gateway/memory/index.ts` | Main exports |
+| `src/gateway/memory/memory.ts` | Core memory manager |
+| `src/gateway/memory/manager.ts` | Memory management orchestration |
+| `src/gateway/memory/bank.ts` | Long-term memory storage |
+| `src/gateway/memory/daily-log.ts` | Daily event/topic logging |
+| `src/gateway/memory/compaction.ts` | Compaction orchestration |
+| `src/gateway/memory/contracts.ts` | Memory interfaces and types |
+| `src/gateway/memory/types.ts` | Memory type definitions |
+| `src/gateway/memory/policy.ts` | Memory policies |
+| `src/gateway/memory/tools.ts` | Memory-related tools |
+| `src/gateway/memory/storage.ts` | Storage abstraction |
+| `src/gateway/memory/backend-*.ts` | Backend implementations |
+| `src/gateway/memory/indexer/indexer.ts` | Main indexer |
+| `src/gateway/memory/indexer/fts5.ts` | SQLite FTS5 full-text search |
+| `src/gateway/memory/indexer/embeddings.ts` | Embedding-based search |
+| `src/gateway/memory/indexer/hybrid.ts` | Hybrid search fusion |
+| `src/gateway/memory/indexer/file-watcher.ts` | File watching for auto-indexing |
