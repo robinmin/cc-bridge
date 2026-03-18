@@ -16,6 +16,7 @@ import { rateLimiter } from "@/gateway/rate-limiter";
 import { handleCallbackHealth, handleClaudeCallback } from "@/gateway/routes/claude-callback";
 import { handleHealth } from "@/gateway/routes/health";
 import { handleFeishuWebhook, handleTelegramWebhook, handleWebhook } from "@/gateway/routes/webhook";
+import { handleMemorySearch, handleMemoryStatus, handleMemoryReindex } from "@/gateway/routes/memory";
 import { ErrorRecoveryService } from "@/gateway/services/ErrorRecoveryService";
 import { FileCleanupService } from "@/gateway/services/file-cleanup";
 import { FileSystemIpc } from "@/gateway/services/filesystem-ipc";
@@ -203,6 +204,12 @@ app.get("/callback-health", (c) =>
 		errorRecoveryService,
 	}),
 );
+
+// Memory routes
+app.get("/memory/status", handleMemoryStatus);
+app.get("/memory/search", handleMemorySearch);
+app.post("/memory/search", handleMemorySearch);
+app.post("/memory/reindex", handleMemoryReindex);
 
 // Initial Discovery - wait for it to complete before accepting requests
 logger.info("Starting initial instance discovery");
