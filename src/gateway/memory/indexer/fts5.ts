@@ -9,21 +9,31 @@ import path from "node:path";
 import Database from "node:sqlite";
 import { readAllMemoryFiles } from "./storage";
 import type { IndexEntry, IndexStatus, MemoryPaths } from "./types";
+import type { EmbeddingProviderInterface } from "./embeddings";
 
 const FTS_TABLE = "memory_fts";
 const DOCS_TABLE = "memory_docs";
+const VECTORS_TABLE = "memory_vectors";
 
 /**
- * FTS5 Index Manager
+ * FTS5 Index Manager with Vector Support
  */
 export class Fts5Indexer {
 	private db: Database.Database | null = null;
 	private paths: MemoryPaths;
 	private indexPath: string;
+	private embeddingProvider: EmbeddingProviderInterface | null = null;
 
 	constructor(_workspaceRoot: string, paths: MemoryPaths) {
 		this.paths = paths;
 		this.indexPath = path.join(paths.root, "memory.db");
+	}
+
+	/**
+	 * Set embedding provider for vector operations
+	 */
+	setEmbeddingProvider(provider: EmbeddingProviderInterface): void {
+		this.embeddingProvider = provider;
 	}
 
 	/**
@@ -42,6 +52,15 @@ export class Fts5Indexer {
 				entity TEXT,
 				content TEXT NOT NULL,
 				last_modified INTEGER
+			)
+		`);
+
+		// Create vectors table for embeddings
+		this.db.run(`
+			CREATE TABLE IF NOT EXISTS ${VECTORS_TABLE} (
+				doc_id INTEGER PRIMARY KEY,
+				embedding BLOB NOT NULL,
+				FOREIGN KEY (doc_id) REFERENCES ${DOCS_TABLE}(id) ON DELETE CASCADE
 			)
 		`);
 
@@ -64,6 +83,7 @@ export class Fts5Indexer {
 		this.db.run(`
 			CREATE TRIGGER IF NOT EXISTS ${DOCS_TABLE}_ad AFTER DELETE ON ${DOCS_TABLE} BEGIN
 				INSERT INTO ${FTS_TABLE}(${FTS_TABLE}, rowid, content) VALUES('delete', old.id, old.content);
+				DELETE FROM ${VECTORS_TABLE} WHERE doc_id = old.id;
 			END
 		`);
 
@@ -93,6 +113,13 @@ export class Fts5Indexer {
 	}
 
 	/**
+	 * Check if vector support is enabled
+	 */
+	isVectorEnabled(): boolean {
+		return this.db !== null && this.embeddingProvider !== null;
+	}
+
+	/**
 	 * Get index status
 	 */
 	async getStatus(): Promise<IndexStatus> {
@@ -113,10 +140,15 @@ export class Fts5Indexer {
 				last: number | null;
 			};
 
+			// Check if vectors exist
+			const vectorsExist = this.db.prepare(`SELECT COUNT(*) as count FROM ${VECTORS_TABLE}`).get() as {
+				count: number;
+			};
+
 			return {
 				initialized: true,
 				fts5: true,
-				vector: false, // Vector is separate
+				vector: vectorsExist.count > 0,
 				documentCount: result.count,
 				lastIndexed: lastIndexed.last ? new Date(lastIndexed.last) : undefined,
 			};
@@ -142,6 +174,7 @@ export class Fts5Indexer {
 			// Clear existing data
 			this.db.run(`DELETE FROM ${FTS_TABLE}`);
 			this.db.run(`DELETE FROM ${DOCS_TABLE}`);
+			this.db.run(`DELETE FROM ${VECTORS_TABLE}`);
 
 			// Read all memory files
 			const docs = await readAllMemoryFiles(this.paths);
@@ -152,10 +185,12 @@ export class Fts5Indexer {
 				VALUES (?, ?, ?, ?, ?, ?)
 			`);
 
+			const docIds: Array<{ id: number; text: string }> = [];
+
 			for (const doc of docs) {
 				if (!doc.text) continue;
 
-				insert.run(
+				const result = insert.run(
 					doc.path,
 					doc.source.type,
 					doc.source.bankType ?? null,
@@ -163,6 +198,12 @@ export class Fts5Indexer {
 					doc.text,
 					doc.lastModified?.getTime() ?? Date.now(),
 				);
+				docIds.push({ id: result.lastInsertRowid as number, text: doc.text });
+			}
+
+			// Generate and store embeddings if provider is available
+			if (this.embeddingProvider && docIds.length > 0) {
+				await this.generateEmbeddings(docIds);
 			}
 
 			return { ok: true };
@@ -171,6 +212,44 @@ export class Fts5Indexer {
 				ok: false,
 				reason: error instanceof Error ? error.message : "rebuild failed",
 			};
+		}
+	}
+
+	/**
+	 * Generate embeddings for documents
+	 */
+	private async generateEmbeddings(docIds: Array<{ id: number; text: string }>): Promise<void> {
+		if (!this.embeddingProvider || !this.db) return;
+
+		try {
+			// Batch process to avoid API limits
+			const batchSize = 100;
+			for (let i = 0; i < docIds.length; i += batchSize) {
+				const batch = docIds.slice(i, i + batchSize);
+				const texts = batch.map((d) => d.text.slice(0, 8000)); // Truncate long texts
+
+				try {
+					const results = await this.embeddingProvider.embedBatch(texts);
+
+					const insert = this.db.prepare(`
+						INSERT INTO ${VECTORS_TABLE} (doc_id, embedding) VALUES (?, ?)
+					`);
+
+					for (let j = 0; j < batch.length; j++) {
+						const embedding = results[j]?.embedding;
+						if (embedding) {
+							// Store embedding as blob (JSON serialized array)
+							const blob = Buffer.from(JSON.stringify(embedding));
+							insert.run(batch[j].id, blob);
+						}
+					}
+				} catch (error) {
+					// Continue with next batch on error
+					console.error("Error generating embeddings for batch:", error);
+				}
+			}
+		} catch (error) {
+			console.error("Error generating embeddings:", error);
 		}
 	}
 
@@ -224,6 +303,71 @@ export class Fts5Indexer {
 	}
 
 	/**
+	 * Search using vector similarity (cosine similarity)
+	 */
+	async searchVectors(query: string, limit = 5): Promise<IndexEntry[]> {
+		if (!this.db || !this.embeddingProvider || !query.trim()) {
+			return [];
+		}
+
+		try {
+			// Generate embedding for query
+			const queryEmbedding = await this.embeddingProvider.embed(query.slice(0, 8000));
+			const queryVec = queryEmbedding.embedding;
+
+			// Get all vectors and compute cosine similarity
+			const vectors = this.db
+				.prepare(
+					`
+				SELECT v.doc_id, v.embedding, d.path, d.source_type as sourceType, d.bank_type as bankType, d.entity, d.content
+				FROM ${VECTORS_TABLE} v
+				JOIN ${DOCS_TABLE} d ON v.doc_id = d.id
+			`,
+				)
+				.all() as Array<{
+				doc_id: number;
+				embedding: Buffer;
+				path: string;
+				sourceType: string;
+				bankType: string | null;
+				entity: string | null;
+				content: string;
+			}>;
+
+			// Compute similarities
+			const scored = vectors.map((v) => {
+				const embedding = JSON.parse(v.embedding.toString()) as number[];
+				const similarity = cosineSimilarity(queryVec, embedding);
+				return {
+					id: v.doc_id,
+					path: v.path,
+					source: {
+						type: v.sourceType as "memory" | "daily" | "bank",
+						bankType: v.bankType as "world" | "experience" | "opinions" | "entities" | undefined,
+						entity: v.entity ?? undefined,
+					},
+					content: v.content.slice(0, 240) + (v.content.length > 240 ? "..." : ""),
+					similarity,
+				};
+			});
+
+			// Sort by similarity and limit
+			scored.sort((a, b) => b.similarity - a.similarity);
+			const top = scored.slice(0, limit);
+
+			return top.map((s) => ({
+				id: s.id,
+				path: s.path,
+				source: s.source,
+				content: s.content,
+			}));
+		} catch (error) {
+			console.error("Vector search error:", error);
+			return [];
+		}
+	}
+
+	/**
 	 * Update a single document in the index
 	 */
 	async updateDocument(docPath: string, content: string): Promise<void> {
@@ -234,9 +378,11 @@ export class Fts5Indexer {
 			const existing = this.db.prepare(`SELECT id FROM ${DOCS_TABLE} WHERE path = ?`).get(docPath);
 
 			if (existing) {
-				this.db
-					.prepare(`UPDATE ${DOCS_TABLE} SET content = ?, last_modified = ? WHERE path = ?`)
-					.run(content, Date.now(), docPath);
+				this.db.prepare(`UPDATE ${DOCS_TABLE} SET content = ?, last_modified = ? WHERE path = ?`).run(
+					content,
+					Date.now(),
+					docPath,
+				);
 			} else {
 				// Insert new document - need to determine source type
 				const sourceType = docPath.includes("/daily/") ? "daily" : docPath.includes("/bank/") ? "bank" : "memory";
@@ -249,6 +395,26 @@ export class Fts5Indexer {
 			// Update failed, ignore
 		}
 	}
+}
+
+/**
+ * Compute cosine similarity between two vectors
+ */
+function cosineSimilarity(a: number[], b: number[]): number {
+	if (a.length !== b.length) return 0;
+
+	let dotProduct = 0;
+	let normA = 0;
+	let normB = 0;
+
+	for (let i = 0; i < a.length; i++) {
+		dotProduct += a[i] * b[i];
+		normA += a[i] * a[i];
+		normB += b[i] * b[i];
+	}
+
+	if (normA === 0 || normB === 0) return 0;
+	return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
 }
 
 /**
