@@ -1,5 +1,3 @@
-import fs from "node:fs/promises";
-import path from "node:path";
 import type {
 	MemoryBackend,
 	MemoryDocument,
@@ -9,34 +7,31 @@ import type {
 	MemoryWriteResult,
 	ReindexResult,
 } from "@/gateway/memory/contracts";
+import { searchBank } from "./bank";
+import { appendDailyLog, ensureMemoryDirs, getMemoryPaths, readMemory, searchDailyLogs, upsertMemory } from "./storage";
 
+/**
+ * Enhanced Builtin Memory Backend
+ *
+ * Implements Openclaw-style memory layout:
+ * - .memory/memory.md - Core durable facts
+ * - .memory/daily/YYYY-MM-DD.md - Daily logs
+ * - .memory/bank/ - Typed memory pages
+ *   - world.md - Objective facts
+ *   - experience.md - What agent did
+ *   - opinions.md - Subjective preferences
+ *   - entities/*.md - Entity-specific facts
+ */
 export class BuiltinMemoryBackend implements MemoryBackend {
 	constructor(private readonly workspaceRoot: string) {}
 
-	private resolvePath(pathOrRef: string): string {
-		return path.isAbsolute(pathOrRef) ? pathOrRef : path.join(this.workspaceRoot, pathOrRef);
+	private getPaths() {
+		return getMemoryPaths(this.workspaceRoot);
 	}
 
-	private getDailyPath(date = new Date()): string {
-		const yyyy = String(date.getFullYear());
-		const mm = String(date.getMonth() + 1).padStart(2, "0");
-		const dd = String(date.getDate()).padStart(2, "0");
-		return path.join(this.workspaceRoot, ".memory", "daily", `${yyyy}-${mm}-${dd}.md`);
-	}
-
-	private async ensureParentDir(filePath: string): Promise<void> {
-		await fs.mkdir(path.dirname(filePath), { recursive: true });
-	}
-
-	private appendWithSpacing(existing: string, entry: string): string {
-		const trimmedEntry = entry.trim();
-		if (!trimmedEntry) {
-			return existing;
-		}
-		if (!existing.trim()) {
-			return `${trimmedEntry}\n`;
-		}
-		return `${existing.trimEnd()}\n\n${trimmedEntry}\n`;
+	async initialize(): Promise<void> {
+		const paths = this.getPaths();
+		await ensureMemoryDirs(paths);
 	}
 
 	status(): MemoryStatus {
@@ -47,50 +42,53 @@ export class BuiltinMemoryBackend implements MemoryBackend {
 	}
 
 	async get(pathOrRef: string): Promise<MemoryDocument> {
-		const resolved = this.resolvePath(pathOrRef);
+		const _paths = this.getPaths();
+
+		// Handle special references
+		if (pathOrRef === "memory" || pathOrRef === "memory.md") {
+			return readMemory(this.workspaceRoot);
+		}
+
+		if (pathOrRef === "daily") {
+			// Return today's daily log
+			const { appendDailyLog } = await import("./daily-log");
+			return appendDailyLog(this.workspaceRoot, "");
+		}
+
+		// Check for bank references
+		if (pathOrRef.startsWith("bank:")) {
+			const type = pathOrRef.replace("bank:", "").replace(".md", "") as "world" | "experience" | "opinions";
+			if (["world", "experience", "opinions"].includes(type)) {
+				const { readBank } = await import("./bank");
+				return readBank(this.workspaceRoot, type);
+			}
+		}
+
+		// Check for entity references
+		if (pathOrRef.startsWith("entity:")) {
+			const entity = pathOrRef.replace("entity:", "").replace(".md", "");
+			const { readEntity } = await import("./bank");
+			return readEntity(this.workspaceRoot, entity);
+		}
+
+		// Default: treat as file path
+		const { resolve } = await import("node:path");
+		const resolved = resolve(this.workspaceRoot, pathOrRef);
+		const { readMemoryFile } = await import("./storage");
+
 		try {
-			const text = await fs.readFile(resolved, "utf-8");
-			return { path: resolved, text };
+			return await readMemoryFile(resolved, { type: "memory" });
 		} catch {
-			// Missing memory files are valid state and should not fail the run.
 			return { path: resolved, text: "" };
 		}
 	}
 
 	async appendDaily(entry: string): Promise<MemoryWriteResult> {
-		const filePath = this.getDailyPath();
-		try {
-			await this.ensureParentDir(filePath);
-			const existing = await this.get(filePath);
-			const updated = this.appendWithSpacing(existing.text, entry);
-			if (updated === existing.text) {
-				return { ok: false, reason: "empty entry" };
-			}
-			await fs.writeFile(filePath, updated, "utf-8");
-			return { ok: true, path: filePath };
-		} catch (error) {
-			return { ok: false, reason: error instanceof Error ? error.message : "write failed" };
-		}
+		return appendDailyLog(this.workspaceRoot, entry);
 	}
 
 	async upsertLongTerm(entry: string): Promise<MemoryWriteResult> {
-		const filePath = path.join(this.workspaceRoot, ".memory", "MEMORY.md");
-		try {
-			await this.ensureParentDir(filePath);
-			const existing = await this.get(filePath);
-			const trimmedEntry = entry.trim();
-			if (!trimmedEntry) {
-				return { ok: false, reason: "empty entry" };
-			}
-			if (existing.text.includes(trimmedEntry)) {
-				return { ok: true, path: filePath };
-			}
-			const updated = this.appendWithSpacing(existing.text, trimmedEntry);
-			await fs.writeFile(filePath, updated, "utf-8");
-			return { ok: true, path: filePath };
-		} catch (error) {
-			return { ok: false, reason: error instanceof Error ? error.message : "write failed" };
-		}
+		return upsertMemory(this.workspaceRoot, entry);
 	}
 
 	async search(query: string, options?: MemorySearchOptions): Promise<MemorySearchHit[]> {
@@ -101,33 +99,50 @@ export class BuiltinMemoryBackend implements MemoryBackend {
 		const limit = Math.max(1, options?.limit ?? 5);
 		const hits: MemorySearchHit[] = [];
 
-		const candidatePaths: string[] = [path.join(this.workspaceRoot, ".memory", "MEMORY.md")];
-		const memoryDir = path.join(this.workspaceRoot, ".memory", "daily");
+		// Search memory.md
+		const memoryResults = await this.searchMemory(normalized, limit - hits.length);
+		hits.push(...memoryResults);
 
-		try {
-			const entries = await fs.readdir(memoryDir, { withFileTypes: true });
-			for (const entry of entries) {
-				if (entry.isFile() && entry.name.endsWith(".md")) {
-					candidatePaths.push(path.join(memoryDir, entry.name));
-				}
-			}
-		} catch {
-			// Missing memory directory is a valid state.
+		// Search daily logs
+		const dailyResults = await searchDailyLogs(this.workspaceRoot, normalized, limit - hits.length);
+		for (const r of dailyResults) {
+			if (hits.length >= limit) break;
+			hits.push({
+				path: r.path,
+				snippet: r.text,
+			});
 		}
 
-		for (const filePath of candidatePaths) {
-			if (hits.length >= limit) break;
-			const doc = await this.get(filePath);
-			if (!doc.text) continue;
-
-			const lines = doc.text.split(/\r?\n/);
-			for (const line of lines) {
+		// Search bank pages
+		if (hits.length < limit) {
+			const bankResults = await searchBank(this.workspaceRoot, normalized, limit - hits.length);
+			for (const r of bankResults) {
 				if (hits.length >= limit) break;
-				const trimmed = line.trim();
-				if (!trimmed) continue;
-				if (!trimmed.toLowerCase().includes(normalized)) continue;
 				hits.push({
-					path: filePath,
+					path: r.path,
+					snippet: r.text,
+				});
+			}
+		}
+
+		return hits;
+	}
+
+	private async searchMemory(query: string, limit: number): Promise<MemorySearchHit[]> {
+		const hits: MemorySearchHit[] = [];
+		const doc = await readMemory(this.workspaceRoot);
+
+		if (!doc.text) return hits;
+
+		const lines = doc.text.split(/\r?\n/);
+		for (const line of lines) {
+			if (hits.length >= limit) break;
+
+			const trimmed = line.trim();
+			if (!trimmed) continue;
+			if (trimmed.toLowerCase().includes(query)) {
+				hits.push({
+					path: doc.path,
 					snippet: trimmed.length > 240 ? `${trimmed.slice(0, 240)}...` : trimmed,
 				});
 			}
@@ -137,6 +152,8 @@ export class BuiltinMemoryBackend implements MemoryBackend {
 	}
 
 	async reindex(): Promise<ReindexResult> {
+		// For now, reindex is a no-op as we search directly
+		// Future: integrate with FTS5 indexer
 		return { ok: true, reason: "noop" };
 	}
 }
