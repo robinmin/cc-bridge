@@ -8,6 +8,7 @@
 
 import type { AgentEvent, AgentMessage } from "@mariozechner/pi-agent-core";
 import type { AssistantMessage, TextContent } from "@mariozechner/pi-ai";
+import { logger } from "@/packages/logger";
 import {
 	type AgentRunObservability,
 	type AgentUsageSnapshot,
@@ -133,7 +134,7 @@ export class EventCollector {
 				this.onImmediate(event);
 			} catch (error) {
 				// Log but don't let streaming errors break agent execution
-				console.error("Streaming callback error:", error);
+				logger.error({ error }, "Streaming callback error");
 			}
 		}
 
