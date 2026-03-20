@@ -43,6 +43,13 @@ export interface AgentRunObservability {
 	aborted: boolean;
 	errorCategory?: AgentErrorCategory;
 	usage: AgentUsageSnapshot;
+	/** RAG retrieval statistics */
+	rag?: {
+		resultsCount?: number;
+		cacheHit?: boolean;
+		threshold?: number;
+		retrievalDurationMs?: number;
+	};
 }
 
 export interface EmbeddedAgentObservabilitySnapshot {
@@ -245,6 +252,12 @@ export function finishObservabilityRun(params: {
 	usage?: AgentUsageSnapshot;
 	errorCategory?: AgentErrorCategory;
 	config?: EmbeddedAgentObservabilityConfig;
+	rag?: {
+		resultsCount?: number;
+		cacheHit?: boolean;
+		threshold?: number;
+		retrievalDurationMs?: number;
+	};
 }): AgentRunObservability {
 	const endedAtMs = Date.now();
 	const finishedRun: AgentRunObservability = {
@@ -258,6 +271,7 @@ export function finishObservabilityRun(params: {
 		aborted: params.aborted,
 		errorCategory: params.errorCategory,
 		usage: cloneUsageSnapshot(params.usage),
+		rag: params.rag,
 	};
 
 	params.snapshot.lastRun = finishedRun;
