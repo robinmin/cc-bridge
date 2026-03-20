@@ -13,14 +13,15 @@
 import path from "node:path";
 import { GATEWAY_CONSTANTS } from "@/gateway/consts";
 import type { MemoryIndexer } from "@/packages/agent/memory/indexer/indexer";
-import { logger } from "@/packages/logger";
 import {
-	type AgentConfig,
+	buildAgentConfig,
+	type AgentYamlConfig,
 	createDefaultTools,
 	type PromptOptions,
 	resolveProviderApiKey,
 	type ToolPolicyConfig,
-} from "./agent";
+} from "@/packages/agent";
+import { logger } from "@/packages/logger";
 import { AgentSessionManager, type AgentSessionManagerConfig } from "./agent-sessions";
 import type { ExecutionRequest, ExecutionResult, IExecutionEngine, LayerHealth } from "./contracts";
 
@@ -33,26 +34,60 @@ import type { ExecutionRequest, ExecutionResult, IExecutionEngine, LayerHealth }
  */
 export class InProcessEngine implements IExecutionEngine {
 	private readonly enabled: boolean;
-	private readonly defaultProvider: string;
-	private readonly defaultModel: string;
+	private readonly agentConfig: AgentYamlConfig;
 	private readonly sessionManager: AgentSessionManager;
 
 	constructor(
 		enabled: boolean = false,
-		defaultProvider?: string,
-		defaultModel?: string,
-		sessionConfig?: AgentSessionManagerConfig,
+		agentConfigOrProvider?: AgentYamlConfig | string,
+		sessionConfigOrModel?: AgentSessionManagerConfig | string,
 		memoryIndexer?: MemoryIndexer,
 	) {
 		this.enabled = enabled;
-		this.defaultProvider = defaultProvider || process.env.LLM_PROVIDER || "anthropic";
-		this.defaultModel = defaultModel || process.env.LLM_MODEL || "claude-sonnet-4-6";
 
-		// Inject memoryIndexer into session config if provided
-		const effectiveSessionConfig: AgentSessionManagerConfig = memoryIndexer
-			? { ...sessionConfig, memoryIndexer }
-			: sessionConfig;
-		this.sessionManager = new AgentSessionManager(effectiveSessionConfig);
+		// Detect signature: backward-compatible overload
+		// Old signature: (enabled, defaultProvider, defaultModel, sessionConfig, memoryIndexer)
+		// New signature: (enabled, agentConfig, sessionConfig, memoryIndexer)
+		if (typeof agentConfigOrProvider === "string") {
+			// Old signature: second arg is provider string, third is model string
+			const defaultProvider = agentConfigOrProvider;
+			const defaultModel = typeof sessionConfigOrModel === "string" ? sessionConfigOrModel : undefined;
+			const sessionConfig = typeof sessionConfigOrModel === "object" ? sessionConfigOrModel : undefined;
+
+			this.agentConfig = {
+				provider: { default: defaultProvider || process.env.LLM_PROVIDER || "anthropic" },
+				model: { default: defaultModel || process.env.LLM_MODEL || "claude-sonnet-4-6" },
+				tools: { enabled: true, policy: { default: "read-only" } },
+				memory: { enabled: true, backend: "builtin" },
+				rag: { enabled: false },
+			};
+
+			// Inject memoryIndexer into session config if provided
+			const effectiveSessionConfig: AgentSessionManagerConfig = memoryIndexer
+				? { ...sessionConfig, memoryIndexer }
+				: sessionConfig;
+			this.sessionManager = new AgentSessionManager(effectiveSessionConfig);
+		} else {
+			// New signature: second arg is AgentYamlConfig
+			const agentConfig = agentConfigOrProvider;
+
+			// Use provided config or defaults
+			this.agentConfig =
+				agentConfig ||
+				({
+					provider: { default: process.env.LLM_PROVIDER || "anthropic" },
+					model: { default: process.env.LLM_MODEL || "claude-sonnet-4-6" },
+					tools: { enabled: true, policy: { default: "read-only" } },
+					memory: { enabled: true, backend: "builtin" },
+					rag: { enabled: false },
+				} as AgentYamlConfig);
+
+			// Inject memoryIndexer into session config if provided
+			const effectiveSessionConfig: AgentSessionManagerConfig = memoryIndexer
+				? { ...sessionConfigOrModel, memoryIndexer }
+				: sessionConfigOrModel;
+			this.sessionManager = new AgentSessionManager(effectiveSessionConfig);
+		}
 	}
 
 	getLayer(): "in-process" {
@@ -65,13 +100,13 @@ export class InProcessEngine implements IExecutionEngine {
 		}
 
 		// Check if API key is available for the default provider (M5: use shared resolver)
-		const apiKey = resolveProviderApiKey(this.defaultProvider);
+		const apiKey = resolveProviderApiKey(this.agentConfig.provider.default);
 		if (!apiKey) {
-			logger.warn({ provider: this.defaultProvider }, "In-process engine: No API key configured for provider");
+			logger.warn({ provider: this.agentConfig.provider.default }, "In-process engine: No API key configured for provider");
 			return false;
 		}
 
-		logger.debug({ provider: this.defaultProvider, model: this.defaultModel }, "In-process engine available");
+		logger.debug({ provider: this.agentConfig.provider.default, model: this.agentConfig.model.default }, "In-process engine available");
 		return true;
 	}
 
@@ -108,8 +143,8 @@ export class InProcessEngine implements IExecutionEngine {
 				promptLength: request.prompt.length,
 				timeoutMs,
 				maxIterations,
-				provider: this.defaultProvider,
-				model: this.defaultModel,
+				provider: this.agentConfig.provider.default,
+				model: this.agentConfig.model.default,
 				workspace,
 			},
 			"Executing via in-process agent engine",
@@ -121,14 +156,18 @@ export class InProcessEngine implements IExecutionEngine {
 			// Get tool policy from options
 			const toolPolicy = request.options?.toolPolicy as ToolPolicyConfig | undefined;
 
-			// Build session-level agent config (H3: per-request options passed to prompt())
-			const agentConfig: AgentConfig = {
+			// Build session-level agent config using the YAML config as base
+			// This separates agent config concerns from gateway code
+			const effectiveAgentConfig = buildAgentConfig(this.agentConfig, {
 				sessionId: String(chatId),
 				workspaceDir,
-				provider: this.defaultProvider,
-				model: this.defaultModel,
-				tools: createDefaultTools(workspaceDir, toolPolicy, String(chatId)),
-			};
+				workspace,
+			});
+
+			// Override tools if explicitly configured or if toolPolicy is passed
+			if (this.agentConfig.tools?.enabled !== false || toolPolicy) {
+				effectiveAgentConfig.tools = createDefaultTools(workspaceDir, toolPolicy, String(chatId));
+			}
 
 			// Per-request options passed to prompt(), not stored on the session
 			const promptOptions: PromptOptions = {
@@ -139,7 +178,7 @@ export class InProcessEngine implements IExecutionEngine {
 			};
 
 			// Get or create an agent for this chat session
-			const agent = this.sessionManager.getOrCreate(chatId, agentConfig);
+			const agent = this.sessionManager.getOrCreate(chatId, effectiveAgentConfig);
 
 			// Execute the prompt and collect results
 			let result = await agent.prompt(request.prompt, promptOptions);
