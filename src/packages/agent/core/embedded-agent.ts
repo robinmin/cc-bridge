@@ -16,7 +16,7 @@
 
 import { Agent, type AgentEvent, type AgentOptions, type AgentTool } from "@mariozechner/pi-agent-core";
 import type { Api, Model, UserMessage } from "@mariozechner/pi-ai";
-import type { MemoryIndexer } from "@/gateway/memory/indexer/indexer";
+import type { MemoryIndexer } from "@/packages/agent/memory/indexer/indexer";
 import { logger } from "@/packages/logger";
 import { type AgentResult, EventCollector } from "./event-bridge";
 import {
@@ -107,7 +107,7 @@ export interface EmbeddedAgentConfig {
 	/** OpenTelemetry configuration */
 	otel?: AgentOtelConfig;
 	/** Optional memory indexer for RAG context retrieval */
-	memoryIndexer?: import("@/gateway/memory/indexer/indexer").MemoryIndexer;
+	memoryIndexer?: import("@/packages/agent/memory/indexer/indexer").MemoryIndexer;
 	/** Optional RAG configuration */
 	rag?: RagConfig;
 }
