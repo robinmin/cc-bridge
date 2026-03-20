@@ -15,8 +15,10 @@
       "Bash(bun test:*)",
       "Bash(bun run:*)",
       "Bash(npx tsc:*)",
-      "Bash(npm test:*)",
-      "Bash(echo:*)"
+      "Bash(echo:*)",
+      "Bash(bun install:*)",
+      "Bash(bun add:*)",
+      "Bash(bun tsc:*)"
     ]
   }
 }
