@@ -20,6 +20,7 @@
  */
 
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
+import type { MemoryIndexer } from "@/gateway/memory/indexer/indexer";
 import { AgentPersistence } from "@/gateway/persistence";
 import {
 	type CompactionConfig,
@@ -53,6 +54,8 @@ export interface AgentSessionManagerConfig {
 	maxMessagesPerSession?: number;
 	/** Context compaction configuration (Phase 5) */
 	compaction?: CompactionConfig;
+	/** Optional memory indexer for RAG context retrieval */
+	memoryIndexer?: MemoryIndexer;
 	/** Factory function for creating agent instances (for testing) */
 	_createAgent?: (sessionId: string) => EmbeddedAgent;
 }
@@ -103,6 +106,7 @@ export class AgentSessionManager {
 	private readonly persistence: AgentPersistence | null;
 	private readonly maxMessagesPerSession: number;
 	private readonly compactionConfig: CompactionConfig;
+	private readonly memoryIndexer: MemoryIndexer | null;
 	private readonly _createAgent?: (sessionId: string) => EmbeddedAgent;
 	private cleanupTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -111,6 +115,7 @@ export class AgentSessionManager {
 		this.maxSessions = config?.maxSessions ?? 100;
 		this.maxMessagesPerSession = config?.maxMessagesPerSession ?? 200;
 		this.compactionConfig = config?.compaction ?? { enabled: true, threshold: 0.8, preserveRecent: 20 };
+		this.memoryIndexer = config?.memoryIndexer ?? null;
 		this._createAgent = config?._createAgent;
 
 		// Initialize persistence if enabled
@@ -151,7 +156,11 @@ export class AgentSessionManager {
 		}
 
 		// Create new agent using the config or factory
-		const agent = this._createAgent ? this._createAgent(key) : new EmbeddedAgent(agentConfig);
+		// Inject memoryIndexer into agentConfig if available
+		const effectiveConfig: EmbeddedAgentConfig = this.memoryIndexer
+			? { ...agentConfig, memoryIndexer: this.memoryIndexer }
+			: agentConfig;
+		const agent = this._createAgent ? this._createAgent(key) : new EmbeddedAgent(effectiveConfig);
 		const now = Date.now();
 		let turnCount = 0;
 
