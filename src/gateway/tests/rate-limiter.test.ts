@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { RateLimiter } from "@/gateway/rate-limiter";
+import { logger } from "@/packages/logger";
 
 type RateLimiterInternals = {
 	requests: Map<string | number, number[]>;
@@ -173,7 +174,7 @@ describe("RateLimiter", () => {
 
 	describe("internal cleanup branches", () => {
 		test("should prune stale timestamps and emit debug on removed entries", async () => {
-			const debugSpy = spyOn(console, "debug").mockImplementation(() => {});
+			const debugSpy = spyOn(logger, "debug").mockImplementation(() => {});
 			const rl = new RateLimiter(2, 1);
 			const rlInternal = rl as unknown as RateLimiterInternals;
 
