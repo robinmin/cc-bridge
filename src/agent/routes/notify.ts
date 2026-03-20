@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { Hono } from "hono";
 import { ZodError } from "zod";
+import { logger } from "@/packages/logger";
 import { AGENT_CONSTANTS } from "@/agent/consts";
 import { NotifySchema } from "@/agent/types";
 
@@ -57,7 +58,7 @@ router.post("/", async (c) => {
 			const transformed = transformNotifyError(error);
 			return c.json(transformed, 400);
 		}
-		console.error("[Agent Notify] Error writing to mailbox:", error);
+		logger.error({ error }, "Error writing to mailbox");
 		return c.json({ error: "Internal server error" }, 500);
 	}
 });
