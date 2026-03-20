@@ -41,16 +41,12 @@ ${blocks.join("\n\n")}
 }
 
 /**
- * Build a RAG prompt by combining the query and formatted context.
+ * Build a RAG prompt by formatting search results into context.
  *
- * @param query - The original user query
+ * @param _query - Reserved for future use (e.g., query-aware formatting)
  * @param results - Array of search results
- * @returns Combined RAG prompt string, or empty string if no results
+ * @returns Formatted RAG context string, or empty string if no results
  */
 export function buildRagPrompt(_query: string, results: SearchResult[]): string {
-	const context = formatRagContext(results);
-	if (context === "") {
-		return "";
-	}
-	return context;
+	return formatRagContext(results);
 }
