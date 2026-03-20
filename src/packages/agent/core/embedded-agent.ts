@@ -300,19 +300,22 @@ export class EmbeddedAgent {
 		let ragRetrievalDurationMs: number | undefined;
 		let ragResultsCount = 0;
 
+		// Evict cache entries older than 5 minutes (per task spec)
+		this.ragCache.evictOlderThan(5 * 60 * 1000);
+
 		try {
 			const ragStartTime = Date.now();
 			const ragResult = await this.retrieveRagContext(message);
 			ragRetrievalDurationMs = Date.now() - ragStartTime;
 			ragContext = ragResult.context;
 			ragCacheHit = ragResult.cacheHit;
+			ragResultsCount = ragResult.resultsCount;
 
 			if (ragContext) {
 				originalSystemPrompt = this.systemPrompt;
 				const effectiveSystemPrompt = `${ragContext}\n\n${this.systemPrompt}`;
 				this.agent.setSystemPrompt(effectiveSystemPrompt);
-				logger.debug({ ragContextLength: ragContext.length }, "RAG context prepended to system prompt");
-				ragResultsCount = ragContext.length > 0 ? 1 : 0;
+				logger.debug({ ragContextLength: ragContext.length, ragResultsCount }, "RAG context prepended to system prompt");
 			}
 		} catch (error) {
 			// RAG retrieval is best-effort - log and continue without RAG
@@ -448,6 +451,7 @@ export class EmbeddedAgent {
 		this.watcher?.dispose();
 		this.watcher = null;
 		await this.otelService?.shutdown();
+		this.ragCache.clear();
 	}
 
 	/** Check if a prompt is currently running */
@@ -530,9 +534,11 @@ export class EmbeddedAgent {
 
 	/**
 	 * Clear the agent's message history.
+	 * Also clears the RAG cache as per task spec.
 	 */
 	clearMessages(): void {
 		this.agent.clearMessages();
+		this.ragCache.clear();
 	}
 
 	/**
@@ -569,26 +575,27 @@ export class EmbeddedAgent {
 	 * Returns undefined if RAG is disabled, indexer unavailable, or no results above threshold.
 	 *
 	 * @param message - The user message to retrieve context for
-	 * @returns Formatted RAG context string or undefined
+	 * @returns Formatted RAG context string, cache hit flag, and results count
 	 */
-	private async retrieveRagContext(message: string): Promise<{ context: string | undefined; cacheHit: boolean }> {
+	private async retrieveRagContext(message: string): Promise<{ context: string | undefined; cacheHit: boolean; resultsCount: number }> {
 		// Check if RAG is disabled
 		if (!this.ragEnabled) {
 			logger.debug("RAG disabled, skipping retrieval");
-			return { context: undefined, cacheHit: false };
+			return { context: undefined, cacheHit: false, resultsCount: 0 };
 		}
 
 		// Check if memory indexer is available
 		if (!this.memoryIndexer) {
 			logger.debug("RAG indexer not available, skipping retrieval");
-			return { context: undefined, cacheHit: false };
+			return { context: undefined, cacheHit: false, resultsCount: 0 };
 		}
 
 		// Check cache first
 		const cached = this.ragCache.get(message);
 		if (cached !== undefined) {
 			logger.debug("RAG cache hit");
-			return { context: cached, cacheHit: true };
+			// For cache hits, we don't have the exact count, but context exists
+			return { context: cached, cacheHit: true, resultsCount: 1 };
 		}
 
 		logger.debug("RAG cache miss, performing search");
@@ -603,7 +610,7 @@ export class EmbeddedAgent {
 		// If search timed out or returned nothing
 		if (searchResults === undefined || searchResults.length === 0) {
 			logger.debug("RAG search returned no results");
-			return { context: undefined, cacheHit: false };
+			return { context: undefined, cacheHit: false, resultsCount: 0 };
 		}
 
 		// Filter results by threshold
@@ -614,7 +621,7 @@ export class EmbeddedAgent {
 
 		if (aboveThreshold.length === 0) {
 			logger.debug({ threshold: this.ragThreshold }, "All RAG results below threshold");
-			return { context: undefined, cacheHit: false };
+			return { context: undefined, cacheHit: false, resultsCount: 0 };
 		}
 
 		// Format and cache results
@@ -623,7 +630,7 @@ export class EmbeddedAgent {
 
 		logger.debug({ resultsCount: aboveThreshold.length, threshold: this.ragThreshold }, "RAG retrieval successful");
 
-		return { context, cacheHit: false };
+		return { context, cacheHit: false, resultsCount: aboveThreshold.length };
 	}
 
 	// =========================================================================
