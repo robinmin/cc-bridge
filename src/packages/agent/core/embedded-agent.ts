@@ -16,6 +16,7 @@
 
 import { Agent, type AgentEvent, type AgentOptions, type AgentTool } from "@mariozechner/pi-agent-core";
 import type { Api, Model, UserMessage } from "@mariozechner/pi-ai";
+import type { MemoryIndexer } from "@/gateway/memory/indexer/indexer";
 import { logger } from "@/packages/logger";
 import { type AgentResult, EventCollector } from "./event-bridge";
 import {
@@ -28,6 +29,8 @@ import {
 	startObservabilityRun,
 } from "./observability";
 import { type AgentOtelConfig, type AgentOtelService, createAgentOtelService } from "./otel";
+import { RagContextCache } from "./rag-cache";
+import { buildRagPrompt } from "./rag-context";
 import { loadWorkspaceBootstrap, WorkspaceWatcher } from "./workspace";
 
 // =============================================================================
@@ -103,6 +106,24 @@ export interface EmbeddedAgentConfig {
 	observability?: EmbeddedAgentObservabilityConfig;
 	/** OpenTelemetry configuration */
 	otel?: AgentOtelConfig;
+	/** Optional memory indexer for RAG context retrieval */
+	memoryIndexer?: import("@/gateway/memory/indexer/indexer").MemoryIndexer;
+	/** Optional RAG configuration */
+	rag?: RagConfig;
+}
+
+/**
+ * RAG (Retrieval-Augmented Generation) configuration for selective context injection.
+ */
+export interface RagConfig {
+	/** Enable or disable RAG context retrieval (default: true) */
+	enabled?: boolean;
+	/** Minimum score threshold for including results (default: 0.3, range: 0-1) */
+	threshold?: number;
+	/** Maximum number of results to retrieve (default: 5) */
+	maxResults?: number;
+	/** Search mode for retrieval (default: "hybrid") */
+	mode?: "keyword" | "vector" | "hybrid";
 }
 
 /**
@@ -144,6 +165,12 @@ export class EmbeddedAgent {
 	private readonly observabilityConfig: EmbeddedAgentObservabilityConfig;
 	private readonly observability: EmbeddedAgentObservabilitySnapshot;
 	private readonly otelService: AgentOtelService | null;
+	private readonly memoryIndexer: MemoryIndexer | null;
+	private readonly ragCache: RagContextCache;
+	private readonly ragEnabled: boolean;
+	private readonly ragThreshold: number;
+	private readonly ragMaxResults: number;
+	private readonly ragMode: "keyword" | "vector" | "hybrid";
 
 	constructor(config: EmbeddedAgentConfig) {
 		this.config = config;
@@ -158,6 +185,14 @@ export class EmbeddedAgent {
 		};
 
 		this.observability = createObservabilitySnapshot(config.sessionId, config.provider, config.model);
+
+		// Initialize RAG fields with config or defaults
+		this.memoryIndexer = config.memoryIndexer ?? null;
+		this.ragCache = new RagContextCache();
+		this.ragEnabled = config.rag?.enabled ?? true;
+		this.ragThreshold = config.rag?.threshold ?? 0.3;
+		this.ragMaxResults = config.rag?.maxResults ?? 5;
+		this.ragMode = config.rag?.mode ?? "hybrid";
 
 		// Resolve provider config for getApiKey
 		const providerConfig = this.getProviderConfig();
@@ -258,6 +293,32 @@ export class EmbeddedAgent {
 		const runContext = startObservabilityRun(this.observability, message.length, this.observabilityConfig);
 		let timedOut = false;
 
+		// Retrieve RAG context before prompt execution
+		let ragContext: string | undefined;
+		let originalSystemPrompt: string | undefined;
+		let ragCacheHit = false;
+		let ragRetrievalDurationMs: number | undefined;
+		let ragResultsCount = 0;
+
+		try {
+			const ragStartTime = Date.now();
+			const ragResult = await this.retrieveRagContext(message);
+			ragRetrievalDurationMs = Date.now() - ragStartTime;
+			ragContext = ragResult.context;
+			ragCacheHit = ragResult.cacheHit;
+
+			if (ragContext) {
+				originalSystemPrompt = this.systemPrompt;
+				const effectiveSystemPrompt = `${ragContext}\n\n${this.systemPrompt}`;
+				this.agent.setSystemPrompt(effectiveSystemPrompt);
+				logger.debug({ ragContextLength: ragContext.length }, "RAG context prepended to system prompt");
+				ragResultsCount = ragContext.length > 0 ? 1 : 0;
+			}
+		} catch (error) {
+			// RAG retrieval is best-effort - log and continue without RAG
+			logger.warn({ error }, "RAG context retrieval failed, continuing without RAG");
+		}
+
 		this.promptRunning = true;
 
 		// Set up event collector with maxIterations guard
@@ -299,6 +360,14 @@ export class EmbeddedAgent {
 				usage: collector.getUsageTotals(),
 				errorCategory: result.aborted ? (timedOut ? "timeout" : "max_iterations") : undefined,
 				config: this.observabilityConfig,
+				rag: ragContext
+					? {
+							resultsCount: ragResultsCount,
+							cacheHit: ragCacheHit,
+							threshold: this.ragThreshold,
+							retrievalDurationMs: ragRetrievalDurationMs,
+						}
+					: undefined,
 			});
 			logger.info(
 				{
@@ -331,12 +400,26 @@ export class EmbeddedAgent {
 				usage: collector.getUsageTotals(),
 				errorCategory: category,
 				config: this.observabilityConfig,
+				rag: ragContext
+					? {
+							resultsCount: ragResultsCount,
+							cacheHit: ragCacheHit,
+							threshold: this.ragThreshold,
+							retrievalDurationMs: ragRetrievalDurationMs,
+						}
+					: undefined,
 			});
 			throw error;
 		} finally {
 			clearTimeout(timeoutHandle);
 			unsub();
 			this.promptRunning = false;
+
+			// Restore original system prompt if RAG context was prepended
+			if (originalSystemPrompt !== undefined) {
+				this.agent.setSystemPrompt(originalSystemPrompt);
+				logger.debug("RAG context removed from system prompt");
+			}
 		}
 	}
 
@@ -481,6 +564,68 @@ export class EmbeddedAgent {
 		return this.agent;
 	}
 
+	/**
+	 * Retrieve RAG context for a given message.
+	 * Returns undefined if RAG is disabled, indexer unavailable, or no results above threshold.
+	 *
+	 * @param message - The user message to retrieve context for
+	 * @returns Formatted RAG context string or undefined
+	 */
+	private async retrieveRagContext(message: string): Promise<{ context: string | undefined; cacheHit: boolean }> {
+		// Check if RAG is disabled
+		if (!this.ragEnabled) {
+			logger.debug("RAG disabled, skipping retrieval");
+			return { context: undefined, cacheHit: false };
+		}
+
+		// Check if memory indexer is available
+		if (!this.memoryIndexer) {
+			logger.debug("RAG indexer not available, skipping retrieval");
+			return { context: undefined, cacheHit: false };
+		}
+
+		// Check cache first
+		const cached = this.ragCache.get(message);
+		if (cached !== undefined) {
+			logger.debug("RAG cache hit");
+			return { context: cached, cacheHit: true };
+		}
+
+		logger.debug("RAG cache miss, performing search");
+
+		// Perform search with timeout
+		const searchResults = await withTimeout(
+			this.memoryIndexer.search(message, { mode: this.ragMode, limit: this.ragMaxResults }),
+			5000,
+			"memoryIndexer.search",
+		);
+
+		// If search timed out or returned nothing
+		if (searchResults === undefined || searchResults.length === 0) {
+			logger.debug("RAG search returned no results");
+			return { context: undefined, cacheHit: false };
+		}
+
+		// Filter results by threshold
+		const aboveThreshold = searchResults.filter((result) => {
+			const score = result.score ?? 0;
+			return score >= this.ragThreshold;
+		});
+
+		if (aboveThreshold.length === 0) {
+			logger.debug({ threshold: this.ragThreshold }, "All RAG results below threshold");
+			return { context: undefined, cacheHit: false };
+		}
+
+		// Format and cache results
+		const context = buildRagPrompt(message, aboveThreshold);
+		this.ragCache.set(message, context);
+
+		logger.debug({ resultsCount: aboveThreshold.length, threshold: this.ragThreshold }, "RAG retrieval successful");
+
+		return { context, cacheHit: false };
+	}
+
 	// =========================================================================
 	// Private helpers
 	// =========================================================================
@@ -525,5 +670,35 @@ export class EmbeddedAgent {
 			contextWindow: 200000,
 			maxTokens: 8192,
 		};
+	}
+}
+
+/**
+ * Wrap a promise with a timeout.
+ * Returns undefined if timeout expires before promise resolves.
+ * Logs a warning if timeout occurs.
+ *
+ * @param promise - The promise to wrap
+ * @param ms - Timeout in milliseconds
+ * @param label - Label for logging
+ * @returns The promise result or undefined if timeout
+ */
+async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T | undefined> {
+	let timeoutId: ReturnType<typeof setTimeout>;
+	let timedOut = false;
+
+	const timeout = new Promise<undefined>((resolve) => {
+		timeoutId = setTimeout(() => {
+			timedOut = true;
+			logger.warn({ ms, label }, "RAG search timed out");
+			resolve(undefined);
+		}, ms);
+	});
+
+	try {
+		const result = await Promise.race([promise, timeout]);
+		return timedOut ? undefined : result;
+	} finally {
+		clearTimeout(timeoutId);
 	}
 }
