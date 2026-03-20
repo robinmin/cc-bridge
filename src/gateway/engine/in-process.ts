@@ -15,8 +15,8 @@ import { GATEWAY_CONSTANTS } from "@/gateway/consts";
 import type { MemoryIndexer } from "@/packages/agent/memory/indexer/indexer";
 import { logger } from "@/packages/logger";
 import {
+	type AgentConfig,
 	createDefaultTools,
-	type EmbeddedAgentConfig,
 	type PromptOptions,
 	resolveProviderApiKey,
 	type ToolPolicyConfig,
@@ -122,7 +122,7 @@ export class InProcessEngine implements IExecutionEngine {
 			const toolPolicy = request.options?.toolPolicy as ToolPolicyConfig | undefined;
 
 			// Build session-level agent config (H3: per-request options passed to prompt())
-			const agentConfig: EmbeddedAgentConfig = {
+			const agentConfig: AgentConfig = {
 				sessionId: String(chatId),
 				workspaceDir,
 				provider: this.defaultProvider,
