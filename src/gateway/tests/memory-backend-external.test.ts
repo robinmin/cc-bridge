@@ -6,7 +6,7 @@ import {
 	ExternalMemoryBackend,
 	type ExternalMemoryProvider,
 	StubExternalProvider,
-} from "@/gateway/memory/backend-external";
+} from "@/packages/agent/memory/backend-external";
 
 describe("memory/backend-external", () => {
 	const testWorkspace = path.join(os.tmpdir(), `cc-bridge-ext-memory-test-${Date.now()}`);
