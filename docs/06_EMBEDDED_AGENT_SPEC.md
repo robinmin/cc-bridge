@@ -1126,14 +1126,6 @@ const result = await engine.execute({
 
 ## 14. What's Next
 
-Implemented features (v1.5.0):
-
-| Feature | Description | Status |
-|---------|-------------|--------|
-| **Memory system** | Complete memory with FTS5, embeddings, hybrid search | Implemented |
-| **3-layer execution** | In-process, Host IPC, Container with orchestrator | Implemented |
-| **LLM compaction** | Context summarization for long sessions | Implemented |
-
 Future enhancement areas:
 
 | Feature | Description | Priority |
@@ -1145,6 +1137,10 @@ Future enhancement areas:
 | **Fallback chains** | Retry with different provider on failure | Medium |
 | **Tool result caching** | Cache tool results to avoid redundant executions | Medium |
 | **Tool retry policy** | Automatic retry with exponential backoff | Low |
+
+---
+
+**Implemented in v1.5.0**: Memory system (FTS5, embeddings, hybrid search), 3-layer execution orchestrator, LLM-powered context compaction. See [Section 10 - Memory System](#10-memory-system) for details.
 
 ---
 
