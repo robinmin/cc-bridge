@@ -8,7 +8,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { SearchResult } from "@/gateway/memory/types";
+import type { SearchResult } from "@/packages/agent/memory/types";
 import { RagContextCache } from "../agent/core/rag-cache";
 import { buildRagPrompt, formatRagContext } from "../agent/core/rag-context";
 
