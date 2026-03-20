@@ -12,6 +12,7 @@
 
 import path from "node:path";
 import { GATEWAY_CONSTANTS } from "@/gateway/consts";
+import type { MemoryIndexer } from "@/gateway/memory/indexer/indexer";
 import { logger } from "@/packages/logger";
 import {
 	createDefaultTools,
@@ -41,11 +42,17 @@ export class InProcessEngine implements IExecutionEngine {
 		defaultProvider?: string,
 		defaultModel?: string,
 		sessionConfig?: AgentSessionManagerConfig,
+		memoryIndexer?: MemoryIndexer,
 	) {
 		this.enabled = enabled;
 		this.defaultProvider = defaultProvider || process.env.LLM_PROVIDER || "anthropic";
 		this.defaultModel = defaultModel || process.env.LLM_MODEL || "claude-sonnet-4-6";
-		this.sessionManager = new AgentSessionManager(sessionConfig);
+
+		// Inject memoryIndexer into session config if provided
+		const effectiveSessionConfig: AgentSessionManagerConfig = memoryIndexer
+			? { ...sessionConfig, memoryIndexer }
+			: sessionConfig;
+		this.sessionManager = new AgentSessionManager(effectiveSessionConfig);
 	}
 
 	getLayer(): "in-process" {
