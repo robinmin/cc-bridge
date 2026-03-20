@@ -54,6 +54,7 @@ export {
 
 // Consolidated agent module - re-exports all agent functionality
 export {
+	type AgentConfig,
 	type AgentResult,
 	applyToolPolicy,
 	BashTool,
@@ -78,7 +79,6 @@ export {
 	discoverSkills,
 	// Core
 	EmbeddedAgent,
-	type EmbeddedAgentConfig,
 	// Events
 	EventCollector,
 	GlobalToolPolicy,
