@@ -8,13 +8,13 @@
       "Skill(rd2:code-review)",
       "Skill(rd2:tasks-changelog)",
       "Skill(rd2:code-review)",
-
       "Bash(tasks:*)",
       "Bash(make:*)",
       "Bash(grep:*)",
       "Bash(ast-grep:*)",
-
-      "Bash(bun test:*)"
+      "Bash(bun test:*)",
+      "Bash(bun run:*)",
+      "Bash(npx tsc:*)"
     ]
   }
 }
