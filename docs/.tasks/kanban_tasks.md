@@ -6,7 +6,7 @@ kanban-plugin: board
 
 ## Backlog
 
-
+- [ ] 0196_implementa_RAW_pipeline
 
 ## Todo
 
