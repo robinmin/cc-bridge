@@ -11,6 +11,7 @@ export enum ErrorType {
 }
 
 import { EventEmitter } from "node:events";
+import { logger } from "@/packages/logger";
 
 /**
  * Recovery event types
@@ -510,24 +511,16 @@ export class ErrorRecoveryService {
 	 */
 	private logger = {
 		info: (msg: string, meta?: Record<string, unknown>) => {
-			if (process.env.NODE_ENV !== "test") {
-				console.log(`[ErrorRecovery] INFO ${msg}`, meta || "");
-			}
+			logger.info({ ...meta }, msg);
 		},
 		warn: (msg: string, meta?: Record<string, unknown>) => {
-			if (process.env.NODE_ENV !== "test") {
-				console.warn(`[ErrorRecovery] WARN ${msg}`, meta || "");
-			}
+			logger.warn({ ...meta }, msg);
 		},
 		error: (msg: string, meta?: Record<string, unknown>) => {
-			if (process.env.NODE_ENV !== "test") {
-				console.error(`[ErrorRecovery] ERROR ${msg}`, meta || "");
-			}
+			logger.error({ ...meta }, msg);
 		},
 		debug: (msg: string, meta?: Record<string, unknown>) => {
-			if (process.env.NODE_ENV !== "test") {
-				console.debug(`[ErrorRecovery] DEBUG ${msg}`, meta || "");
-			}
+			logger.debug({ ...meta }, msg);
 		},
 	};
 
