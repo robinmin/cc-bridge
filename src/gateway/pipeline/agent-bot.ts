@@ -14,12 +14,16 @@ import type { ExecutionRequest, ExecutionResult } from "@/gateway/engine/contrac
 import { InProcessEngine } from "@/gateway/engine/in-process";
 import { getExecutionOrchestrator } from "@/gateway/engine/orchestrator";
 import { instanceManager } from "@/gateway/instance-manager";
-import { buildMemoryBootstrapContext, persistConversationMemory, resolveMemoryConfig } from "@/packages/agent/memory/manager";
-import { inferGroupContext } from "@/packages/agent/memory/policy";
 import { persistence } from "@/gateway/persistence";
 import { discoveryCache } from "@/gateway/services/discovery-cache";
 import { SessionPoolService } from "@/gateway/services/SessionPoolService";
 import { TmuxManager } from "@/gateway/services/tmux-manager";
+import {
+	buildMemoryBootstrapContext,
+	persistConversationMemory,
+	resolveMemoryConfig,
+} from "@/packages/agent/memory/manager";
+import { inferGroupContext } from "@/packages/agent/memory/policy";
 import { logger } from "@/packages/logger";
 import { renderTemplate } from "@/packages/template";
 import type { Bot, Message } from "./index";
