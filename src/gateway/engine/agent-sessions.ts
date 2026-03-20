@@ -20,16 +20,15 @@
  */
 
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
-import type { MemoryIndexer } from "@/packages/agent/memory/indexer/indexer";
 import { AgentPersistence } from "@/gateway/persistence";
 import {
-	type CompactionConfig,
+	type AgentConfig,
 	compactMessages,
 	compactMessagesSync,
 	EmbeddedAgent,
-	type EmbeddedAgentConfig,
 	needsCompaction,
 } from "@/packages/agent";
+import type { MemoryIndexer } from "@/packages/agent/memory/indexer/indexer";
 import { logger } from "@/packages/logger";
 
 // =============================================================================
@@ -140,7 +139,7 @@ export class AgentSessionManager {
 	 * Get an existing agent session or create a new one.
 	 * If persistence is enabled and a saved session exists, loads message history (warm start).
 	 */
-	getOrCreate(chatId: string | number, agentConfig: EmbeddedAgentConfig): EmbeddedAgent {
+	getOrCreate(chatId: string | number, agentConfig: AgentConfig): EmbeddedAgent {
 		const key = String(chatId);
 
 		// Check for existing session
@@ -157,7 +156,7 @@ export class AgentSessionManager {
 
 		// Create new agent using the config or factory
 		// Inject memoryIndexer into agentConfig if available
-		const effectiveConfig: EmbeddedAgentConfig = this.memoryIndexer
+		const effectiveConfig: AgentConfig = this.memoryIndexer
 			? { ...agentConfig, memoryIndexer: this.memoryIndexer }
 			: agentConfig;
 		const agent = this._createAgent ? this._createAgent(key) : new EmbeddedAgent(effectiveConfig);
