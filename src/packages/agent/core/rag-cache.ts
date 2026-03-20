@@ -17,82 +17,22 @@ interface CacheEntry {
 
 /**
  * Common stop words to remove during query normalization
- * Initialized without array literal to avoid coverage counting internal iterator
  */
-const STOP_WORDS = new Set<string>();
-STOP_WORDS.add("a");
-STOP_WORDS.add("an");
-STOP_WORDS.add("the");
-STOP_WORDS.add("is");
-STOP_WORDS.add("are");
-STOP_WORDS.add("was");
-STOP_WORDS.add("were");
-STOP_WORDS.add("be");
-STOP_WORDS.add("been");
-STOP_WORDS.add("being");
-STOP_WORDS.add("have");
-STOP_WORDS.add("has");
-STOP_WORDS.add("had");
-STOP_WORDS.add("do");
-STOP_WORDS.add("does");
-STOP_WORDS.add("did");
-STOP_WORDS.add("will");
-STOP_WORDS.add("would");
-STOP_WORDS.add("could");
-STOP_WORDS.add("should");
-STOP_WORDS.add("may");
-STOP_WORDS.add("might");
-STOP_WORDS.add("must");
-STOP_WORDS.add("can");
-STOP_WORDS.add("to");
-STOP_WORDS.add("of");
-STOP_WORDS.add("in");
-STOP_WORDS.add("for");
-STOP_WORDS.add("on");
-STOP_WORDS.add("with");
-STOP_WORDS.add("at");
-STOP_WORDS.add("by");
-STOP_WORDS.add("from");
-STOP_WORDS.add("as");
-STOP_WORDS.add("into");
-STOP_WORDS.add("through");
-STOP_WORDS.add("during");
-STOP_WORDS.add("before");
-STOP_WORDS.add("after");
-STOP_WORDS.add("above");
-STOP_WORDS.add("below");
-STOP_WORDS.add("between");
-STOP_WORDS.add("under");
-STOP_WORDS.add("again");
-STOP_WORDS.add("further");
-STOP_WORDS.add("then");
-STOP_WORDS.add("once");
-STOP_WORDS.add("here");
-STOP_WORDS.add("there");
-STOP_WORDS.add("when");
-STOP_WORDS.add("where");
-STOP_WORDS.add("why");
-STOP_WORDS.add("how");
-STOP_WORDS.add("all");
-STOP_WORDS.add("each");
-STOP_WORDS.add("every");
-STOP_WORDS.add("both");
-STOP_WORDS.add("few");
-STOP_WORDS.add("more");
-STOP_WORDS.add("most");
-STOP_WORDS.add("other");
-STOP_WORDS.add("some");
-STOP_WORDS.add("such");
-STOP_WORDS.add("no");
-STOP_WORDS.add("nor");
-STOP_WORDS.add("not");
-STOP_WORDS.add("only");
-STOP_WORDS.add("own");
-STOP_WORDS.add("same");
-STOP_WORDS.add("so");
-STOP_WORDS.add("than");
-STOP_WORDS.add("too");
-STOP_WORDS.add("very");
+const createStopWords = (): Set<string> =>
+	new Set([
+		"a", "an", "the", "is", "are", "was", "were",
+		"have", "has", "had", "do", "does", "did",
+		"will", "would", "could", "should", "may", "might", "must", "can",
+		"to", "of", "in", "for", "on", "with", "at", "by", "from", "as",
+		"into", "through", "during", "before", "after", "above", "below",
+		"between", "under", "again", "further", "then", "once",
+		"here", "there", "when", "where", "why", "how",
+		"all", "each", "every", "both", "few", "more", "most",
+		"other", "some", "such", "no", "nor", "not", "only", "own", "same",
+		"so", "than", "too", "very",
+	]);
+
+const STOP_WORDS = createStopWords();
 
 /**
  * RagContextCache provides query normalization and TTL-based eviction
@@ -101,10 +41,6 @@ STOP_WORDS.add("very");
 export class RagContextCache {
 	private readonly cache = new Map<string, CacheEntry>();
 	private readonly keysWithTimestamp: Array<{ key: string; timestamp: number }> = [];
-
-	constructor() {
-		// Explicit constructor for coverage attribution
-	}
 
 	/**
 	 * Get a cached RAG context for a normalized query.
