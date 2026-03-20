@@ -255,11 +255,11 @@ export class Fts5Indexer {
 					}
 				} catch (error) {
 					// Continue with next batch on error
-					console.error("Error generating embeddings for batch:", error);
+					logger.error({ error }, "Error generating embeddings for batch");
 				}
 			}
 		} catch (error) {
-			console.error("Error generating embeddings:", error);
+			logger.error({ error }, "Error generating embeddings");
 		}
 	}
 
