@@ -28,6 +28,7 @@ export {
 	PROVIDER_CONFIGS,
 	type PromptOptions,
 	type ProviderConfig,
+	type RagConfig,
 	resolveProviderApiKey,
 } from "./core/embedded-agent";
 export { type AgentResult, EventCollector, isTextContentBlock, type ToolCallRecord } from "./core/event-bridge";
@@ -56,6 +57,8 @@ export {
 	createAgentOtelService,
 	createOtelConfigFromEnv,
 } from "./core/otel";
+export { RagContextCache } from "./core/rag-cache";
+export { buildRagPrompt, formatRagContext } from "./core/rag-context";
 export {
 	BOOTSTRAP_FILES,
 	type BootstrapFileName,
