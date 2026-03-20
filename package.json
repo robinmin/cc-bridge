@@ -6,7 +6,8 @@
   "scripts": {
     "start:agent": "bun run src/agent/index.ts",
     "start:gateway": "bun run src/gateway/index.ts",
-    "test": "bun test test src/agent/tests/*.test.ts --reporter=dots && bun test src/packages/tests src/gateway/tests --reporter=dots",
+    "test-old": "bun test test src/agent/tests/*.test.ts --reporter=dots && bun test src/packages/tests src/gateway/tests --reporter=dots",
+    "test": "make test",
     "format": "biome format --write src",
     "lint": "biome lint --write src",
     "check": "biome check --write src"
