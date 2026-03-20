@@ -6,7 +6,7 @@ import { GATEWAY_CONSTANTS } from "@/gateway/consts";
 import { getExecutionOrchestrator } from "@/gateway/engine/orchestrator";
 import { instanceManager } from "@/gateway/instance-manager";
 import { MailboxWatcher } from "@/gateway/mailbox-watcher";
-import { createMemoryBackend, resolveMemoryConfig } from "@/gateway/memory/manager";
+import { createMemoryBackend, resolveMemoryConfig } from "@/packages/agent/memory/manager";
 import { authMiddleware } from "@/gateway/middleware/auth";
 import { persistence } from "@/gateway/persistence";
 import { AgentBot } from "@/gateway/pipeline/agent-bot";
