@@ -7,9 +7,9 @@
 
 import path from "node:path";
 import Database from "node:sqlite";
+import type { EmbeddingProviderInterface } from "./embeddings";
 import { readAllMemoryFiles } from "./storage";
 import type { IndexEntry, IndexStatus, MemoryPaths } from "./types";
-import type { EmbeddingProviderInterface } from "./embeddings";
 
 const FTS_TABLE = "memory_fts";
 const DOCS_TABLE = "memory_docs";
@@ -378,11 +378,9 @@ export class Fts5Indexer {
 			const existing = this.db.prepare(`SELECT id FROM ${DOCS_TABLE} WHERE path = ?`).get(docPath);
 
 			if (existing) {
-				this.db.prepare(`UPDATE ${DOCS_TABLE} SET content = ?, last_modified = ? WHERE path = ?`).run(
-					content,
-					Date.now(),
-					docPath,
-				);
+				this.db
+					.prepare(`UPDATE ${DOCS_TABLE} SET content = ?, last_modified = ? WHERE path = ?`)
+					.run(content, Date.now(), docPath);
 			} else {
 				// Insert new document - need to determine source type
 				const sourceType = docPath.includes("/daily/") ? "daily" : docPath.includes("/bank/") ? "bank" : "memory";
