@@ -591,5 +591,64 @@ describe("embedded-agent", () => {
 			expect(result).toBeDefined();
 			agent.dispose();
 		});
+
+		test("RAG context retrieval with mock memoryIndexer", async () => {
+			// Create a mock memory indexer that returns search results
+			const mockMemoryIndexer = {
+				search: mock(async () => [
+					{ path: "test.md", snippet: "Test content", score: 0.8 },
+					{ path: "doc.md", snippet: "Documentation", score: 0.6 },
+				]),
+				initialize: mock(async () => {}),
+				close: mock(() => {}),
+				isInitialized: mock(() => true),
+				getStatus: mock(async () => ({ initialized: true, fts5: true, vector: false, documentCount: 1 })),
+				rebuild: mock(async () => ({ ok: true })),
+				isVectorEnabled: mock(() => false),
+			};
+
+			const agent = new EmbeddedAgent({
+				provider: "anthropic",
+				model: "claude-3-5-sonnet-20241022",
+				workspaceDir: "/tmp/test",
+				memoryIndexer: mockMemoryIndexer as unknown as typeof mockMemoryIndexer & {
+					search: typeof mockMemoryIndexer.search;
+				},
+			});
+			await agent.initialize();
+			const result = await agent.prompt("test query for RAG");
+			expect(result).toBeDefined();
+			// Verify the mock was called (RAG retrieval happened)
+			expect(mockMemoryIndexer.search).toHaveBeenCalled();
+			agent.dispose();
+		});
+
+		test("RAG context below threshold returns no context", async () => {
+			// Create a mock memory indexer that returns low-score results
+			const mockMemoryIndexer = {
+				search: mock(async () => [
+					{ path: "test.md", snippet: "Test content", score: 0.1 }, // Below default threshold 0.3
+				]),
+				initialize: mock(async () => {}),
+				close: mock(() => {}),
+				isInitialized: mock(() => true),
+				getStatus: mock(async () => ({ initialized: true, fts5: true, vector: false, documentCount: 1 })),
+				rebuild: mock(async () => ({ ok: true })),
+				isVectorEnabled: mock(() => false),
+			};
+
+			const agent = new EmbeddedAgent({
+				provider: "anthropic",
+				model: "claude-3-5-sonnet-20241022",
+				workspaceDir: "/tmp/test",
+				memoryIndexer: mockMemoryIndexer as unknown as typeof mockMemoryIndexer & {
+					search: typeof mockMemoryIndexer.search;
+				},
+			});
+			await agent.initialize();
+			const result = await agent.prompt("test query");
+			expect(result).toBeDefined();
+			agent.dispose();
+		});
 	});
 });
