@@ -1,7 +1,148 @@
+// Agent Configuration
+// This file contains agent-specific configuration separated from gateway concerns.
+// The gateway loads this file and passes the configuration to the agent.
+
 {
-	/* Agent Service Configuration */
-	"healthStatus": "ok",
-	"healthRuntime": "bun",
-	// Log level (debug, info, warn, error)
-	"logLevel": "debug"
+	// Provider Configuration
+	"provider": {
+		// Default provider: "anthropic", "openai", "google", "gemini", "openrouter"
+		"default": "anthropic",
+
+		// Multi-provider configuration (optional)
+		// "multiProvider": {
+		//   "strategy": "smart"  // cost-optimized, latency-optimized, quality-optimized, fallback, smart
+		//   "weights": {
+		//     "cost": 0.3,
+		//     "latency": 0.3,
+		//     "quality": 0.4
+		//   },
+		//   "order": ["anthropic", "openai"]
+		// }
+	},
+
+	// Model Configuration
+	"model": {
+		// Default model
+		"default": "claude-sonnet-4-6",
+
+		// Enable extended thinking/reasoning (provider-specific)
+		"reasoning": false,
+
+		// Per-provider model overrides (optional)
+		// "models": {
+		//   "anthropic": "claude-sonnet-4-6",
+		//   "openai": "gpt-4o"
+		// }
+	},
+
+	// Tool Configuration
+	"tools": {
+		// Enable built-in tools
+		"enabled": true,
+
+		// Tool policy configuration
+		"policy": {
+			// Default policy: "read-only" or "full"
+			"default": "read-only",
+
+			// Per-tool overrides (optional)
+			// "bash": {
+			//   "allowed": true,
+			//   "timeout": 60000
+			// },
+			// "web-search": {
+			//   "allowed": true,
+			//   "dailyLimit": 100
+			// }
+		}
+	},
+
+	// Sandbox Configuration
+	"sandbox": {
+		// Default sandbox mode: "host" or "docker"
+		"mode": "host",
+
+		// Docker settings (when mode is "docker")
+		// "docker": {
+		//   "image": "ubuntu:22.04",
+		//   "network": "bridge"
+		// },
+
+		// Resource limits
+		"limits": {
+			"memory": "512m",
+			"cpus": 2,
+			"pids": 100
+		}
+	},
+
+	// Memory Configuration
+	"memory": {
+		// Enable memory system
+		"enabled": true,
+
+		// Storage backend: "builtin", "external", "none"
+		"backend": "builtin",
+
+		// Compaction settings
+		"compaction": {
+			"enabled": true,
+			"reserveTokens": 8000,
+			"keepRecentTokens": 2000
+		},
+
+		// Indexing settings for RAG
+		"indexing": {
+			"enabled": true,
+			"vector": true,
+			"provider": "openai"  // openai, gemini, voyage, mistral
+		}
+	},
+
+	// RAG (Retrieval-Augmented Generation) Configuration
+	"rag": {
+		// Enable RAG context retrieval
+		"enabled": true,
+
+		// Minimum score threshold (0-1)
+		"threshold": 0.3,
+
+		// Maximum results to retrieve
+		"maxResults": 5,
+
+		// Search mode: "keyword", "vector", "hybrid"
+		"mode": "hybrid"
+	},
+
+	// Observability Configuration
+	"observability": {
+		// Enable observability
+		"enabled": false,
+
+		// OpenTelemetry settings
+		"otel": {
+			"enabled": false,
+			// OTLP endpoint (e.g., http://localhost:4318)
+			"endpoint": "http://localhost:4318",
+			"serviceName": "cc-bridge-agent",
+			"sampleRate": 1.0,
+			"traces": true,
+			"metrics": true
+		}
+	},
+
+	// Session Configuration
+	"session": {
+		// Session idle timeout in milliseconds (default: 30 minutes)
+		"ttlMs": 1800000,
+
+		// Maximum concurrent sessions
+		"maxSessions": 100,
+
+		// Maximum messages per session before pruning
+		"maxMessagesPerSession": 200,
+
+		// Cleanup check interval in milliseconds
+		"cleanupIntervalMs": 60000
+	}
 }
