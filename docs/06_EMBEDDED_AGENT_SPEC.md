@@ -266,7 +266,7 @@ The main class that wraps pi-agent-core Agent.
 | Property | Type | Description |
 |----------|------|-------------|
 | `agent` | `Agent` | The underlying pi-agent-core Agent instance |
-| `config` | `EmbeddedAgentConfig` | Configuration for this agent instance |
+| `config` | `AgentConfig` | Configuration for this agent instance |
 | `systemPrompt` | `string` | Current system prompt (from workspace files) |
 | `initialized` | `boolean` | Whether initialize() has been called |
 | `promptRunning` | `boolean` | Whether a prompt is currently executing |
@@ -317,7 +317,7 @@ The observability system provides detailed tracking of agent runs with OpenTelem
 
 **Configuration**:
 ```typescript
-interface EmbeddedAgentConfig {
+interface AgentConfig {
   // ... other fields
   observability?: EmbeddedAgentObservabilityConfig;
   otel?: AgentOtelConfig;
@@ -358,7 +358,7 @@ interface AgentOtelConfig {
 class EmbeddedAgent {
   // === Lifecycle ===
 
-  constructor(config: EmbeddedAgentConfig)
+  constructor(config: AgentConfig)
   // Creates a new EmbeddedAgent instance
   // Note: Does NOT initialize - call initialize() explicitly
 
@@ -433,7 +433,7 @@ class EmbeddedAgent {
 ### 4.2 Configuration Types
 
 ```typescript
-interface EmbeddedAgentConfig {
+interface AgentConfig {
   /** Unique session identifier */
   sessionId: string;
   /** Absolute path to workspace directory containing bootstrap files */
@@ -1024,7 +1024,7 @@ The gateway uses its own `AgentSessionManager` built on top of `SessionManager`:
 
 ```typescript
 class AgentSessionManager {
-  getOrCreate(chatId: string | number, config: EmbeddedAgentConfig): EmbeddedAgent
+  getOrCreate(chatId: string | number, config: AgentConfig): EmbeddedAgent
   has(chatId: string | number): boolean
   get(chatId: string | number): EmbeddedAgent | undefined
   remove(chatId: string | number): boolean
