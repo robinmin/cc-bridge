@@ -15,6 +15,8 @@ export interface MemoryConfig {
 	builtin: {
 		index: {
 			enabled: boolean;
+			vector: boolean;
+			provider?: string;
 		};
 	};
 	external?: {

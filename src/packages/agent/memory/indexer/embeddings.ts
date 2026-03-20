@@ -119,7 +119,7 @@ export class NullEmbeddingProvider implements EmbeddingProviderInterface {
 	}
 
 	async embedBatch(texts: string[]): Promise<EmbeddingResult[]> {
-		return texts.map((t) => this.embed(t));
+		return Promise.all(texts.map((t) => this.embed(t)));
 	}
 }
 

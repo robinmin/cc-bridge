@@ -7,6 +7,7 @@
 
 import path from "node:path";
 import Database from "node:sqlite";
+import { logger } from "@/packages/logger";
 import type { EmbeddingProviderInterface } from "./embeddings";
 import { readAllMemoryFiles } from "./storage";
 import type { IndexEntry, IndexStatus, MemoryPaths } from "./types";
@@ -40,59 +41,68 @@ export class Fts5Indexer {
 	 * Initialize the database
 	 */
 	async initialize(): Promise<void> {
-		this.db = new Database.Database(this.indexPath);
+		try {
+			this.db = new Database.Database(this.indexPath);
 
-		// Create documents table
-		this.db.run(`
-			CREATE TABLE IF NOT EXISTS ${DOCS_TABLE} (
-				id INTEGER PRIMARY KEY AUTOINCREMENT,
-				path TEXT NOT NULL UNIQUE,
-				source_type TEXT NOT NULL,
-				bank_type TEXT,
-				entity TEXT,
-				content TEXT NOT NULL,
-				last_modified INTEGER
-			)
-		`);
+			// Create documents table
+			this.db.run(`
+				CREATE TABLE IF NOT EXISTS ${DOCS_TABLE} (
+					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					path TEXT NOT NULL UNIQUE,
+					source_type TEXT NOT NULL,
+					bank_type TEXT,
+					entity TEXT,
+					content TEXT NOT NULL,
+					last_modified INTEGER
+				)
+			`);
 
-		// Create vectors table for embeddings
-		this.db.run(`
-			CREATE TABLE IF NOT EXISTS ${VECTORS_TABLE} (
-				doc_id INTEGER PRIMARY KEY,
-				embedding BLOB NOT NULL,
-				FOREIGN KEY (doc_id) REFERENCES ${DOCS_TABLE}(id) ON DELETE CASCADE
-			)
-		`);
+			// Create vectors table for embeddings
+			this.db.run(`
+				CREATE TABLE IF NOT EXISTS ${VECTORS_TABLE} (
+					doc_id INTEGER PRIMARY KEY,
+					embedding BLOB NOT NULL,
+					FOREIGN KEY (doc_id) REFERENCES ${DOCS_TABLE}(id) ON DELETE CASCADE
+				)
+			`);
 
-		// Create FTS5 virtual table
-		this.db.run(`
-			CREATE VIRTUAL TABLE IF NOT EXISTS ${FTS_TABLE} USING fts5(
-				content,
-				content=${DOCS_TABLE},
-				content_rowid=id
-			)
-		`);
+			// Create FTS5 virtual table
+			this.db.run(`
+				CREATE VIRTUAL TABLE IF NOT EXISTS ${FTS_TABLE} USING fts5(
+					content,
+					content=${DOCS_TABLE},
+					content_rowid=id
+				)
+			`);
 
-		// Create triggers to keep FTS in sync
-		this.db.run(`
-			CREATE TRIGGER IF NOT EXISTS ${DOCS_TABLE}_ai AFTER INSERT ON ${DOCS_TABLE} BEGIN
-				INSERT INTO ${FTS_TABLE}(rowid, content) VALUES (new.id, new.content);
-			END
-		`);
+			// Create triggers to keep FTS in sync
+			this.db.run(`
+				CREATE TRIGGER IF NOT EXISTS ${DOCS_TABLE}_ai AFTER INSERT ON ${DOCS_TABLE} BEGIN
+					INSERT INTO ${FTS_TABLE}(rowid, content) VALUES (new.id, new.content);
+				END
+			`);
 
-		this.db.run(`
-			CREATE TRIGGER IF NOT EXISTS ${DOCS_TABLE}_ad AFTER DELETE ON ${DOCS_TABLE} BEGIN
-				INSERT INTO ${FTS_TABLE}(${FTS_TABLE}, rowid, content) VALUES('delete', old.id, old.content);
-				DELETE FROM ${VECTORS_TABLE} WHERE doc_id = old.id;
-			END
-		`);
+			this.db.run(`
+				CREATE TRIGGER IF NOT EXISTS ${DOCS_TABLE}_ad AFTER DELETE ON ${DOCS_TABLE} BEGIN
+					INSERT INTO ${FTS_TABLE}(${FTS_TABLE}, rowid, content) VALUES('delete', old.id, old.content);
+					DELETE FROM ${VECTORS_TABLE} WHERE doc_id = old.id;
+				END
+			`);
 
-		this.db.run(`
-			CREATE TRIGGER IF NOT EXISTS ${DOCS_TABLE}_au AFTER UPDATE ON ${DOCS_TABLE} BEGIN
-				INSERT INTO ${FTS_TABLE}(${FTS_TABLE}, rowid, content) VALUES('delete', old.id, old.content);
-				INSERT INTO ${FTS_TABLE}(rowid, content) VALUES (new.id, new.content);
-			END
-		`);
+			this.db.run(`
+				CREATE TRIGGER IF NOT EXISTS ${DOCS_TABLE}_au AFTER UPDATE ON ${DOCS_TABLE} BEGIN
+					INSERT INTO ${FTS_TABLE}(${FTS_TABLE}, rowid, content) VALUES('delete', old.id, old.content);
+					INSERT INTO ${FTS_TABLE}(rowid, content) VALUES (new.id, new.content);
+				END
+			`);
+		} catch (error) {
+			// Clean up on failure to avoid inconsistent state
+			if (this.db) {
+				this.db.close();
+				this.db = null;
+			}
+			throw error;
+		}
 	}
 
 	/**
@@ -296,8 +306,8 @@ export class Fts5Indexer {
 				},
 				content: r.snippet,
 			}));
-		} catch {
-			// FTS5 search failed, return empty
+		} catch (error) {
+			logger.warn({ error }, "FTS5 search failed, returning empty results");
 			return [];
 		}
 	}
@@ -362,7 +372,7 @@ export class Fts5Indexer {
 				content: s.content,
 			}));
 		} catch (error) {
-			console.error("Vector search error:", error);
+			logger.error({ error }, "Vector search failed");
 			return [];
 		}
 	}
@@ -389,8 +399,8 @@ export class Fts5Indexer {
 					.prepare(`INSERT INTO ${DOCS_TABLE} (path, source_type, content, last_modified) VALUES (?, ?, ?, ?)`)
 					.run(docPath, sourceType, content, Date.now());
 			}
-		} catch {
-			// Update failed, ignore
+		} catch (error) {
+			logger.warn({ error, docPath }, "Failed to update document in FTS5 index");
 		}
 	}
 }

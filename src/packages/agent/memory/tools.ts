@@ -1,4 +1,4 @@
-import type { MemoryBackend } from "@/gateway/memory/contracts";
+import type { MemoryBackend } from "@/packages/agent/memory/contracts";
 
 export async function memoryGet(backend: MemoryBackend, pathOrRef: string): Promise<{ path: string; text: string }> {
 	return backend.get(pathOrRef);

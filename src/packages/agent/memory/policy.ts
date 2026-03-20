@@ -1,4 +1,4 @@
-import type { MemoryConfig } from "@/gateway/memory/contracts";
+import type { MemoryConfig } from "@/packages/agent/memory/contracts";
 
 export interface MemoryLoadDecision {
 	includeSoul: boolean;

@@ -5,14 +5,14 @@
  * markdown-first approach with Pi-mono-style compaction.
  */
 
-import type { MemoryBackend, MemorySearchHit, MemoryWriteResult } from "./contracts";
+import type { MemoryBackend, MemorySearchHit, MemoryWriteResult, MemoryConfig } from "./contracts";
+
+// Re-export for convenience
+export type { MemoryConfig } from "./contracts";
 
 // ============================================================================
 // Core Types
 // ============================================================================
-
-/** Memory slot types */
-export type MemorySlot = "builtin" | "none" | "external";
 
 /** Bank memory types */
 export type BankType = "world" | "experience" | "opinions" | "entities";
@@ -46,29 +46,6 @@ export interface MemoryPaths {
 	experience: string;
 	opinions: string;
 	entities: string;
-}
-
-/** Memory configuration */
-export interface MemoryConfig {
-	slot: MemorySlot;
-	citations: "auto" | "on" | "off";
-	loadPolicy: {
-		groupLoadLongTerm: boolean;
-	};
-	flush: {
-		enabled: boolean;
-		softThresholdTokens: number;
-	};
-	builtin: {
-		index: {
-			enabled: boolean;
-			vector: boolean;
-			provider?: string;
-		};
-	};
-	external?: {
-		provider?: string;
-	};
 }
 
 // ============================================================================

@@ -6,7 +6,7 @@ import type {
 	MemoryStatus,
 	MemoryWriteResult,
 	ReindexResult,
-} from "@/gateway/memory/contracts";
+} from "@/packages/agent/memory/contracts";
 import { searchBank } from "./bank";
 import { appendDailyLog, ensureMemoryDirs, getMemoryPaths, readMemory, searchDailyLogs, upsertMemory } from "./storage";
 
@@ -23,15 +23,23 @@ import { appendDailyLog, ensureMemoryDirs, getMemoryPaths, readMemory, searchDai
  *   - entities/*.md - Entity-specific facts
  */
 export class BuiltinMemoryBackend implements MemoryBackend {
+	private initialized = false;
+
 	constructor(private readonly workspaceRoot: string) {}
 
 	private getPaths() {
 		return getMemoryPaths(this.workspaceRoot);
 	}
 
-	async initialize(): Promise<void> {
+	private async ensureInitialized(): Promise<void> {
+		if (this.initialized) return;
 		const paths = this.getPaths();
 		await ensureMemoryDirs(paths);
+		this.initialized = true;
+	}
+
+	async initialize(): Promise<void> {
+		await this.ensureInitialized();
 	}
 
 	status(): MemoryStatus {
@@ -84,10 +92,12 @@ export class BuiltinMemoryBackend implements MemoryBackend {
 	}
 
 	async appendDaily(entry: string): Promise<MemoryWriteResult> {
+		await this.ensureInitialized();
 		return appendDailyLog(this.workspaceRoot, entry);
 	}
 
 	async upsertLongTerm(entry: string): Promise<MemoryWriteResult> {
+		await this.ensureInitialized();
 		return upsertMemory(this.workspaceRoot, entry);
 	}
 
@@ -151,9 +161,12 @@ export class BuiltinMemoryBackend implements MemoryBackend {
 		return hits;
 	}
 
+	/**
+	 * @deprecated BuiltinMemoryBackend searches directly without index.
+	 * Use FTS5Indexer for indexed search operations.
+	 */
 	async reindex(): Promise<ReindexResult> {
-		// For now, reindex is a no-op as we search directly
-		// Future: integrate with FTS5 indexer
-		return { ok: true, reason: "noop" };
+		// BuiltinMemoryBackend searches directly without index
+		return { ok: true, reason: "noop - builtin backend searches directly" };
 	}
 }

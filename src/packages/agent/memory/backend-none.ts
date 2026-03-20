@@ -6,7 +6,7 @@ import type {
 	MemoryStatus,
 	MemoryWriteResult,
 	ReindexResult,
-} from "@/gateway/memory/contracts";
+} from "@/packages/agent/memory/contracts";
 
 const DISABLED_REASON = "memory backend disabled";
 

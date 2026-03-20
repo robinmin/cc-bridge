@@ -1,8 +1,9 @@
-import { BuiltinMemoryBackend } from "@/gateway/memory/backend-builtin";
-import { ExternalMemoryBackend, StubExternalProvider } from "@/gateway/memory/backend-external";
-import { NoneMemoryBackend } from "@/gateway/memory/backend-none";
-import type { MemoryBackend, MemoryConfig, MemorySlot } from "@/gateway/memory/contracts";
-import { getMemoryLoadDecision } from "@/gateway/memory/policy";
+import { logger } from "@/packages/logger";
+import { BuiltinMemoryBackend } from "@/packages/agent/memory/backend-builtin";
+import { ExternalMemoryBackend, StubExternalProvider } from "@/packages/agent/memory/backend-external";
+import { NoneMemoryBackend } from "@/packages/agent/memory/backend-none";
+import type { MemoryBackend, MemoryConfig, MemorySlot } from "@/packages/agent/memory/contracts";
+import { getMemoryLoadDecision } from "@/packages/agent/memory/policy";
 
 const DEFAULT_MEMORY_CONFIG: MemoryConfig = {
 	slot: "none",
@@ -90,6 +91,9 @@ export function createMemoryBackend(config: MemoryConfig, workspaceRoot: string)
 		case "builtin":
 			return new BuiltinMemoryBackend(workspaceRoot);
 		case "external":
+			// TODO: Implement external provider resolution from config.external.provider
+			// Currently external slot is non-functional - use builtin or none
+			logger.warn("External memory slot is not fully implemented, using stub provider");
 			return new ExternalMemoryBackend(new StubExternalProvider(), workspaceRoot);
 		default:
 			return new NoneMemoryBackend();

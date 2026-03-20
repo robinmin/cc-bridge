@@ -1,5 +1,5 @@
-import { BuiltinMemoryBackend } from "@/gateway/memory/backend-builtin";
-import { NoneMemoryBackend } from "@/gateway/memory/backend-none";
+import { BuiltinMemoryBackend } from "@/packages/agent/memory/backend-builtin";
+import { NoneMemoryBackend } from "@/packages/agent/memory/backend-none";
 import type {
 	MemoryBackend,
 	MemoryDocument,
@@ -8,7 +8,7 @@ import type {
 	MemoryStatus,
 	MemoryWriteResult,
 	ReindexResult,
-} from "@/gateway/memory/contracts";
+} from "@/packages/agent/memory/contracts";
 
 export interface ExternalMemoryProvider {
 	name: string;
