@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import { AgentHttpServer } from "@/agent/api/server";
+import { logger } from "@/packages/logger";
 import { app } from "@/agent/app";
 import { AGENT_CONSTANTS } from "@/agent/consts";
 import { createGatewayBackedAgentRuntime } from "@/agent/runtime/gateway-adapter";
@@ -17,7 +18,7 @@ if (import.meta.main) {
 
 	if (isHttpMode) {
 		// HTTP API Server Mode
-		console.info("Starting agent HTTP API server");
+		logger.info("Starting agent HTTP API server");
 
 		const runtime = createGatewayBackedAgentRuntime({
 			containerId: process.env.AGENT_CONTAINER_ID || "claude-agent",
@@ -42,16 +43,16 @@ if (import.meta.main) {
 		// Start services
 		Promise.all([tmuxManager.start(), requestTracker.start(), sessionPool.start(), httpServer.start()])
 			.then(() => {
-				console.info(`HTTP API server listening on port ${httpServer.getPort()}`);
+				logger.info({ port: httpServer.getPort() }, "HTTP API server listening");
 			})
 			.catch((err) => {
-				console.error("Failed to start HTTP server:", err);
+				logger.error({ err }, "Failed to start HTTP server");
 				process.exit(1);
 			});
 
 		// Graceful shutdown
 		const shutdown = async () => {
-			console.info("Shutting down HTTP server...");
+			logger.info("Shutting down HTTP server...");
 			await Promise.all([httpServer.stop(), sessionPool.stop(), requestTracker.stop(), tmuxManager.stop()]);
 			process.exit(0);
 		};
@@ -60,14 +61,14 @@ if (import.meta.main) {
 	} else if (isTcpMode) {
 		// TCP Server Mode (for faster IPC from host)
 		const port = Number.parseInt(process.env.AGENT_TCP_PORT || "3001", 10);
-		console.info(`Starting agent TCP server on port ${port}`);
+		logger.info({ port }, "Starting agent TCP server");
 		const server = Bun.serve({
 			port,
 			hostname: "0.0.0.0",
 			fetch: app.fetch,
 		});
 		const shutdown = () => {
-			console.info("Shutting down TCP server...");
+			logger.info("Shutting down TCP server...");
 			server.stop(true);
 			process.exit(0);
 		};
@@ -84,13 +85,13 @@ if (import.meta.main) {
 		if (fs.existsSync(socketPath)) {
 			fs.unlinkSync(socketPath);
 		}
-		console.info(`Starting persistent agent server on ${socketPath}`);
+		logger.info({ socketPath }, "Starting persistent agent server");
 		const server = Bun.serve({
 			unix: socketPath,
 			fetch: app.fetch,
 		});
 		const shutdown = () => {
-			console.info("Shutting down unix socket server...");
+			logger.info("Shutting down unix socket server...");
 			server.stop(true);
 			process.exit(0);
 		};
