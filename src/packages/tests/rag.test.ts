@@ -103,11 +103,11 @@ describe("RagContextCache", () => {
 			cache.evictOlderThan(60000); // 60 seconds
 			expect(cache.get("query1")).toBe("context1");
 			// Ensure evictOlderThan itself is tracked as called
-			const result = cache.evictOlderThan(60000);
+			const _result = cache.evictOlderThan(60000);
 		});
 
 		it("should handle empty cache gracefully", () => {
-			const result = cache.evictOlderThan(0);
+			const _result = cache.evictOlderThan(0);
 			expect(cache.size).toBe(0);
 		});
 
