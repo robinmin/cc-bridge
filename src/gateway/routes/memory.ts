@@ -5,8 +5,8 @@
  */
 
 import type { Context } from "hono";
-import { createMemoryIndexer, type MemoryIndexer } from "@/gateway/memory/indexer/indexer";
 import { DEFAULT_COMPACTION_SETTINGS } from "@/gateway/memory/compaction/token-counter";
+import { createMemoryIndexer, type MemoryIndexer } from "@/gateway/memory/indexer/indexer";
 import { logger } from "@/packages/logger";
 
 // Global memory indexer instance (lazy initialized per workspace)
