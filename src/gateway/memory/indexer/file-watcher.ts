@@ -7,8 +7,8 @@
 
 import fsSync from "node:fs";
 import path from "node:path";
-import type { MemoryIndexer } from "./indexer";
 import { logger } from "@/packages/logger";
+import type { MemoryIndexer } from "./indexer";
 
 /**
  * Memory file watcher options
@@ -52,11 +52,7 @@ export class MemoryFileWatcher {
 		let pathsToWatch = this.watchPaths;
 		if (pathsToWatch.length === 0) {
 			const memPaths = this.indexer.getPaths();
-			pathsToWatch = [
-				memPaths.root,
-				memPaths.daily,
-				memPaths.bank,
-			];
+			pathsToWatch = [memPaths.root, memPaths.daily, memPaths.bank];
 		}
 
 		for (const dirPath of pathsToWatch) {
