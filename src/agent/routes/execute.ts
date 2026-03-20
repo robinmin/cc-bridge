@@ -2,6 +2,7 @@ import fs from "node:fs";
 import { zValidator } from "@hono/zod-validator";
 import { Hono } from "hono";
 import type { StatusCode } from "hono/utils/http-statusCodes";
+import { logger } from "@/packages/logger";
 import { AGENT_CONSTANTS } from "@/agent/consts";
 import { ExecuteCommandSchema } from "@/agent/types";
 
@@ -69,7 +70,7 @@ app.post("/", zValidator("json", ExecuteCommandSchema), async (c) => {
 			// If specified workspace doesn't exist, fall back to current directory
 			workingDir = undefined;
 		}
-		console.info(`Executing command: ${cmdList.join(" ")} in ${workingDir || "current directory"}`);
+		logger.info({ cmd: cmdList.join(" "), cwd: workingDir }, "Executing command");
 
 		// Prefer ANTHROPIC_API_KEY when provided; otherwise use ANTHROPIC_AUTH_TOKEN
 		const childEnv = applyLlmProviderEnv({ ...process.env } as Record<string, string>);
