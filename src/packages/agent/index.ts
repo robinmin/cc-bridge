@@ -40,6 +40,17 @@ export {
 // Configuration
 // =============================================================================
 
+export {
+	loadAgentConfig,
+	buildAgentConfig,
+	getDefaultAgentConfigPath,
+	type AgentYamlConfig,
+} from "./core/config-loader";
+
+// =============================================================================
+// Configuration
+// =============================================================================
+
 export type {
 	ProviderMetadata,
 	ProviderSelector,
