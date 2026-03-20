@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { NoneMemoryBackend } from "@/gateway/memory/backend-none";
+import { NoneMemoryBackend } from "@/packages/agent/memory/backend-none";
 
 describe("memory/backend-none", () => {
 	test("constructor works", () => {
