@@ -1,4 +1,6 @@
 // Rate limiting configuration
+import { logger } from "@/packages/logger";
+
 const DEFAULT_LIMIT = 10;
 const DEFAULT_WINDOW_SECONDS = 60;
 const CLEANUP_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
@@ -77,7 +79,7 @@ export class RateLimiter {
 
 		if (removedCount > 0) {
 			// Debug log for cleanup activity
-			console.debug(`RateLimiter: cleaned up ${removedCount} idle entries`);
+			logger.debug({ removedCount }, "RateLimiter: cleaned up idle entries");
 		}
 	}
 
