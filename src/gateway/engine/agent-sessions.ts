@@ -20,7 +20,7 @@
  */
 
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
-import type { MemoryIndexer } from "@/gateway/memory/indexer/indexer";
+import type { MemoryIndexer } from "@/packages/agent/memory/indexer/indexer";
 import { AgentPersistence } from "@/gateway/persistence";
 import {
 	type CompactionConfig,
