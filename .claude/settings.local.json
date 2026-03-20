@@ -14,7 +14,9 @@
       "Bash(ast-grep:*)",
       "Bash(bun test:*)",
       "Bash(bun run:*)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(npm test:*)",
+      "Bash(echo:*)"
     ]
   }
 }
