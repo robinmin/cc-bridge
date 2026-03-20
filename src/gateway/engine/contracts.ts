@@ -8,6 +8,7 @@
  */
 
 import type { AgentEvent } from "@mariozechner/pi-agent-core";
+import type { AgentYamlConfig } from "@/packages/agent";
 import type { AgentInstance } from "@/gateway/instance-manager";
 import type { ToolPolicyConfig } from "./tools/policy";
 
@@ -144,10 +145,12 @@ export interface OrchestratorConfig {
 	maxRetries: number;
 	/** Health check interval in ms */
 	healthCheckIntervalMs: number;
-	/** Default LLM provider for in-process execution */
+	/** Default LLM provider for in-process execution (deprecated: use agentConfig instead) */
 	defaultProvider?: string;
-	/** Default LLM model for in-process execution */
+	/** Default LLM model for in-process execution (deprecated: use agentConfig instead) */
 	defaultModel?: string;
+	/** Agent configuration loaded from YAML (takes precedence over defaultProvider/defaultModel) */
+	agentConfig?: AgentYamlConfig;
 }
 
 /** Default orchestrator configuration */
