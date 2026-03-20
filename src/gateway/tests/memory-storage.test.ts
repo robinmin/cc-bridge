@@ -10,7 +10,7 @@ import {
 	upsertEntity,
 	writeBank,
 	writeEntity,
-} from "@/gateway/memory/bank";
+} from "@/packages/agent/memory/bank";
 import {
 	appendDailyLog,
 	getDailyLogsRange,
@@ -18,8 +18,8 @@ import {
 	searchDailyLogs,
 	writeDailyEntry,
 	writeRetainEntry,
-} from "@/gateway/memory/daily-log";
-import { readMemory, searchMemory, upsertMemory, upsertMemoryBatch, writeMemory } from "@/gateway/memory/memory";
+} from "@/packages/agent/memory/daily-log";
+import { readMemory, searchMemory, upsertMemory, upsertMemoryBatch, writeMemory } from "@/packages/agent/memory/memory";
 import {
 	appendMemoryFile,
 	ensureDir,
@@ -34,7 +34,7 @@ import {
 	resolveEntityPath,
 	resolveMemoryPaths,
 	writeMemoryFile,
-} from "@/gateway/memory/storage";
+} from "@/packages/agent/memory/storage";
 
 describe("memory/storage", () => {
 	const tmpDir = path.join(os.tmpdir(), `cc-bridge-storage-test-${Date.now()}`);
