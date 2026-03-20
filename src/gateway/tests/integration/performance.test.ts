@@ -4,6 +4,7 @@ import { existsSync } from "node:fs";
 import { rm, utimes } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { logger } from "@/packages/logger";
 import { FileSystemIpc } from "@/gateway/services/filesystem-ipc";
 
 describe("Performance Benchmarks", () => {
@@ -64,9 +65,7 @@ describe("Performance Benchmarks", () => {
 		expect(response).toBeDefined();
 		expect(response?.output).toBe(output);
 
-		console.log(`  Write time: ${writeTime.toFixed(2)}ms`);
-		console.log(`  Read time: ${readTime.toFixed(2)}ms`);
-		console.log(`  Total time: ${totalTime.toFixed(2)}ms`);
+		logger.info({ writeTime: writeTime.toFixed(2), readTime: readTime.toFixed(2), totalTime: totalTime.toFixed(2) }, "File write/read performance");
 
 		expect(totalTime).toBeLessThan(100); // Should complete in <100ms
 	});
@@ -101,10 +100,7 @@ describe("Performance Benchmarks", () => {
 		const minLatency = Math.min(...latencies);
 		const totalTime = latencies.reduce((a, b) => a + b);
 
-		console.log(`  Average: ${avgLatency.toFixed(2)}ms`);
-		console.log(`  Min: ${minLatency.toFixed(2)}ms`);
-		console.log(`  Max: ${maxLatency.toFixed(2)}ms`);
-		console.log(`  Total: ${totalTime.toFixed(2)}ms`);
+		logger.info({ avgLatency: avgLatency.toFixed(2), minLatency: minLatency.toFixed(2), maxLatency: maxLatency.toFixed(2), totalTime: totalTime.toFixed(2) }, "Sequential file operations performance");
 
 		// Average should be under 10ms per file
 		expect(avgLatency).toBeLessThan(10);
@@ -143,8 +139,7 @@ describe("Performance Benchmarks", () => {
 		const totalTime = performance.now() - start;
 		const avgTime = totalTime / results.length;
 
-		console.log(`  Total time: ${totalTime.toFixed(2)}ms`);
-		console.log(`  Average per read: ${avgTime.toFixed(2)}ms`);
+		logger.info({ totalTime: totalTime.toFixed(2), avgTimePerRead: avgTime.toFixed(2) }, "Concurrent file reads performance");
 
 		// All should succeed
 		expect(results.every((r) => r !== null)).toBe(true);
@@ -168,8 +163,7 @@ describe("Performance Benchmarks", () => {
 		const avgLatency = latencies.reduce((a, b) => a + b) / latencies.length;
 		const maxLatency = Math.max(...latencies);
 
-		console.log(`  Average UUID generation: ${avgLatency.toFixed(3)}ms`);
-		console.log(`  Max UUID generation: ${maxLatency.toFixed(3)}ms`);
+		logger.info({ avgLatency: avgLatency.toFixed(3), maxLatency: maxLatency.toFixed(3) }, "UUID generation performance");
 
 		// All should be unique
 		expect(ids.size).toBe(1000);
@@ -224,10 +218,7 @@ describe("Performance Benchmarks", () => {
 
 		const cleanupTime = performance.now() - start;
 
-		console.log(`  Cleaned ${cleanedCount} files in ${cleanupTime.toFixed(2)}ms`);
-		if (cleanedCount > 0) {
-			console.log(`  Average per file: ${(cleanupTime / cleanedCount).toFixed(2)}ms`);
-		}
+		logger.info({ cleanedCount, cleanupTime: cleanupTime.toFixed(2), avgTimePerFile: cleanedCount > 0 ? (cleanupTime / cleanedCount).toFixed(2) : "0" }, "File cleanup performance");
 
 		// All files should be cleaned up
 		expect(cleanedCount).toBe(100);
@@ -267,10 +258,7 @@ describe("Performance Benchmarks", () => {
 		const readTime = performance.now() - readStart;
 		const totalTime = writeTime + readTime;
 
-		console.log(`  File size: ${(largeOutput.length / 1024).toFixed(2)}KB`);
-		console.log(`  Write time: ${writeTime.toFixed(2)}ms`);
-		console.log(`  Read time: ${readTime.toFixed(2)}ms`);
-		console.log(`  Total time: ${totalTime.toFixed(2)}ms`);
+		logger.info({ fileSizeKB: (largeOutput.length / 1024).toFixed(2), writeTime: writeTime.toFixed(2), readTime: readTime.toFixed(2), totalTime: totalTime.toFixed(2) }, "Large file handling performance");
 
 		expect(response).toBeDefined();
 		expect(response?.output.length).toBe(100000);
@@ -297,7 +285,7 @@ describe("Performance Benchmarks", () => {
 
 		const avgLatency = latencies.reduce((a, b) => a + b) / latencies.length;
 
-		console.log(`  Average session name generation: ${avgLatency.toFixed(3)}ms`);
+		logger.info({ avgLatency: avgLatency.toFixed(3) }, "Session name generation performance");
 
 		// Session name generation should be extremely fast
 		expect(avgLatency).toBeLessThan(0.1);
@@ -326,7 +314,7 @@ describe("Performance Benchmarks", () => {
 
 		const totalTime = performance.now() - start;
 
-		console.log(`  Read with retries returned in: ${totalTime.toFixed(2)}ms`);
+		logger.info({ totalTime: totalTime.toFixed(2) }, "Retry logic overhead");
 
 		expect(error).not.toBeNull();
 		// Should return after timeout (500ms + some overhead)
@@ -354,8 +342,7 @@ describe("Performance Benchmarks", () => {
 
 		const elapsed = performance.now() - start;
 
-		console.log(`  Actual timeout: ${elapsed.toFixed(2)}ms`);
-		console.log(`  Configured timeout: 300ms`);
+		logger.info({ actualTimeout: elapsed.toFixed(2), configuredTimeout: 300 }, "Timeout precision");
 
 		expect(error).not.toBeNull();
 		// Should be close to configured timeout (within 100ms tolerance)
