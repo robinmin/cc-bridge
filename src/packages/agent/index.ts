@@ -23,14 +23,29 @@ export {
 	needsCompaction,
 } from "./core/context-compaction";
 export {
+	type AgentConfig,
 	EmbeddedAgent,
-	type EmbeddedAgentConfig,
+	type MemoryConfig,
+	type MultiProviderConfig,
 	PROVIDER_CONFIGS,
 	type PromptOptions,
 	type ProviderConfig,
 	type RagConfig,
 	resolveProviderApiKey,
+	type SelectionPolicy,
+	type SingleProviderConfig,
 } from "./core/embedded-agent";
+
+// =============================================================================
+// Configuration
+// =============================================================================
+
+export type {
+	ProviderMetadata,
+	ProviderSelector,
+	SelectionContext,
+	SelectionResult,
+} from "./core/config";
 export { type AgentResult, EventCollector, isTextContentBlock, type ToolCallRecord } from "./core/event-bridge";
 export {
 	type AgentErrorCategory,
@@ -57,6 +72,14 @@ export {
 	createAgentOtelService,
 	createOtelConfigFromEnv,
 } from "./core/otel";
+export {
+	costOptimizedProviders,
+	DefaultProviderSelector,
+	fallbackProviders,
+	getProviderApiType,
+	resolveApiKey,
+	singleProvider,
+} from "./core/provider-selector";
 export { RagContextCache } from "./core/rag-cache";
 export { buildRagPrompt, formatRagContext } from "./core/rag-context";
 export {
