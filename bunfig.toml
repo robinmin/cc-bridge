@@ -11,7 +11,9 @@ coveragePathIgnorePatterns = [
 ]
 
 # Always enable coverage
+passWithNoTests = true
 coverage = true
+coverageThreshold = 0.9
 
 # Specifically exclude test files themselves from the report
-coverageSkipTestFiles = true
+# coverageSkipTestFiles = true
