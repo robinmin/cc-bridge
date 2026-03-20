@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { BuiltinMemoryBackend } from "@/gateway/memory/backend-builtin";
+import { BuiltinMemoryBackend } from "@/packages/agent/memory/backend-builtin";
 
 describe("memory/backend-builtin", () => {
 	const testWorkspace = path.join(os.tmpdir(), `cc-bridge-memory-test-${Date.now()}`);
@@ -131,7 +131,7 @@ describe("memory/backend-builtin", () => {
 		const backend = new BuiltinMemoryBackend(testWorkspace);
 		const result = await backend.reindex();
 		expect(result.ok).toBe(true);
-		expect(result.reason).toBe("noop");
+		expect(result.reason).toBe("noop - builtin backend searches directly");
 	});
 
 	test("truncates long snippets in search results", async () => {
