@@ -7,6 +7,7 @@
 
 import crypto from "node:crypto";
 import { logger } from "@/packages/logger";
+import { getDefaultAgentConfigPath, loadAgentConfig, type AgentYamlConfig } from "@/packages/agent";
 import { createContainerEngine } from "./container";
 import type {
 	ExecutionLayer,
@@ -47,7 +48,7 @@ export class ExecutionOrchestrator {
 		if (this.config.enableInProcess) {
 			this.engines.set(
 				"in-process",
-				new InProcessEngine(this.config.enableInProcess, this.config.defaultProvider, this.config.defaultModel),
+				new InProcessEngine(this.config.enableInProcess, this.config.agentConfig),
 			);
 		}
 
@@ -278,7 +279,26 @@ export class ExecutionOrchestrator {
  * Factory function to create orchestrator
  */
 export function createOrchestrator(config?: Partial<OrchestratorConfig>): ExecutionOrchestrator {
-	return new ExecutionOrchestrator(config);
+	// Try to load agent config from YAML file if available
+	let agentConfig: AgentYamlConfig | undefined;
+	try {
+		const agentConfigPath = getDefaultAgentConfigPath();
+		agentConfig = loadAgentConfig(agentConfigPath);
+		logger.info({ agentConfigPath }, "Loaded agent configuration from YAML");
+	} catch (_error) {
+		// Agent config is optional - use defaults from environment/process
+		logger.debug("No agent config file found, using defaults");
+	}
+
+	// Merge config with agentConfig taking precedence over defaultProvider/defaultModel
+	const mergedConfig: Partial<OrchestratorConfig> = {
+		...config,
+		agentConfig,
+		// If agentConfig is provided, don't need defaultProvider/defaultModel
+		// (InProcessEngine will use agentConfig.provider.default)
+	};
+
+	return new ExecutionOrchestrator(mergedConfig);
 }
 
 let defaultOrchestrator: ExecutionOrchestrator | null = null;
