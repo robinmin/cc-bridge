@@ -222,10 +222,8 @@ export class HybridSearchManager {
 			}
 		}
 
-		// Sort by combined score
-		return Array.from(scored.values())
-			.sort((a, b) => b.score - a.score)
-			.map(({ score, ...rest }) => rest);
+		// Sort by combined score (include score in returned objects)
+		return Array.from(scored.values()).sort((a, b) => b.score - a.score);
 	}
 }
 
