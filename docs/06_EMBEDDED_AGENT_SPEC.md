@@ -1,7 +1,7 @@
 # EmbeddedAgent Specification
 
-**Version**: 1.5.0
-**Last Updated**: 2026-03-18
+**Version**: 1.6.0
+**Last Updated**: 2026-03-19
 **Status**: Production Ready
 **Module**: `src/packages/agent/core` (core), `src/gateway/engine/agent.ts` (gateway entry)
 
@@ -24,7 +24,8 @@
 11. [Session Management](#11-session-management)
 12. [Event Handling](#12-event-handling)
 13. [Configuration](#13-configuration)
-14. [What's Next](#14-whats-next)
+14. [RAG Pipeline](#14-rag-pipeline)
+15. [What's Next](#15-whats-next)
 
 ---
 
@@ -447,6 +448,24 @@ interface EmbeddedAgentConfig {
   observability?: EmbeddedAgentObservabilityConfig;
   /** OpenTelemetry configuration */
   otel?: AgentOtelConfig;
+  /** Optional memory indexer for RAG context retrieval */
+  memoryIndexer?: MemoryIndexer;
+  /** Optional RAG configuration */
+  rag?: RagConfig;
+}
+
+/**
+ * RAG (Retrieval-Augmented Generation) configuration for selective context injection.
+ */
+interface RagConfig {
+  /** Enable or disable RAG context retrieval (default: true) */
+  enabled?: boolean;
+  /** Minimum score threshold for including results (default: 0.3, range: 0-1) */
+  threshold?: number;
+  /** Maximum number of results to retrieve (default: 5) */
+  maxResults?: number;
+  /** Search mode for retrieval (default: "hybrid") */
+  mode?: "keyword" | "vector" | "hybrid";
 }
 
 interface PromptOptions {
@@ -1124,13 +1143,136 @@ const result = await engine.execute({
 
 ---
 
-## 14. What's Next
+## 14. RAG Pipeline
+
+The EmbeddedAgent includes a **Selective Hybrid RAG** system that retrieves relevant context from the memory index on every prompt and injects it into the system prompt when relevance exceeds a threshold.
+
+### 14.1 Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                          RAG Pipeline Flow                                    │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  User message                                                                 │
+│      │                                                                        │
+│      ▼                                                                        │
+│  ┌──────────────────────────────────────────────────────────────────────┐   │
+│  │  EmbeddedAgent.prompt(message)                                       │   │
+│  │                                                                       │   │
+│  │  1. Evict cache entries older than 5 minutes                         │   │
+│  │  2. Check ragEnabled flag                                            │   │
+│  │  3. Check cache for normalized query ──────────────────────────┐    │   │
+│  │     │ (cache hit)                                              │    │   │
+│  │     ▼                                                          ▼    │   │
+│  │  4. MemoryIndexer.search(query, { mode, limit })                   │   │
+│  │     │                                                              │   │
+│  │  5. Filter results by threshold (default: 0.3)                    │   │
+│  │     │                                                              │   │
+│  │     │ (below threshold = skip)                                     │   │
+│  │     ▼                                                              │   │
+│  │  6. Format as <rag-context> markdown block                         │   │
+│  │     │                                                              │   │
+│  │  7. Cache result                                                   │   │
+│  │     │                                                              │   │
+│  │  8. Prepend to systemPrompt                                        │   │
+│  │     │                                                              │   │
+│  │  9. Call agent.prompt(message)                                     │   │
+│  │     │                                                              │   │
+│  │  10. Restore original systemPrompt (finally)                       │   │
+│  │     │                                                              │   │
+│  └──────┼──────────────────────────────────────────────────────────────┘   │
+│         │                                                                    │
+│         ▼                                                                    │
+│    AgentResult                                                               │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 14.2 Key Components
+
+| Component | File | Description |
+|-----------|------|-------------|
+| `RagContextCache` | `src/packages/agent/core/rag-cache.ts` | Session-level cache with query normalization |
+| `formatRagContext` | `src/packages/agent/core/rag-context.ts` | Formats search results as markdown |
+| `retrieveRagContext` | `src/packages/agent/core/embedded-agent.ts` | Main retrieval method |
+
+### 14.3 Context Format
+
+RAG context is injected as a markdown block prepended to the system prompt:
+
+```markdown
+<rag-context>
+## Retrieved Context
+
+> [memory/bank/experience/project-x.md]
+> The project uses a hybrid search architecture combining FTS5 and vector embeddings...
+
+> [memory/daily/2026-03-17.md]
+> Discussed RAG pipeline design. User prefers selective injection over always-on...
+
+</rag-context>
+
+[Original system prompt from workspace bootstrap files]
+```
+
+### 14.4 Configuration
+
+```typescript
+interface RagConfig {
+  /** Enable or disable RAG context retrieval (default: true) */
+  enabled?: boolean;
+  /** Minimum score threshold for including results (default: 0.3, range: 0-1) */
+  threshold?: number;
+  /** Maximum number of results to retrieve (default: 5) */
+  maxResults?: number;
+  /** Search mode for retrieval (default: "hybrid") */
+  mode?: "keyword" | "vector" | "hybrid";
+}
+```
+
+### 14.5 Cache Behavior
+
+- **Query Normalization**: Queries are normalized (lowercase, stop-word removal, whitespace collapse) for consistent cache keys
+- **TTL Eviction**: Entries older than 5 minutes are evicted on each prompt
+- **Session Scoped**: Cache is cleared on `clearMessages()` and `dispose()`
+
+### 14.6 Graceful Degradation
+
+The RAG pipeline degrades gracefully when components are unavailable:
+
+| Condition | Behavior |
+|-----------|----------|
+| RAG disabled | Skip retrieval, proceed without context |
+| MemoryIndexer unavailable | Log debug, skip retrieval |
+| Search timeout (>5s) | Log warning, skip retrieval |
+| Search throws error | Log warning, proceed without RAG |
+| All results below threshold | Skip context injection |
+
+### 14.7 Observability
+
+RAG statistics are included in `AgentRunObservability`:
+
+```typescript
+interface AgentRunObservability {
+  // ... other fields
+  rag?: {
+    resultsCount: number;      // Number of results above threshold
+    cacheHit: boolean;         // Whether result was from cache
+    threshold: number;         // Threshold used for filtering
+    retrievalDurationMs: number; // Time taken for retrieval
+  };
+}
+```
+
+---
+
+## 15. What's Next
 
 Future enhancement areas:
 
 | Feature | Description | Priority |
 |---------|-------------|----------|
-| **RAG pipeline** | Retrieve relevant docs from workspace | High |
 | **User preference learning** | Learn and remember user preferences | Low |
 | **More providers** | Azure OpenAI, Anthropic Vertex, etc. | Medium |
 | **Model routing** | Automatic model selection based on task | Low |
@@ -1139,6 +1281,8 @@ Future enhancement areas:
 | **Tool retry policy** | Automatic retry with exponential backoff | Low |
 
 ---
+
+**Implemented in v1.6.0**: RAG pipeline with selective hybrid retrieval, session-level caching, and observability integration. See [Section 14 - RAG Pipeline](#14-rag-pipeline) for details.
 
 **Implemented in v1.5.0**: Memory system (FTS5, embeddings, hybrid search), 3-layer execution orchestrator, LLM-powered context compaction. See [Section 10 - Memory System](#10-memory-system) for details.
 
