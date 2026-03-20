@@ -5,7 +5,7 @@
  * markdown-first approach with Pi-mono-style compaction.
  */
 
-import type { MemoryBackend, MemorySearchHit, MemoryWriteResult, MemoryConfig } from "./contracts";
+import type { MemoryBackend, MemorySearchHit, MemoryWriteResult } from "./contracts";
 
 // Re-export for convenience
 export type { MemoryConfig } from "./contracts";
