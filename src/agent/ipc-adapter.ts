@@ -41,7 +41,7 @@ export class StdioIpcAdapter {
 				}
 			}
 		} catch (error) {
-			console.error("Fatal IPC error:", error);
+			logger.error({ error }, "Fatal IPC error");
 			process.exit(1);
 		} finally {
 			reader.releaseLock();
