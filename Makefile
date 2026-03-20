@@ -104,8 +104,8 @@ app-unschedule:
 ## test: Run tests without coverage
 test:
 	@echo "Running tests..."
-	@NODE_ENV=test $(BUN) test src/agent/tests/*.test.ts || exit $$?
-	@NODE_ENV=test $(BUN) test src/packages/tests src/gateway/tests || exit $$?
+	@NODE_ENV=test $(BUN) test src/agent/tests/*.test.ts --reporter=dots || exit $$?
+	@NODE_ENV=test $(BUN) test src/packages/tests src/gateway/tests --reporter=dots || exit $$?
 
 ## test-coverage: Run tests with coverage + threshold gate
 test-coverage:
