@@ -2,13 +2,13 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { BuiltinMemoryBackend } from "@/gateway/memory/backend-builtin";
+import { BuiltinMemoryBackend } from "@/packages/agent/memory/backend-builtin";
 import {
 	ExternalMemoryBackend,
 	type ExternalMemoryProvider,
 	StubExternalProvider,
-} from "@/gateway/memory/backend-external";
-import { NoneMemoryBackend } from "@/gateway/memory/backend-none";
+} from "@/packages/agent/memory/backend-external";
+import { NoneMemoryBackend } from "@/packages/agent/memory/backend-none";
 import {
 	buildMemoryBootstrapContext,
 	createMemoryBackend,
@@ -17,9 +17,9 @@ import {
 	resolveMemoryConfig,
 	shouldCaptureLongTermMemory,
 	shouldTriggerMemoryFlush,
-} from "@/gateway/memory/manager";
-import { getMemoryLoadDecision, inferGroupContext } from "@/gateway/memory/policy";
-import { memoryGet, memorySearch } from "@/gateway/memory/tools";
+} from "@/packages/agent/memory/manager";
+import { getMemoryLoadDecision, inferGroupContext } from "@/packages/agent/memory/policy";
+import { memoryGet, memorySearch } from "@/packages/agent/memory/tools";
 
 describe("memory manager scaffolding", () => {
 	let tmpDir: string;
@@ -118,7 +118,7 @@ describe("memory manager scaffolding", () => {
 		const missing = await backend.get("missing.md");
 		expect(missing.text).toBe("");
 		expect(await backend.search("x")).toEqual([]);
-		expect(await backend.reindex()).toEqual({ ok: true, reason: "noop" });
+		expect(await backend.reindex()).toEqual({ ok: true, reason: "noop - builtin backend searches directly" });
 	});
 
 	test("builtin backend appends daily memory and creates directories", async () => {
