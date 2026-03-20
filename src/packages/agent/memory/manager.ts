@@ -1,9 +1,9 @@
-import { logger } from "@/packages/logger";
 import { BuiltinMemoryBackend } from "@/packages/agent/memory/backend-builtin";
 import { ExternalMemoryBackend, StubExternalProvider } from "@/packages/agent/memory/backend-external";
 import { NoneMemoryBackend } from "@/packages/agent/memory/backend-none";
 import type { MemoryBackend, MemoryConfig, MemorySlot } from "@/packages/agent/memory/contracts";
 import { getMemoryLoadDecision } from "@/packages/agent/memory/policy";
+import { logger } from "@/packages/logger";
 
 const DEFAULT_MEMORY_CONFIG: MemoryConfig = {
 	slot: "none",
