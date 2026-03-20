@@ -5,7 +5,7 @@
  * for injection into the agent's system prompt.
  */
 
-import type { SearchResult } from "@/gateway/memory/types";
+import type { SearchResult } from "@/packages/agent/memory/types";
 
 /**
  * Format search results into a structured RAG context string.
