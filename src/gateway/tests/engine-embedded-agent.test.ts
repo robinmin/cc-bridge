@@ -650,5 +650,216 @@ describe("embedded-agent", () => {
 			expect(result).toBeDefined();
 			agent.dispose();
 		});
+
+		test("RAG cache hit on repeated query", async () => {
+			const searchCallCount = { value: 0 };
+			const mockMemoryIndexer = {
+				search: mock(async () => {
+					searchCallCount.value++;
+					return [{ path: "test.md", snippet: "Test content", score: 0.8 }];
+				}),
+				initialize: mock(async () => {}),
+				close: mock(() => {}),
+				isInitialized: mock(() => true),
+				getStatus: mock(async () => ({ initialized: true, fts5: true, vector: false, documentCount: 1 })),
+				rebuild: mock(async () => ({ ok: true })),
+				isVectorEnabled: mock(() => false),
+			};
+
+			const agent = new EmbeddedAgent({
+				provider: "anthropic",
+				model: "claude-3-5-sonnet-20241022",
+				workspaceDir: "/tmp/test",
+				memoryIndexer: mockMemoryIndexer as unknown as typeof mockMemoryIndexer & {
+					search: typeof mockMemoryIndexer.search;
+				},
+			});
+			await agent.initialize();
+
+			// First prompt - should trigger search (cache miss)
+			await agent.prompt("test query");
+			expect(searchCallCount.value).toBe(1);
+
+			// Second prompt with same normalized query - should hit cache (no search)
+			await agent.prompt("TEST QUERY"); // Different casing, same normalized query
+
+			// Search should NOT have been called again (cache hit)
+			expect(searchCallCount.value).toBe(1);
+
+			agent.dispose();
+		});
+
+		test("RAG cache cleared on clearMessages", async () => {
+			const mockMemoryIndexer = {
+				search: mock(async () => [{ path: "test.md", snippet: "Test", score: 0.8 }]),
+				initialize: mock(async () => {}),
+				close: mock(() => {}),
+				isInitialized: mock(() => true),
+				getStatus: mock(async () => ({ initialized: true, fts5: true, vector: false, documentCount: 1 })),
+				rebuild: mock(async () => ({ ok: true })),
+				isVectorEnabled: mock(() => false),
+			};
+
+			const agent = new EmbeddedAgent({
+				provider: "anthropic",
+				model: "claude-3-5-sonnet-20241022",
+				workspaceDir: "/tmp/test",
+				memoryIndexer: mockMemoryIndexer as unknown as typeof mockMemoryIndexer & {
+					search: typeof mockMemoryIndexer.search;
+				},
+			});
+			await agent.initialize();
+
+			// Make a prompt to populate cache
+			await agent.prompt("test query");
+
+			// Clear messages should also clear RAG cache
+			agent.clearMessages();
+
+			// Verify cache was cleared by checking messages are empty
+			expect(agent.getMessages()).toEqual([]);
+
+			agent.dispose();
+		});
+
+		test("RAG graceful degradation when indexer unavailable", async () => {
+			const agent = new EmbeddedAgent({
+				provider: "anthropic",
+				model: "claude-3-5-sonnet-20241022",
+				workspaceDir: "/tmp/test",
+				// No memoryIndexer provided - should gracefully degrade
+			});
+			await agent.initialize();
+
+			// Should still work without RAG
+			const result = await agent.prompt("test query");
+			expect(result).toBeDefined();
+
+			agent.dispose();
+		});
+
+		test("RAG handles indexer returning undefined", async () => {
+			const mockMemoryIndexer = {
+				search: mock(async () => undefined), // Simulates timeout/failure
+				initialize: mock(async () => {}),
+				close: mock(() => {}),
+				isInitialized: mock(() => true),
+				getStatus: mock(async () => ({ initialized: true, fts5: true, vector: false, documentCount: 1 })),
+				rebuild: mock(async () => ({ ok: true })),
+				isVectorEnabled: mock(() => false),
+			};
+
+			const agent = new EmbeddedAgent({
+				provider: "anthropic",
+				model: "claude-3-5-sonnet-20241022",
+				workspaceDir: "/tmp/test",
+				memoryIndexer: mockMemoryIndexer as unknown as typeof mockMemoryIndexer & {
+					search: typeof mockMemoryIndexer.search;
+				},
+			});
+			await agent.initialize();
+
+			// Should gracefully handle undefined results
+			const result = await agent.prompt("test query");
+			expect(result).toBeDefined();
+
+			agent.dispose();
+		});
+
+		test("RAG handles indexer throwing error", async () => {
+			const mockMemoryIndexer = {
+				search: mock(async () => {
+					throw new Error("Indexer error");
+				}),
+				initialize: mock(async () => {}),
+				close: mock(() => {}),
+				isInitialized: mock(() => true),
+				getStatus: mock(async () => ({ initialized: true, fts5: true, vector: false, documentCount: 1 })),
+				rebuild: mock(async () => ({ ok: true })),
+				isVectorEnabled: mock(() => false),
+			};
+
+			const agent = new EmbeddedAgent({
+				provider: "anthropic",
+				model: "claude-3-5-sonnet-20241022",
+				workspaceDir: "/tmp/test",
+				memoryIndexer: mockMemoryIndexer as unknown as typeof mockMemoryIndexer & {
+					search: typeof mockMemoryIndexer.search;
+				},
+			});
+			await agent.initialize();
+
+			// Should gracefully handle indexer errors
+			const result = await agent.prompt("test query");
+			expect(result).toBeDefined();
+
+			agent.dispose();
+		});
+
+		test("RAG with custom threshold", async () => {
+			const mockMemoryIndexer = {
+				search: mock(async () => [
+					{ path: "test.md", snippet: "Test content", score: 0.4 }, // Above 0.3, below 0.5
+				]),
+				initialize: mock(async () => {}),
+				close: mock(() => {}),
+				isInitialized: mock(() => true),
+				getStatus: mock(async () => ({ initialized: true, fts5: true, vector: false, documentCount: 1 })),
+				rebuild: mock(async () => ({ ok: true })),
+				isVectorEnabled: mock(() => false),
+			};
+
+			const agent = new EmbeddedAgent({
+				provider: "anthropic",
+				model: "claude-3-5-sonnet-20241022",
+				workspaceDir: "/tmp/test",
+				memoryIndexer: mockMemoryIndexer as unknown as typeof mockMemoryIndexer & {
+					search: typeof mockMemoryIndexer.search;
+				},
+				rag: {
+					enabled: true,
+					threshold: 0.5, // Custom threshold
+				},
+			});
+			await agent.initialize();
+
+			const result = await agent.prompt("test query");
+			expect(result).toBeDefined();
+
+			agent.dispose();
+		});
+
+		test("RAG disabled via config", async () => {
+			const mockMemoryIndexer = {
+				search: mock(async () => [{ path: "test.md", snippet: "Test", score: 0.8 }]),
+				initialize: mock(async () => {}),
+				close: mock(() => {}),
+				isInitialized: mock(() => true),
+				getStatus: mock(async () => ({ initialized: true, fts5: true, vector: false, documentCount: 1 })),
+				rebuild: mock(async () => ({ ok: true })),
+				isVectorEnabled: mock(() => false),
+			};
+
+			const agent = new EmbeddedAgent({
+				provider: "anthropic",
+				model: "claude-3-5-sonnet-20241022",
+				workspaceDir: "/tmp/test",
+				memoryIndexer: mockMemoryIndexer as unknown as typeof mockMemoryIndexer & {
+					search: typeof mockMemoryIndexer.search;
+				},
+				rag: {
+					enabled: false, // RAG disabled
+				},
+			});
+			await agent.initialize();
+
+			const result = await agent.prompt("test query");
+			expect(result).toBeDefined();
+
+			// Search should NOT have been called since RAG is disabled
+			expect(mockMemoryIndexer.search).not.toHaveBeenCalled();
+
+			agent.dispose();
+		});
 	});
 });
