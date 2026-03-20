@@ -12,7 +12,7 @@
 
 import path from "node:path";
 import { GATEWAY_CONSTANTS } from "@/gateway/consts";
-import type { MemoryIndexer } from "@/gateway/memory/indexer/indexer";
+import type { MemoryIndexer } from "@/packages/agent/memory/indexer/indexer";
 import { logger } from "@/packages/logger";
 import {
 	createDefaultTools,
