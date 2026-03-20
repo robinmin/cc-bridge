@@ -9,6 +9,7 @@
  */
 
 export {
+	type AgentConfig,
 	type AgentErrorCategory,
 	type AgentResult,
 	type AgentRunObservability,
@@ -42,7 +43,6 @@ export {
 	discoverSkills,
 	// Core
 	EmbeddedAgent,
-	type EmbeddedAgentConfig,
 	type EmbeddedAgentObservabilityConfig,
 	type EmbeddedAgentObservabilitySnapshot,
 	// Events
