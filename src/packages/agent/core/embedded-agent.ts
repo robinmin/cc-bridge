@@ -88,28 +88,92 @@ export function resolveProviderApiKey(provider: string): string | undefined {
 }
 
 /**
- * Configuration for creating an EmbeddedAgent (session-level settings).
- * Per-request settings (onEvent, maxIterations, timeoutMs) are passed to prompt().
+ * Agent Configuration
+ *
+ * Unified configuration for creating an EmbeddedAgent.
+ * Supports single provider (string) or multi-provider with selection strategy.
  */
-export interface EmbeddedAgentConfig {
+export interface AgentConfig {
 	/** Unique session identifier */
-	sessionId: string;
+	sessionId?: string;
 	/** Absolute path to workspace directory containing bootstrap files */
 	workspaceDir: string;
-	/** LLM provider name (e.g., "anthropic", "openai", "google") */
-	provider: string;
-	/** LLM model identifier (e.g., "claude-sonnet-4-6") */
+	/** LLM provider - string for single provider, or config object for multi-provider */
+	provider: string | SingleProviderConfig | MultiProviderConfig;
+	/** LLM model identifier (e.g., "claude-sonnet-4-6", "gpt-4o") */
 	model: string;
+	/** Enable extended thinking/reasoning (provider-specific, e.g., Anthropic's extended) */
+	modelReasoning?: boolean;
 	/** Tools to register on the agent */
 	tools?: AgentTool<unknown>[];
+	/** Optional memory configuration (recommended way) */
+	memory?: MemoryConfig;
+	/** @deprecated Optional memory indexer instance (for backward compatibility) */
+	memoryIndexer?: MemoryIndexer;
+	/** Optional RAG configuration */
+	rag?: RagConfig;
 	/** Optional observability hooks and tracing adapter */
 	observability?: EmbeddedAgentObservabilityConfig;
 	/** OpenTelemetry configuration */
 	otel?: AgentOtelConfig;
-	/** Optional memory indexer for RAG context retrieval */
-	memoryIndexer?: import("@/packages/agent/memory/indexer/indexer").MemoryIndexer;
-	/** Optional RAG configuration */
-	rag?: RagConfig;
+}
+
+/**
+ * Memory configuration for the agent.
+ * When provided, the agent will manage memory with the specified backend.
+ */
+export interface MemoryConfig {
+	/** Enable memory system (default: true if memory is provided) */
+	enabled?: boolean;
+	/** Memory storage slot (default: "builtin") */
+	slot?: "builtin" | "none" | "external";
+	/** Citation mode for context (default: "auto") */
+	citations?: "auto" | "on" | "off";
+	/** Compaction settings for context management */
+	compaction?: {
+		enabled?: boolean;
+		reserveTokens?: number;
+		keepRecentTokens?: number;
+	};
+	/** Indexing settings for RAG */
+	indexing?: {
+		enabled?: boolean;
+		vector?: boolean;
+		provider?: "openai" | "gemini" | "voyage" | "mistral";
+	};
+}
+
+/**
+ * Single provider configuration.
+ */
+export interface SingleProviderConfig {
+	/** Provider name (e.g., "anthropic", "openai", "gemini") */
+	name: string;
+	/** API key - resolves from env if not provided */
+	apiKey?: string;
+	/** Custom base URL for API */
+	baseUrl?: string;
+}
+
+/**
+ * Provider selection policy types.
+ * Extensible via discriminated union - add new policies by adding new type branches.
+ */
+export type SelectionPolicy =
+	| { type: "cost-optimized"; maxBudgetPer1kTokens?: number }
+	| { type: "latency-optimized"; maxLatencyMs?: number }
+	| { type: "quality-optimized"; preferredProviders?: string[] }
+	| { type: "fallback"; order: string[] }
+	| { type: "smart"; weights: { cost: number; latency: number; quality: number } };
+
+/**
+ * Multi-provider configuration with selection strategy.
+ */
+export interface MultiProviderConfig {
+	/** List of providers to choose from */
+	providers: SingleProviderConfig[];
+	/** Selection policy */
+	selection: SelectionPolicy;
 }
 
 /**
@@ -156,7 +220,7 @@ export interface PromptOptions {
  */
 export class EmbeddedAgent {
 	private readonly agent: Agent;
-	private readonly config: EmbeddedAgentConfig;
+	private readonly config: AgentConfig;
 	private systemPrompt = "";
 	private initialized = false;
 	private promptRunning = false;
@@ -172,7 +236,7 @@ export class EmbeddedAgent {
 	private readonly ragMaxResults: number;
 	private readonly ragMode: "keyword" | "vector" | "hybrid";
 
-	constructor(config: EmbeddedAgentConfig) {
+	constructor(config: AgentConfig) {
 		this.config = config;
 
 		// Create OTEL service if configured
@@ -315,7 +379,10 @@ export class EmbeddedAgent {
 				originalSystemPrompt = this.systemPrompt;
 				const effectiveSystemPrompt = `${ragContext}\n\n${this.systemPrompt}`;
 				this.agent.setSystemPrompt(effectiveSystemPrompt);
-				logger.debug({ ragContextLength: ragContext.length, ragResultsCount }, "RAG context prepended to system prompt");
+				logger.debug(
+					{ ragContextLength: ragContext.length, ragResultsCount },
+					"RAG context prepended to system prompt",
+				);
 			}
 		} catch (error) {
 			// RAG retrieval is best-effort - log and continue without RAG
@@ -577,7 +644,9 @@ export class EmbeddedAgent {
 	 * @param message - The user message to retrieve context for
 	 * @returns Formatted RAG context string, cache hit flag, and results count
 	 */
-	private async retrieveRagContext(message: string): Promise<{ context: string | undefined; cacheHit: boolean; resultsCount: number }> {
+	private async retrieveRagContext(
+		message: string,
+	): Promise<{ context: string | undefined; cacheHit: boolean; resultsCount: number }> {
 		// Check if RAG is disabled
 		if (!this.ragEnabled) {
 			logger.debug("RAG disabled, skipping retrieval");
