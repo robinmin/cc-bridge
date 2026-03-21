@@ -205,6 +205,8 @@ export function resolveApiKey(provider: SingleProviderConfig): string | undefine
 		gemini: "GEMINI_API_KEY",
 		ollama: "OLLAMA_API_KEY",
 		openrouter: "OPENROUTER_API_KEY",
+		minimax: "MINIMAX_API_KEY",
+		zai: "ZAI_API_KEY",
 	};
 
 	const envVar = envVarMap[provider.name];
