@@ -20,11 +20,22 @@ import type { AgentOtelConfig } from "./otel";
 import type { ToolPolicyConfig } from "../tools/policy";
 
 /**
- * Agent configuration loaded from YAML
+ * Agent configuration loaded from JSONC
  */
 export interface AgentYamlConfig {
 	provider: {
+		/** Default provider name */
 		default: string;
+		/** Provider definitions with API keys from env and custom base URLs */
+		providers?: Record<string, {
+			/** API key environment variable name (e.g., "ANTHROPIC_API_KEY") */
+			apiKeyEnv?: string;
+			/** Custom base URL for API (overrides default) */
+			baseUrl?: string;
+			/** API type: "anthropic-messages", "openai-completions", "google-generative-ai" */
+			api?: "anthropic-messages" | "openai-completions" | "google-generative-ai";
+		}>;
+		/** Multi-provider configuration (optional) */
 		multiProvider?: {
 			strategy: "cost-optimized" | "latency-optimized" | "quality-optimized" | "fallback" | "smart";
 			maxBudgetPer1kTokens?: number;
@@ -200,24 +211,56 @@ export function buildAgentConfig(
 }
 
 /**
- * Build provider config from YAML
+ * Resolve API key from environment variable name
+ */
+function resolveApiKeyFromEnv(apiKeyEnv?: string): string | undefined {
+	if (!apiKeyEnv) return undefined;
+	return process.env[apiKeyEnv];
+}
+
+/**
+ * Build provider config from YAML config
+ * Creates proper SingleProviderConfig or MultiProviderConfig with baseUrl and resolved apiKey
  */
 function buildProviderConfig(
 	providerConfig: AgentYamlConfig["provider"],
 ): string | SingleProviderConfig | MultiProviderConfig {
+	// Build provider definitions from config
+	const providerDefs = providerConfig.providers || {};
+
+	// If no multi-provider config, return simple provider config
 	if (!providerConfig.multiProvider) {
-		return providerConfig.default;
+		const def = providerDefs[providerConfig.default];
+		const defaultProvider: SingleProviderConfig = {
+			name: providerConfig.default,
+			baseUrl: def?.baseUrl,
+			api: def?.api,
+			apiKey: resolveApiKeyFromEnv(def?.apiKeyEnv),
+		};
+		return defaultProvider;
 	}
 
+	// Build multi-provider config
 	const { multiProvider } = providerConfig;
 	const strategy = multiProvider.strategy;
+
+	// Build providers array with full config including resolved apiKey
+	const providerNames = multiProvider.order || [providerConfig.default];
+	const providers: SingleProviderConfig[] = providerNames.map((name) => {
+		const def = providerDefs[name];
+		return {
+			name,
+			baseUrl: def?.baseUrl,
+			api: def?.api,
+			apiKey: resolveApiKeyFromEnv(def?.apiKeyEnv),
+		};
+	});
 
 	switch (strategy) {
 		case "cost-optimized":
 			return {
-				type: "multi",
-				primary: providerConfig.default,
-				selectionPolicy: {
+				providers,
+				selection: {
 					type: "cost-optimized",
 					maxBudgetPer1kTokens: multiProvider.maxBudgetPer1kTokens,
 				},
@@ -225,9 +268,8 @@ function buildProviderConfig(
 
 		case "latency-optimized":
 			return {
-				type: "multi",
-				primary: providerConfig.default,
-				selectionPolicy: {
+				providers,
+				selection: {
 					type: "latency-optimized",
 					maxLatencyMs: multiProvider.maxLatencyMs,
 				},
@@ -235,9 +277,8 @@ function buildProviderConfig(
 
 		case "quality-optimized":
 			return {
-				type: "multi",
-				primary: providerConfig.default,
-				selectionPolicy: {
+				providers,
+				selection: {
 					type: "quality-optimized",
 					preferredProviders: multiProvider.preferredProviders,
 				},
@@ -245,9 +286,8 @@ function buildProviderConfig(
 
 		case "fallback":
 			return {
-				type: "multi",
-				primary: providerConfig.default,
-				selectionPolicy: {
+				providers,
+				selection: {
 					type: "fallback",
 					order: multiProvider.order || [providerConfig.default],
 				},
@@ -255,16 +295,18 @@ function buildProviderConfig(
 
 		case "smart":
 			return {
-				type: "multi",
-				primary: providerConfig.default,
-				selectionPolicy: {
+				providers,
+				selection: {
 					type: "smart",
 					weights: multiProvider.weights || { cost: 0.33, latency: 0.33, quality: 0.34 },
 				},
 			};
 
 		default:
-			return providerConfig.default;
+			return {
+				providers,
+				selection: { type: "fallback", order: providerNames },
+			};
 	}
 }
 
