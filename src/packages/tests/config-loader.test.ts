@@ -167,7 +167,7 @@ describe("buildAgentConfig", () => {
 
 		expect(result.sessionId).toBe("session-123");
 		expect(result.workspaceDir).toBe("/workspace/test");
-		expect(result.provider).toBe("anthropic");
+		expect(result.provider).toEqual({ name: "anthropic" });
 		expect(result.model).toBe("claude-sonnet-4-6");
 	});
 
@@ -297,13 +297,13 @@ describe("buildAgentConfig - multi-provider strategies", () => {
 		model: { default: "claude-sonnet-4-6" },
 	};
 
-	test("should return simple string provider when no multiProvider", () => {
+	test("should return SingleProviderConfig when no multiProvider", () => {
 		const result = buildAgentConfig(baseConfig, {
 			workspaceDir: "/workspace/test",
 			sessionId: "session-123",
 		});
 
-		expect(result.provider).toBe("anthropic");
+		expect(result.provider).toEqual({ name: "anthropic" });
 	});
 
 	test("should build cost-optimized multi-provider config", () => {
@@ -324,9 +324,8 @@ describe("buildAgentConfig - multi-provider strategies", () => {
 		});
 
 		expect(result.provider).toEqual({
-			type: "multi",
-			primary: "anthropic",
-			selectionPolicy: {
+			providers: [{ name: "anthropic" }],
+			selection: {
 				type: "cost-optimized",
 				maxBudgetPer1kTokens: 0.01,
 			},
@@ -351,9 +350,8 @@ describe("buildAgentConfig - multi-provider strategies", () => {
 		});
 
 		expect(result.provider).toEqual({
-			type: "multi",
-			primary: "anthropic",
-			selectionPolicy: {
+			providers: [{ name: "anthropic" }],
+			selection: {
 				type: "latency-optimized",
 				maxLatencyMs: 1000,
 			},
@@ -378,9 +376,8 @@ describe("buildAgentConfig - multi-provider strategies", () => {
 		});
 
 		expect(result.provider).toEqual({
-			type: "multi",
-			primary: "anthropic",
-			selectionPolicy: {
+			providers: [{ name: "anthropic" }],
+			selection: {
 				type: "quality-optimized",
 				preferredProviders: ["anthropic", "openai"],
 			},
@@ -405,9 +402,8 @@ describe("buildAgentConfig - multi-provider strategies", () => {
 		});
 
 		expect(result.provider).toEqual({
-			type: "multi",
-			primary: "anthropic",
-			selectionPolicy: {
+			providers: [{ name: "anthropic" }, { name: "openai" }, { name: "google" }],
+			selection: {
 				type: "fallback",
 				order: ["anthropic", "openai", "google"],
 			},
@@ -431,9 +427,8 @@ describe("buildAgentConfig - multi-provider strategies", () => {
 		});
 
 		expect(result.provider).toEqual({
-			type: "multi",
-			primary: "anthropic",
-			selectionPolicy: {
+			providers: [{ name: "anthropic" }],
+			selection: {
 				type: "fallback",
 				order: ["anthropic"],
 			},
@@ -458,9 +453,8 @@ describe("buildAgentConfig - multi-provider strategies", () => {
 		});
 
 		expect(result.provider).toEqual({
-			type: "multi",
-			primary: "anthropic",
-			selectionPolicy: {
+			providers: [{ name: "anthropic" }],
+			selection: {
 				type: "smart",
 				weights: { cost: 0.2, latency: 0.3, quality: 0.5 },
 			},
@@ -484,23 +478,26 @@ describe("buildAgentConfig - multi-provider strategies", () => {
 		});
 
 		expect(result.provider).toEqual({
-			type: "multi",
-			primary: "anthropic",
-			selectionPolicy: {
+			providers: [{ name: "anthropic" }],
+			selection: {
 				type: "smart",
 				weights: { cost: 0.33, latency: 0.33, quality: 0.34 },
 			},
 		});
 	});
 
-	test("should return simple string for unknown strategy", () => {
+	test("should build multi-provider config with provider definitions", () => {
 		const config: AgentYamlConfig = {
 			...baseConfig,
 			provider: {
 				default: "anthropic",
+				providers: {
+					anthropic: { apiKeyEnv: "ANTHROPIC_API_KEY", api: "anthropic-messages" },
+					minimax: { apiKeyEnv: "MINIMAX_API_KEY", baseUrl: "https://api.minimax.chat/v1" },
+				},
 				multiProvider: {
-					// @ts-expect-error - testing unknown strategy
-					strategy: "unknown-strategy",
+					strategy: "fallback",
+					order: ["anthropic", "minimax"],
 				},
 			},
 		};
@@ -510,7 +507,17 @@ describe("buildAgentConfig - multi-provider strategies", () => {
 			sessionId: "session-123",
 		});
 
-		expect(result.provider).toBe("anthropic");
+		// apiKey will be undefined since env vars are not set in test
+		expect(result.provider).toEqual({
+			providers: [
+				{ name: "anthropic", api: "anthropic-messages", apiKey: undefined, baseUrl: undefined },
+				{ name: "minimax", baseUrl: "https://api.minimax.chat/v1", apiKey: undefined, api: undefined },
+			],
+			selection: {
+				type: "fallback",
+				order: ["anthropic", "minimax"],
+			},
+		});
 	});
 });
 
