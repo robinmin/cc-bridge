@@ -5,19 +5,36 @@
 {
 	// Provider Configuration
 	"provider": {
-		// Default provider: "anthropic", "openai", "google", "gemini", "openrouter"
+		// Default provider name
 		"default": "anthropic",
 
-		// Multi-provider configuration (optional)
-		// "multiProvider": {
-		//   "strategy": "smart"  // cost-optimized, latency-optimized, quality-optimized, fallback, smart
-		//   "weights": {
-		//     "cost": 0.3,
-		//     "latency": 0.3,
-		//     "quality": 0.4
-		//   },
-		//   "order": ["anthropic", "openai"]
-		// }
+		// Provider definitions (key = provider name)
+		"providers": {
+			// Anthropic - Primary provider
+			"anthropic": {
+				"apiKeyEnv": "ANTHROPIC_API_KEY",
+				"api": "anthropic-messages"
+			},
+			// Minimax - Chinese LLM provider
+			"minimax": {
+				"apiKeyEnv": "MINIMAX_API_KEY",
+				"baseUrl": "https://api.minimax.chat/v1",
+				"api": "openai-completions"
+			},
+			// Zai - Custom provider
+			"zai": {
+				"apiKeyEnv": "ZAI_API_KEY",
+				"baseUrl": "https://api.zai.com/v1",
+				"api": "openai-completions"
+			}
+		},
+
+		// Multi-provider configuration with fallback order
+		// Tries providers in order until one succeeds
+		"multiProvider": {
+			"strategy": "fallback",
+			"order": ["anthropic", "minimax", "zai"]
+		}
 	},
 
 	// Model Configuration
@@ -31,7 +48,8 @@
 		// Per-provider model overrides (optional)
 		// "models": {
 		//   "anthropic": "claude-sonnet-4-6",
-		//   "openai": "gpt-4o"
+		//   "minimax": "abab6-chat",
+		//   "zai": "zai-model"
 		// }
 	},
 
