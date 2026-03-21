@@ -72,6 +72,16 @@ export const PROVIDER_CONFIGS: Record<string, ProviderConfig> = {
 		baseUrl: "https://openrouter.ai/api/v1",
 		api: "openai-completions",
 	},
+	minimax: {
+		getApiKey: () => process.env.MINIMAX_API_KEY,
+		baseUrl: process.env.MINIMAX_BASE_URL || "https://api.minimax.chat/v1",
+		api: "openai-completions",
+	},
+	zai: {
+		getApiKey: () => process.env.ZAI_API_KEY,
+		baseUrl: process.env.ZAI_BASE_URL,
+		api: "openai-completions",
+	},
 };
 
 /**
